@@ -1,5 +1,5 @@
 import type { BaseGameState, BaseGameAction, BaseGameConfig } from "../types.js";
-import type { GameResult } from "@playden/game-types";
+import type { GameResult } from "@playora/game-types";
 
 export type ChessColor = "w" | "b";
 

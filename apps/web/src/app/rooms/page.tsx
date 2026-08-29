@@ -13,7 +13,7 @@ import {
   Input,
   Dialog,
   Tabs,
-} from "@playden/ui";
+} from "@playora/ui";
 import {
   Plus,
   Search,
@@ -90,7 +90,7 @@ function RoomsContent() {
   return (
     <div className="container mx-auto max-w-7xl px-4 py-10 sm:px-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between pb-8 border-b border-slate-800 gap-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between pb-8 border-b border-border gap-4">
         <div>
           <div className="flex items-center space-x-3">
             <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
@@ -102,14 +102,14 @@ function RoomsContent() {
               </Badge>
             )}
           </div>
-          <p className="mt-2 text-slate-400">
+          <p className="mt-2 text-muted-foreground">
             {currentGameTitle
               ? `Join a public match or create a private room for ${currentGameTitle.split(" (")[0]}.`
               : "Discover public multiplayer matches or enter a private room code."}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button onClick={() => setIsCreateOpen(true)} className="gap-2 shadow-lg shadow-indigo-600/25">
+          <Button onClick={() => setIsCreateOpen(true)} className="gap-2 shadow-lg shadow-primary/25">
             <Plus className="h-5 w-5" />
             <span>Create Room</span>
           </Button>
@@ -132,12 +132,12 @@ function RoomsContent() {
           {/* Join with Room Code Form */}
           <form onSubmit={handleJoinByCode} className="flex gap-2 w-full lg:w-96">
             <div className="relative flex-1">
-              <Hash className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <Hash className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={joinCodeInput}
                 onChange={(e) => setJoinCodeInput(e.target.value)}
                 placeholder="Enter Private Room Code..."
-                className="pl-9 font-mono uppercase bg-slate-900/80 border-slate-700 text-xs"
+                className="pl-9 font-mono uppercase bg-card/80 border-border text-xs"
               />
             </div>
             <Button type="submit" variant="secondary" className="gap-1.5 px-4 text-xs font-semibold shrink-0">
@@ -148,12 +148,12 @@ function RoomsContent() {
         </div>
 
         <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search rooms..."
-            className="pl-9 bg-slate-900/50 border-slate-800"
+            className="pl-9 bg-card/50 border-border"
           />
         </div>
       </div>
@@ -183,19 +183,19 @@ function RoomsContent() {
           {[0, 1, 2].map((i) => (
             <div
               key={i}
-              className="h-40 animate-pulse rounded-xl border border-slate-800 bg-slate-900/40"
+              className="h-40 animate-pulse rounded-xl border border-border bg-card/40"
             />
           ))}
         </div>
       ) : filteredRooms.length === 0 ? (
         activeFilterTab === "private" ? (
-          <Card className="bg-slate-900/40 border-slate-800/80 p-12 text-center flex flex-col items-center justify-center space-y-4">
+          <Card className="bg-card/40 border-border/80 p-12 text-center flex flex-col items-center justify-center space-y-4">
             <div className="h-16 w-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
               <Lock className="h-8 w-8" />
             </div>
             <div className="space-y-1 max-w-md">
-              <h3 className="text-xl font-bold text-slate-100">Private Rooms are Hidden</h3>
-              <p className="text-sm text-slate-400">
+              <h3 className="text-xl font-bold text-foreground">Private Rooms are Hidden</h3>
+              <p className="text-sm text-muted-foreground">
                 Private matches do not appear in the public list. Enter the 6-character room code provided by your host above to enter.
               </p>
             </div>
@@ -205,18 +205,18 @@ function RoomsContent() {
             </Button>
           </Card>
         ) : (
-          <Card className="bg-slate-900/40 border-slate-800/80 p-12 text-center flex flex-col items-center justify-center space-y-4">
-            <div className="h-16 w-16 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center">
+          <Card className="bg-card/40 border-border/80 p-12 text-center flex flex-col items-center justify-center space-y-4">
+            <div className="h-16 w-16 rounded-2xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center">
               <Gamepad2 className="h-8 w-8" />
             </div>
             <div className="space-y-1 max-w-md">
-              <h3 className="text-xl font-bold text-slate-100">No Active Rooms Available</h3>
-              <p className="text-sm text-slate-400">
+              <h3 className="text-xl font-bold text-foreground">No Active Rooms Available</h3>
+              <p className="text-sm text-muted-foreground">
                 There are currently no public rooms waiting for players. Create your match to start playing!
               </p>
             </div>
             <div className="flex gap-3">
-              <Button onClick={() => { setIsPrivate(false); setIsCreateOpen(true); }} className="gap-2 shadow-indigo-600/30">
+              <Button onClick={() => { setIsPrivate(false); setIsCreateOpen(true); }} className="gap-2 shadow-primary/30">
                 <Globe2 className="h-4 w-4" />
                 <span>Create Public Room</span>
               </Button>
@@ -232,10 +232,10 @@ function RoomsContent() {
           {filteredRooms.map((room) => (
             <Card
               key={room.id}
-              className={`flex flex-col justify-between transition-all bg-slate-900/50 backdrop-blur-md ${
+              className={`flex flex-col justify-between transition-all bg-card/50 backdrop-blur-md ${
                 room.isPrivate
                   ? "border-amber-500/30 hover:border-amber-500/60"
-                  : "border-slate-800 hover:border-indigo-500/50"
+                  : "border-border hover:border-primary/50"
               }`}
             >
               <div>
@@ -255,19 +255,19 @@ function RoomsContent() {
                     </div>
                   </div>
                   <CardTitle className="mt-3 text-lg">{room.name}</CardTitle>
-                  <CardDescription className="font-mono text-xs text-indigo-400">
+                  <CardDescription className="font-mono text-xs text-primary">
                     Code: {room.code}
                   </CardDescription>
                 </CardHeader>
 
-                <CardContent className="space-y-2 text-xs text-slate-400">
-                  <div className="flex justify-between items-center py-1 border-t border-slate-800/60">
+                <CardContent className="space-y-2 text-xs text-muted-foreground">
+                  <div className="flex justify-between items-center py-1 border-t border-border/60">
                     <span>Host:</span>
-                    <span className="font-semibold text-slate-200">{room.hostUsername}</span>
+                    <span className="font-semibold text-foreground">{room.hostUsername}</span>
                   </div>
-                  <div className="flex justify-between items-center py-1 border-t border-slate-800/60">
+                  <div className="flex justify-between items-center py-1 border-t border-border/60">
                     <span>Players:</span>
-                    <span className="flex items-center text-indigo-400 font-semibold">
+                    <span className="flex items-center text-primary font-semibold">
                       <Users className="h-3.5 w-3.5 mr-1" />
                       {room.playerCount}/{room.maxPlayers}
                     </span>
@@ -279,7 +279,7 @@ function RoomsContent() {
                 <Button
                   variant={room.isPrivate ? "outline" : "default"}
                   onClick={() => router.push(`/rooms/${room.code}`)}
-                  className={`w-full gap-2 ${room.isPrivate ? "border-amber-500/40 text-amber-300 hover:bg-amber-500/10" : "shadow-indigo-600/20"}`}
+                  className={`w-full gap-2 ${room.isPrivate ? "border-amber-500/40 text-amber-300 hover:bg-amber-500/10" : "shadow-primary/20"}`}
                 >
                   <Play className="h-4 w-4 fill-current" />
                   <span>{room.isPrivate ? "Enter Private Room" : "Join Room"}</span>
@@ -299,18 +299,18 @@ function RoomsContent() {
       >
         <div className="space-y-5">
           <div>
-            <label className="text-xs font-semibold text-slate-300">Room Name</label>
+            <label className="text-xs font-semibold text-foreground">Room Name</label>
             <Input
               value={roomName}
               onChange={(e) => setRoomName(e.target.value)}
               placeholder="e.g. Saturday Night Showdown"
-              className="mt-1.5 bg-slate-900 border-slate-700"
+              className="mt-1.5 bg-card border-border"
             />
           </div>
 
           {/* Privacy Selector Cards */}
           <div>
-            <label className="text-xs font-semibold text-slate-300 mb-2 block">Room Visibility</label>
+            <label className="text-xs font-semibold text-foreground mb-2 block">Room Visibility</label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Public Option Card */}
               <div
@@ -318,19 +318,19 @@ function RoomsContent() {
                 className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
                   !isPrivate
                     ? "bg-emerald-950/40 border-emerald-500/80 shadow-[0_0_15px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500"
-                    : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
+                    : "bg-card/60 border-border hover:border-border"
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center space-x-2">
-                    <div className={`p-1.5 rounded-lg ${!isPrivate ? "bg-emerald-500/20 text-emerald-400" : "bg-slate-800 text-slate-400"}`}>
+                    <div className={`p-1.5 rounded-lg ${!isPrivate ? "bg-emerald-500/20 text-emerald-400" : "bg-border text-muted-foreground"}`}>
                       <Globe2 className="h-4 w-4" />
                     </div>
                     <span className="text-sm font-bold text-white">Public Room</span>
                   </div>
                   {!isPrivate && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
                 </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
                   Visible in room directory. Anyone can discover and join.
                 </p>
               </div>
@@ -341,33 +341,33 @@ function RoomsContent() {
                 className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between ${
                   isPrivate
                     ? "bg-amber-950/40 border-amber-500/80 shadow-[0_0_15px_rgba(245,158,11,0.15)] ring-1 ring-amber-500"
-                    : "bg-slate-900/60 border-slate-800 hover:border-slate-700"
+                    : "bg-card/60 border-border hover:border-border"
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center space-x-2">
-                    <div className={`p-1.5 rounded-lg ${isPrivate ? "bg-amber-500/20 text-amber-400" : "bg-slate-800 text-slate-400"}`}>
+                    <div className={`p-1.5 rounded-lg ${isPrivate ? "bg-amber-500/20 text-amber-400" : "bg-border text-muted-foreground"}`}>
                       <Lock className="h-4 w-4" />
                     </div>
                     <span className="text-sm font-bold text-white">Private Room</span>
                   </div>
                   {isPrivate && <CheckCircle2 className="h-4 w-4 text-amber-400" />}
                 </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
                   Hidden from directory. Only friends with your room code can join.
                 </p>
               </div>
             </div>
           </div>
 
-          <div className="flex justify-end space-x-3 pt-4 border-t border-slate-800">
+          <div className="flex justify-end space-x-3 pt-4 border-t border-border">
             <Button variant="ghost" onClick={() => setIsCreateOpen(false)}>
               Cancel
             </Button>
             <Button
               onClick={handleCreateRoom}
               disabled={isCreating}
-              className="shadow-indigo-600/30"
+              className="shadow-primary/30"
             >
               Create {isPrivate ? "Private" : "Public"} Room
             </Button>
@@ -380,7 +380,7 @@ function RoomsContent() {
 
 export default function RoomsPage() {
   return (
-    <React.Suspense fallback={<div className="container mx-auto p-10 text-slate-400">Loading rooms...</div>}>
+    <React.Suspense fallback={<div className="container mx-auto p-10 text-muted-foreground">Loading rooms...</div>}>
       <RoomsContent />
     </React.Suspense>
   );

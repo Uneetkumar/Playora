@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Gamepad2, Users, Trophy, LogIn, Swords, Zap } from "lucide-react";
 import { useAuthStore } from "../lib/store/auth-store";
-import { Avatar, Button, Badge } from "@playden/ui";
+import { Avatar, Button, Badge } from "@playora/ui";
 
 export function Header() {
   const pathname = usePathname();
@@ -24,20 +24,22 @@ export function Header() {
   ];
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 w-full border-b border-border/80 bg-background/70 backdrop-blur-xl">
       <div className="container mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         {/* Brand */}
         <div className="flex items-center space-x-6">
           <Link href="/" className="flex items-center space-x-2.5 group">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 shadow-lg shadow-indigo-500/25 group-hover:scale-105 transition-transform duration-200">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-primary via-primary to-secondary shadow-glow-primary transition-transform duration-200 group-hover:scale-105">
               <Gamepad2 className="h-6 w-6 text-white" />
             </div>
             <div className="flex flex-col">
-              <span className="text-lg font-black tracking-wider text-white">
-                GAME<span className="text-indigo-400">PLATFORM</span>
+              <span className="font-display text-lg font-extrabold tracking-wide text-foreground">
+                PLAY<span className="text-primary">ORA</span>
               </span>
-              <span className="text-[10px] uppercase font-bold tracking-widest text-slate-500 -mt-1">
-                Multiplayer
+              {/* Wraps and crowds the header below ~400px; the wordmark carries
+                  the brand on its own there. */}
+              <span className="-mt-1 hidden whitespace-nowrap text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground sm:inline">
+                Play · Connect · Compete
               </span>
             </div>
           </Link>
@@ -52,8 +54,8 @@ export function Header() {
                   href={href}
                   className={`flex items-center space-x-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                     isActive
-                      ? "bg-slate-800/90 text-white font-semibold shadow-sm"
-                      : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+                      ? "bg-border/90 text-white font-semibold shadow-sm"
+                      : "text-muted-foreground hover:bg-border/50 hover:text-foreground"
                   }`}
                 >
                   <Icon className="h-4 w-4" />
@@ -69,7 +71,7 @@ export function Header() {
           {isAuthenticated && user ? (
             <Link
               href="/profile"
-              className="flex items-center space-x-3 rounded-xl border border-slate-800 bg-slate-900/60 p-1.5 pr-3 hover:bg-slate-800/80 transition-colors"
+              className="flex items-center space-x-3 rounded-xl border border-border bg-card/60 p-1.5 pr-3 hover:bg-border/80 transition-colors"
             >
               <Avatar src={user.avatarUrl} fallbackText={user.displayName} size="sm" />
               <div className="flex flex-col text-left">
@@ -85,7 +87,7 @@ export function Header() {
             </Link>
           ) : (
             <Link href="/login">
-              <Button size="sm" className="gap-2 shadow-indigo-500/20">
+              <Button size="sm" className="gap-2 shadow-primary/20">
                 <LogIn className="h-4 w-4" />
                 <span>Sign In</span>
               </Button>

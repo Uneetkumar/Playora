@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Room, Player, ChatMessage, PlayerReaction } from "@playden/game-types";
+import type { Room, Player, ChatMessage, PlayerReaction } from "@playora/game-types";
 
 interface RoomStoreState {
   currentRoom: Room | null;

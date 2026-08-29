@@ -1,11 +1,12 @@
-name = "playden-realtime"
+name = "playora-realtime"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
 [durable_objects]
 bindings = [
-  { name = "ROOM_DO", class_name = "RoomDurableObject" }
+  { name = "ROOM_DO", class_name = "RoomDurableObject" },
+  { name = "MATCHMAKING_DO", class_name = "MatchmakingDurableObject" }
 ]
 
 [[migrations]]
@@ -14,3 +15,7 @@ new_sqlite_classes = ["RoomDurableObject"]
 
 [observability]
 enabled = true
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["MatchmakingDurableObject"]

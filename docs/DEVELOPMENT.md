@@ -50,7 +50,7 @@ pnpm dev
 ## Project Structure
 
 ```
-playden/
+playora/
 ├── apps/
 │   ├── web/           # Next.js 15 App Router Frontend (Port 8000)
 │   └── realtime/      # Cloudflare Workers + Durable Objects (Port 8787)

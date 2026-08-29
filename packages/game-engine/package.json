@@ -1,5 +1,5 @@
 {
-  "name": "@playden/game-engine",
+  "name": "@playora/game-engine",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,11 +14,11 @@
     "clean": "rimraf dist"
   },
   "dependencies": {
-    "@playden/game-types": "workspace:*",
+    "@playora/game-types": "workspace:*",
     "chess.js": "^1.4.0"
   },
   "devDependencies": {
-    "@playden/config": "workspace:*",
+    "@playora/config": "workspace:*",
     "rimraf": "^6.0.1",
     "typescript": "^5.7.3",
     "vitest": "^4.1.11"

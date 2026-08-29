@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isValidRoomCode, normalizeRoomCode } from "@playden/game-types";
+import { isValidRoomCode, normalizeRoomCode } from "@playora/game-types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { apiError, invalidRequest, roomNotFound, serverError } from "@/lib/api/responses";
 

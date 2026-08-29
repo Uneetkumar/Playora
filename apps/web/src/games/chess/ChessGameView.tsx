@@ -2,9 +2,9 @@
 
 import * as React from "react";
 import { ChessBoard } from "./ChessBoard";
-import type { ChessPlayerView } from "@playden/game-engine";
-import type { GameResult, Player } from "@playden/game-types";
-import { Button, Card, CardHeader, CardTitle, CardContent, Badge, Dialog } from "@playden/ui";
+import type { ChessPlayerView } from "@playora/game-engine";
+import type { GameResult, Player } from "@playora/game-types";
+import { Button, Card, CardHeader, CardTitle, CardContent, Badge, Dialog } from "@playora/ui";
 import {
   Timer,
   Flag,
@@ -116,7 +116,7 @@ export function ChessGameView({
         title="Confirm Resignation"
         description="Are you sure you want to resign this match? Your opponent will win."
       >
-        <div className="flex justify-end space-x-3 pt-4 border-t border-slate-800">
+        <div className="flex justify-end space-x-3 pt-4 border-t border-border">
           <Button variant="ghost" onClick={() => setShowResignConfirm(false)}>
             Cancel
           </Button>
@@ -136,15 +136,15 @@ export function ChessGameView({
       <div className="flex flex-col items-center w-full max-w-[500px] space-y-3">
         {/* Draw Offer Notification Banner */}
         {hasDrawOfferFromOpponent && !gameState.isFinished && (
-          <div className="w-full bg-indigo-950/80 border border-indigo-500/50 p-3 rounded-xl flex items-center justify-between shadow-lg">
+          <div className="w-full bg-primary/10/80 border border-primary/50 p-3 rounded-xl flex items-center justify-between shadow-lg">
             <div className="flex items-center space-x-2">
-              <Handshake className="h-4 w-4 text-indigo-400" />
-              <span className="text-xs font-semibold text-indigo-200">
+              <Handshake className="h-4 w-4 text-primary" />
+              <span className="text-xs font-semibold text-primary">
                 Opponent offered a draw.
               </span>
             </div>
             <div className="flex space-x-2">
-              <Button size="sm" onClick={onAcceptDraw} className="h-7 text-xs bg-indigo-600">
+              <Button size="sm" onClick={onAcceptDraw} className="h-7 text-xs bg-primary">
                 Accept
               </Button>
               <Button
@@ -160,7 +160,7 @@ export function ChessGameView({
         )}
 
         {hasDrawOfferFromMe && !gameState.isFinished && (
-          <div className="w-full bg-slate-900 border border-slate-800 p-2.5 rounded-xl text-center text-xs text-slate-400">
+          <div className="w-full bg-card border border-border p-2.5 rounded-xl text-center text-xs text-muted-foreground">
             Draw offer sent. Waiting for opponent...
           </div>
         )}
@@ -169,31 +169,31 @@ export function ChessGameView({
         <div
           className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl border transition-all ${
             isTopActive && !gameState.isFinished
-              ? "bg-slate-900/90 border-indigo-500/80 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
-              : "bg-slate-950/60 border-slate-800"
+              ? "bg-card/90 border-primary/80 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+              : "bg-background/60 border-border"
           }`}
         >
           <div className="flex items-center space-x-3">
             <div className="relative">
-              <div className="w-9 h-9 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-sm text-slate-200">
+              <div className="w-9 h-9 rounded-lg bg-border border border-border flex items-center justify-center font-bold text-sm text-foreground">
                 {topPlayer?.displayName?.slice(0, 2).toUpperCase() || "??"}
               </div>
               <span
-                className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-slate-900 ${
-                  topColor === "White" ? "bg-white" : "bg-slate-700"
+                className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-card ${
+                  topColor === "White" ? "bg-white" : "bg-border"
                 }`}
               />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="text-sm font-bold text-slate-100">
+                <span className="text-sm font-bold text-foreground">
                   {topPlayer?.displayName || "Opponent"}
                 </span>
                 <Badge variant="secondary" className="text-[10px] py-0 px-1.5">
                   {topColor}
                 </Badge>
               </div>
-              <div className="flex gap-1 text-[10px] text-slate-400 mt-0.5">
+              <div className="flex gap-1 text-[10px] text-muted-foreground mt-0.5">
                 {(myColor === "b" ? gameState.capturedPieces.black : gameState.capturedPieces.white)
                   .slice(-8)
                   .map((p, idx) => (
@@ -208,8 +208,8 @@ export function ChessGameView({
           <div
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-mono text-sm font-bold ${
               isTopActive && !gameState.isFinished
-                ? "bg-indigo-600 text-white shadow"
-                : "bg-slate-900 text-slate-300 border border-slate-800"
+                ? "bg-primary text-white shadow"
+                : "bg-card text-foreground border border-border"
             }`}
           >
             <Timer className="h-3.5 w-3.5" />
@@ -232,31 +232,31 @@ export function ChessGameView({
         <div
           className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl border transition-all ${
             isBottomActive && !gameState.isFinished
-              ? "bg-slate-900/90 border-indigo-500/80 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
-              : "bg-slate-950/60 border-slate-800"
+              ? "bg-card/90 border-primary/80 shadow-[0_0_15px_rgba(99,102,241,0.2)]"
+              : "bg-background/60 border-border"
           }`}
         >
           <div className="flex items-center space-x-3">
             <div className="relative">
-              <div className="w-9 h-9 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-sm text-indigo-400">
+              <div className="w-9 h-9 rounded-lg bg-border border border-border flex items-center justify-center font-bold text-sm text-primary">
                 {bottomPlayer?.displayName?.slice(0, 2).toUpperCase() || "ME"}
               </div>
               <span
-                className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-slate-900 ${
-                  bottomColor === "White" ? "bg-white" : "bg-slate-700"
+                className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-card ${
+                  bottomColor === "White" ? "bg-white" : "bg-border"
                 }`}
               />
             </div>
             <div>
               <div className="flex items-center space-x-2">
-                <span className="text-sm font-bold text-slate-100">
+                <span className="text-sm font-bold text-foreground">
                   {bottomPlayer?.displayName || "You"}
                 </span>
                 <Badge variant="secondary" className="text-[10px] py-0 px-1.5">
                   {bottomColor}
                 </Badge>
               </div>
-              <div className="flex gap-1 text-[10px] text-slate-400 mt-0.5">
+              <div className="flex gap-1 text-[10px] text-muted-foreground mt-0.5">
                 {(myColor === "b" ? gameState.capturedPieces.white : gameState.capturedPieces.black)
                   .slice(-8)
                   .map((p, idx) => (
@@ -271,8 +271,8 @@ export function ChessGameView({
           <div
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg font-mono text-sm font-bold ${
               isBottomActive && !gameState.isFinished
-                ? "bg-indigo-600 text-white shadow"
-                : "bg-slate-900 text-slate-300 border border-slate-800"
+                ? "bg-primary text-white shadow"
+                : "bg-card text-foreground border border-border"
             }`}
           >
             <Timer className="h-3.5 w-3.5" />
@@ -288,7 +288,7 @@ export function ChessGameView({
               size="sm"
               onClick={onOfferDraw}
               disabled={hasDrawOfferFromMe}
-              className="flex-1 gap-1.5 text-xs text-slate-300 hover:text-white"
+              className="flex-1 gap-1.5 text-xs text-foreground hover:text-white"
             >
               <Handshake className="h-3.5 w-3.5" />
               <span>{hasDrawOfferFromMe ? "Draw Offered" : "Offer Draw"}</span>
@@ -307,8 +307,8 @@ export function ChessGameView({
       </div>
 
       {/* Move History & Match Information Sidebar */}
-      <Card className="w-full lg:w-80 bg-slate-900/60 border-slate-800 backdrop-blur-md">
-        <CardHeader className="py-3 px-4 border-b border-slate-800">
+      <Card className="w-full lg:w-80 bg-card/60 border-border backdrop-blur-md">
+        <CardHeader className="py-3 px-4 border-b border-border">
           <CardTitle className="text-sm font-semibold flex items-center justify-between">
             <span>Move History</span>
             <Badge variant="outline" className="text-[10px]">
@@ -319,7 +319,7 @@ export function ChessGameView({
         <CardContent className="p-3">
           <div className="max-h-[320px] overflow-y-auto space-y-1 text-xs">
             {gameState.history.length === 0 ? (
-              <p className="text-center text-slate-500 py-6">Game in progress. White to move.</p>
+              <p className="text-center text-muted-foreground py-6">Game in progress. White to move.</p>
             ) : (
               <div className="grid grid-cols-2 gap-x-2 gap-y-1 font-mono">
                 {Array.from({ length: Math.ceil(gameState.history.length / 2) }).map((_, idx) => {
@@ -328,18 +328,18 @@ export function ChessGameView({
 
                   return (
                     <React.Fragment key={idx}>
-                      <div className="flex items-center space-x-1.5 bg-slate-950/40 px-2 py-1 rounded">
-                        <span className="text-slate-500 text-[10px] w-4">{idx + 1}.</span>
-                        <span className="text-slate-200 font-semibold">{whiteMove?.san}</span>
+                      <div className="flex items-center space-x-1.5 bg-background/40 px-2 py-1 rounded">
+                        <span className="text-muted-foreground text-[10px] w-4">{idx + 1}.</span>
+                        <span className="text-foreground font-semibold">{whiteMove?.san}</span>
                       </div>
-                      <div className="flex items-center space-x-1.5 bg-slate-950/40 px-2 py-1 rounded">
+                      <div className="flex items-center space-x-1.5 bg-background/40 px-2 py-1 rounded">
                         {blackMove ? (
                           <>
-                            <span className="text-slate-500 text-[10px] w-4">{idx + 1}...</span>
-                            <span className="text-slate-300">{blackMove.san}</span>
+                            <span className="text-muted-foreground text-[10px] w-4">{idx + 1}...</span>
+                            <span className="text-foreground">{blackMove.san}</span>
                           </>
                         ) : (
-                          <span className="text-slate-600">...</span>
+                          <span className="text-muted-foreground">...</span>
                         )}
                       </div>
                     </React.Fragment>
@@ -353,8 +353,8 @@ export function ChessGameView({
 
       {/* Game Over Modal */}
       {gameState.isFinished && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-sm w-full text-center space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl p-6 max-w-sm w-full text-center space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="flex justify-center">
               {gameState.isDraw ? (
                 <div className="w-16 h-16 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center">
@@ -379,7 +379,7 @@ export function ChessGameView({
                   ? "Victory!"
                   : "Defeat"}
               </h3>
-              <p className="text-xs text-slate-400 mt-1 capitalize">
+              <p className="text-xs text-muted-foreground mt-1 capitalize">
                 {gameState.drawReason
                   ? `Draw by ${gameState.drawReason.replace("_", " ")}`
                   : gameState.phase === "resigned"
@@ -390,14 +390,14 @@ export function ChessGameView({
               </p>
             </div>
 
-            <div className="bg-slate-950/60 rounded-xl p-3 text-xs text-slate-300 space-y-1.5 border border-slate-800">
+            <div className="bg-background/60 rounded-xl p-3 text-xs text-foreground space-y-1.5 border border-border">
               <div className="flex justify-between">
-                <span className="text-slate-500">Total Moves:</span>
+                <span className="text-muted-foreground">Total Moves:</span>
                 <span className="font-semibold">{gameState.history.length}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Winner:</span>
-                <span className="font-semibold text-indigo-400">
+                <span className="text-muted-foreground">Winner:</span>
+                <span className="font-semibold text-primary">
                   {gameState.winnerId
                     ? players[gameState.winnerId]?.displayName || "Winner"
                     : "None (Draw)"}
@@ -406,7 +406,7 @@ export function ChessGameView({
             </div>
 
             <div className="pt-2">
-              <Button onClick={onRematch} className="w-full gap-2 shadow-indigo-600/30">
+              <Button onClick={onRematch} className="w-full gap-2 shadow-primary/30">
                 <RotateCcw className="h-4 w-4" />
                 <span>Return to Lobby</span>
               </Button>

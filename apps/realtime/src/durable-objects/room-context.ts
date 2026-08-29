@@ -1,5 +1,5 @@
 import type { WebSocket as CFWebSocket } from "@cloudflare/workers-types";
-import type { ServerMessage } from "@playden/protocol";
+import type { ServerMessage } from "@playora/protocol";
 import type { ConnectionAttachment, PersistedRoom } from "./room-state.js";
 import type { MatchResult } from "../handlers/game-handler.js";
 

@@ -1,4 +1,4 @@
-import type { GameId } from "@playden/game-types";
+import type { GameId } from "@playora/game-types";
 import type { BotEngine } from "./types.js";
 import { ChessBot } from "./chess/ChessBot.js";
 

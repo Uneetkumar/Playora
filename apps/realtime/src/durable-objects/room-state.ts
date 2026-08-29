@@ -1,6 +1,6 @@
-import type { ProtocolPlayer, ProtocolRoomStatePayload, ProtocolRoomSettings } from "@playden/protocol";
-import type { BaseGameState } from "@playden/game-engine";
-import type { GameId } from "@playden/game-types";
+import type { ProtocolPlayer, ProtocolRoomStatePayload, ProtocolRoomSettings } from "@playora/protocol";
+import type { BaseGameState } from "@playora/game-engine";
+import type { GameId } from "@playora/game-types";
 
 export type RoomStatus = ProtocolRoomStatePayload["status"];
 

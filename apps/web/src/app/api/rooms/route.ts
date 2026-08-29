@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { generateRoomCode } from "@playden/game-types";
+import { generateRoomCode } from "@playora/game-types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { CreateRoomSchema, ListRoomsQuerySchema } from "@/lib/api/schemas";
 import { apiError, invalidRequest, serverError, unauthorized } from "@/lib/api/responses";

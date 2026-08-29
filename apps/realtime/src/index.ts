@@ -1,6 +1,7 @@
 import { APP_VERSION } from "./version.js";
 import type { Env } from "./types.js";
 export { RoomDurableObject } from "./durable-objects/RoomDurableObject.js";
+export { MatchmakingDurableObject } from "./durable-objects/MatchmakingDurableObject.js";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -10,7 +11,7 @@ export default {
     if (url.pathname === "/health") {
       return Response.json({
         status: "healthy",
-        service: "playden-realtime",
+        service: "playora-realtime",
         timestamp: new Date().toISOString(),
       });
     }
@@ -18,12 +19,23 @@ export default {
     // Status endpoint
     if (url.pathname === "/status") {
       return Response.json({
-        service: "playden-realtime",
+        service: "playora-realtime",
         version: APP_VERSION,
         environment: env.ENVIRONMENT || "development",
         supportedProtocols: ["websocket", "http"],
         features: ["rooms", "presence", "game-sessions", "chat", "reactions"],
       });
+    }
+
+    // Matchmaking route: /matchmaking/:gameId
+    // One Durable Object per game, so each game has its own pool.
+    const mmMatch = url.pathname.match(/^\/matchmaking\/([^/]+)/);
+    if (mmMatch) {
+      const gameId = mmMatch[1];
+      if (!gameId) return new Response("Game ID is required", { status: 400 });
+      if (!url.searchParams.has("gameId")) url.searchParams.set("gameId", gameId);
+      const stub = env.MATCHMAKING_DO.get(env.MATCHMAKING_DO.idFromName(gameId));
+      return stub.fetch(new Request(url.toString(), request));
     }
 
     // WebSocket / Room route: /rooms/:roomId/ws

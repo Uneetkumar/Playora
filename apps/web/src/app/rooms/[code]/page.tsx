@@ -10,8 +10,8 @@ import { useRoomInfo } from "../../../hooks/use-rooms";
 import { RoomChat } from "../../../components/chat/room-chat";
 import { ReactionOverlay, type FloatingReaction } from "../../../components/reactions/reaction-overlay";
 import { ChessGameView } from "../../../games/chess/ChessGameView";
-import type { ChessPlayerView } from "@playden/game-engine";
-import type { PlayerReaction } from "@playden/game-types";
+import type { ChessPlayerView } from "@playora/game-engine";
+import type { PlayerReaction } from "@playora/game-types";
 import {
   Button,
   Badge,
@@ -20,7 +20,7 @@ import {
   CardTitle,
   CardDescription,
   CardContent,
-} from "@playden/ui";
+} from "@playora/ui";
 import {
   Users,
   Copy,
@@ -125,19 +125,19 @@ function RoomDetailsContent() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col bg-[#080c14] text-slate-100 relative pb-12">
+    <div className="min-h-[calc(100vh-4rem)] flex flex-col bg-[#080c14] text-foreground relative pb-12">
       {/* Ephemeral Reaction Overlay */}
       <ReactionOverlay reactions={floatingReactions} />
 
       {/* Top Navigation / Room Info Header */}
-      <header className="border-b border-slate-800 bg-slate-950/70 backdrop-blur-md sticky top-16 z-30 px-4 py-3">
+      <header className="border-b border-border bg-background/70 backdrop-blur-md sticky top-16 z-30 px-4 py-3">
         <div className="container mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
-            <Button variant="ghost" size="sm" onClick={handleLeave} className="h-8 gap-1 text-slate-400">
+            <Button variant="ghost" size="sm" onClick={handleLeave} className="h-8 gap-1 text-muted-foreground">
               <ArrowLeft className="h-4 w-4" />
               <span>Leave</span>
             </Button>
-            <div className="h-4 w-px bg-slate-800" />
+            <div className="h-4 w-px bg-border" />
             <div>
               <div className="flex items-center space-x-2">
                 <span className="text-sm font-bold text-white tracking-wide">
@@ -162,7 +162,7 @@ function RoomDetailsContent() {
 
           <div className="flex items-center space-x-2 sm:space-x-3">
             {/* Connection Status Badge */}
-            <div className="flex items-center space-x-1.5 text-xs bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-full">
+            <div className="flex items-center space-x-1.5 text-xs bg-card border border-border px-2.5 py-1 rounded-full">
               {connectionStatus === "connected" ? (
                 <>
                   <Wifi className="h-3 w-3 text-emerald-400" />
@@ -177,15 +177,15 @@ function RoomDetailsContent() {
             </div>
 
             {/* Room Code Badge with Copy */}
-            <div className="flex items-center bg-slate-900 border border-indigo-500/40 rounded-lg p-0.5 shadow-sm">
-              <span className="px-2 text-xs font-mono font-bold text-indigo-300">
+            <div className="flex items-center bg-card border border-primary/40 rounded-lg p-0.5 shadow-sm">
+              <span className="px-2 text-xs font-mono font-bold text-primary">
                 {roomCode}
               </span>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleCopyCode}
-                className="h-7 w-7 p-0 text-indigo-400 hover:text-indigo-200"
+                className="h-7 w-7 p-0 text-primary hover:text-primary"
                 title="Copy Room Code"
               >
                 {copiedCode ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
@@ -244,8 +244,8 @@ function RoomDetailsContent() {
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center h-80 space-y-3">
-                  <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                  <p className="text-sm text-slate-400">Loading live board state...</p>
+                  <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+                  <p className="text-sm text-muted-foreground">Loading live board state...</p>
                 </div>
               )}
             </div>
@@ -305,7 +305,7 @@ function RoomDetailsContent() {
                 </div>
               )}
 
-              <Card className="bg-slate-900/60 border-slate-800 backdrop-blur-md">
+              <Card className="bg-card/60 border-border backdrop-blur-md">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
@@ -325,21 +325,21 @@ function RoomDetailsContent() {
 
                 <CardContent className="space-y-4">
                   {/* Player 1 Slot (White / Host) */}
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950/60 border border-slate-800">
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-background/60 border border-border">
                     <div className="flex items-center space-x-3">
                       <div className="relative">
-                        <div className="w-12 h-12 rounded-xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 flex items-center justify-center font-extrabold text-base">
+                        <div className="w-12 h-12 rounded-xl bg-primary/20 border border-primary/40 text-primary flex items-center justify-center font-extrabold text-base">
                           {player1?.displayName?.slice(0, 2).toUpperCase() || "P1"}
                         </div>
                         {player1?.role === "host" && (
-                          <div className="absolute -top-1.5 -right-1.5 bg-amber-500 text-slate-950 p-1 rounded-full">
+                          <div className="absolute -top-1.5 -right-1.5 bg-amber-500 text-background p-1 rounded-full">
                             <Crown className="h-3 w-3" />
                           </div>
                         )}
                       </div>
                       <div>
                         <div className="flex items-center space-x-2">
-                          <span className="font-bold text-slate-100">
+                          <span className="font-bold text-foreground">
                             {player1?.displayName || "Player 1"}
                           </span>
                           {player1?.userId === currentUserId && (
@@ -348,7 +348,7 @@ function RoomDetailsContent() {
                             </Badge>
                           )}
                         </div>
-                        <span className="text-xs text-slate-400">Plays White ♔</span>
+                        <span className="text-xs text-muted-foreground">Plays White ♔</span>
                       </div>
                     </div>
 
@@ -376,14 +376,14 @@ function RoomDetailsContent() {
                   </div>
 
                   {/* Player 2 Slot (Black / Challenger) */}
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-slate-950/60 border border-slate-800">
+                  <div className="flex items-center justify-between p-4 rounded-xl bg-background/60 border border-border">
                     <div className="flex items-center space-x-3">
                       <div className="relative">
                         <div
                           className={`w-12 h-12 rounded-xl flex items-center justify-center font-extrabold text-base ${
                             player2
                               ? "bg-purple-600/20 border border-purple-500/40 text-purple-400"
-                              : "border border-dashed border-slate-700 text-slate-600"
+                              : "border border-dashed border-border text-muted-foreground"
                           }`}
                         >
                           {player2?.displayName?.slice(0, 2).toUpperCase() || "?"}
@@ -391,7 +391,7 @@ function RoomDetailsContent() {
                       </div>
                       <div>
                         <div className="flex items-center space-x-2">
-                          <span className="font-bold text-slate-100">
+                          <span className="font-bold text-foreground">
                             {player2?.displayName || "Waiting for opponent..."}
                           </span>
                           {player2?.userId === currentUserId && (
@@ -406,7 +406,7 @@ function RoomDetailsContent() {
                             </Badge>
                           )}
                         </div>
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-muted-foreground">
                           {player2 ? "Plays Black ♚" : "Share room code or invite link"}
                         </span>
                       </div>
@@ -425,7 +425,7 @@ function RoomDetailsContent() {
                         )
                       ) : (
                         <div className="flex items-center gap-3">
-                          <div className="hidden sm:flex items-center space-x-2 text-xs text-indigo-400 font-medium">
+                          <div className="hidden sm:flex items-center space-x-2 text-xs text-primary font-medium">
                             <Sparkles className="h-3.5 w-3.5" />
                             <span>Slot Open</span>
                           </div>
@@ -446,7 +446,7 @@ function RoomDetailsContent() {
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                  <div className="pt-4 border-t border-border flex flex-wrap items-center justify-between gap-3">
                     {/* Non-host Ready Toggle */}
                     {!isHost && myPlayerRecord && (
                       <Button
@@ -465,7 +465,7 @@ function RoomDetailsContent() {
                         size="lg"
                         onClick={() => startGame()}
                         disabled={!isAllReady || playersList.length < 2}
-                        className="w-full sm:w-auto gap-2 shadow-indigo-600/30"
+                        className="w-full sm:w-auto gap-2 shadow-primary/30"
                       >
                         <Play className="h-5 w-5 fill-current" />
                         <span>{playersList.length < 2 ? "Waiting for Opponent" : !isAllReady ? "Waiting for Ready" : "Start Game"}</span>
@@ -473,7 +473,7 @@ function RoomDetailsContent() {
                     )}
 
                     {!isHost && !myPlayerRecord && (
-                      <p className="text-xs text-slate-400">You are spectating this match.</p>
+                      <p className="text-xs text-muted-foreground">You are spectating this match.</p>
                     )}
                   </div>
                 </CardContent>
@@ -499,7 +499,7 @@ function RoomDetailsContent() {
 
 export default function RoomDetailsPage() {
   return (
-    <React.Suspense fallback={<div className="container mx-auto p-10 text-slate-400">Loading room...</div>}>
+    <React.Suspense fallback={<div className="container mx-auto p-10 text-muted-foreground">Loading room...</div>}>
       <RoomDetailsContent />
     </React.Suspense>
   );

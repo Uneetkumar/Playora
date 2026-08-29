@@ -1,6 +1,6 @@
-import { botRegistry } from "@playden/bot-engine";
-import { gameEngineRegistry } from "@playden/game-engine";
-import type { GameId } from "@playden/game-types";
+import { botRegistry } from "@playora/bot-engine";
+import { gameEngineRegistry } from "@playora/game-engine";
+import type { GameId } from "@playora/game-types";
 
 export type PlayModeId =
   | "offline-ai"
@@ -65,8 +65,7 @@ export function getPlayModes(gameId: GameId): PlayMode[] {
       tagline: "Get matched with a player near your level",
       needsAuth: true,
       needsInternet: true,
-      status: "coming-soon",
-      note: "Matchmaking is not live yet",
+      status: hasEngine ? "ready" : "coming-soon",
     },
     {
       id: "online-ai",

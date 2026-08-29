@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { GameSession, GameResult } from "@playden/game-types";
+import type { GameSession, GameResult } from "@playora/game-types";
 
 interface GameStoreState {
   currentSession: GameSession | null;

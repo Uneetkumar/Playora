@@ -8,15 +8,15 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-indigo-600 text-white shadow hover:bg-indigo-700 hover:shadow-indigo-500/20 focus-visible:ring-indigo-500",
+          "bg-primary text-white shadow hover:bg-primary/90 hover:shadow-primary/20 focus-visible:ring-primary",
         destructive:
           "bg-rose-600 text-white shadow-sm hover:bg-rose-700 hover:shadow-rose-500/20 focus-visible:ring-rose-500",
         outline:
-          "border border-slate-700 bg-slate-900/60 backdrop-blur-sm text-slate-200 hover:bg-slate-800 hover:text-white focus-visible:ring-slate-400",
+          "border border-border bg-card/60 backdrop-blur-sm text-foreground hover:bg-border hover:text-white focus-visible:ring-muted-foreground",
         secondary:
-          "bg-slate-800 text-slate-100 shadow-sm hover:bg-slate-700 focus-visible:ring-slate-400",
-        ghost: "text-slate-300 hover:bg-slate-800/80 hover:text-white focus-visible:ring-slate-400",
-        link: "text-indigo-400 underline-offset-4 hover:underline",
+          "bg-border text-foreground shadow-sm hover:bg-border focus-visible:ring-muted-foreground",
+        ghost: "text-foreground hover:bg-border/80 hover:text-white focus-visible:ring-muted-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
         default: "h-10 px-4 py-2",

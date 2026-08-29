@@ -1,4 +1,4 @@
-import type { GameId, GameResult, Player } from "@playden/game-types";
+import type { GameId, GameResult, Player } from "@playora/game-types";
 import type {
   ActionValidationResult,
   ActionResult,

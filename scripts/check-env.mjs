@@ -117,7 +117,7 @@ const files = new Map();
 let missing = 0;
 let present = 0;
 
-console.log(`\n${b("Playden environment check")}\n`);
+console.log(`\n${b("Playora environment check")}\n`);
 
 let currentFile = null;
 for (const item of SPEC) {

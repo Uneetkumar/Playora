@@ -6,11 +6,11 @@ import {
   type ServerMessage,
   parseServerMessage,
   serializeProtocolMessage,
-} from "@playden/protocol";
+} from "@playora/protocol";
 import { useRoomStore } from "../lib/store/room-store";
 import { useGameStore } from "../lib/store/game-store";
 import { useAuthStore } from "../lib/store/auth-store";
-import type { PlayerReaction, GameId, Player, RoomSettings } from "@playden/game-types";
+import type { PlayerReaction, GameId, Player, RoomSettings } from "@playora/game-types";
 
 interface UseRoomSocketOptions {
   roomId: string;

@@ -217,17 +217,17 @@ export function ChessBoard({
     <div className="relative flex flex-col items-center select-none">
       {/* Promotion Picker Modal */}
       {pendingPromotion && (
-        <div className="absolute inset-0 z-30 bg-slate-950/80 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl shadow-2xl text-center space-y-4 max-w-xs">
-            <h4 className="text-sm font-bold text-slate-100">Promote Pawn</h4>
-            <p className="text-xs text-slate-400">Choose a piece to promote your pawn into:</p>
+        <div className="absolute inset-0 z-30 bg-background/80 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center p-4">
+          <div className="bg-card border border-border p-4 rounded-xl shadow-2xl text-center space-y-4 max-w-xs">
+            <h4 className="text-sm font-bold text-foreground">Promote Pawn</h4>
+            <p className="text-xs text-muted-foreground">Choose a piece to promote your pawn into:</p>
             <div className="grid grid-cols-4 gap-2">
               {(["q", "r", "b", "n"] as const).map((pType) => (
                 <button
                   key={pType}
                   type="button"
                   onClick={() => executePromotion(pType)}
-                  className="h-14 rounded-lg bg-slate-800 hover:bg-indigo-600/40 border border-slate-700 hover:border-indigo-500 flex items-center justify-center p-2 transition-all transform hover:scale-105"
+                  className="h-14 rounded-lg bg-border hover:bg-primary/40 border border-border hover:border-primary flex items-center justify-center p-2 transition-all transform hover:scale-105"
                 >
                   {renderPieceIcon({ type: pType, color: myColor === "b" ? "b" : "w" })}
                 </button>
@@ -238,7 +238,7 @@ export function ChessBoard({
       )}
 
       {/* Main 8x8 Board Grid */}
-      <div className="relative w-full max-w-[500px] aspect-square rounded-xl overflow-hidden shadow-2xl border-4 border-slate-800 bg-[#0f172a]">
+      <div className="relative w-full max-w-[500px] aspect-square rounded-xl overflow-hidden shadow-2xl border-4 border-border bg-[#0f172a]">
         <div className="grid grid-cols-8 grid-rows-8 w-full h-full">
           {displayedRanks.map((rank, rankIdx) =>
             displayedFiles.map((file, fileIdx) => {
@@ -263,7 +263,7 @@ export function ChessBoard({
                     isLight ? "bg-[#2a374a]" : "bg-[#182333]"
                   } ${
                     isSelected
-                      ? "ring-4 ring-indigo-500 ring-inset z-10 bg-indigo-900/40"
+                      ? "ring-4 ring-primary ring-inset z-10 bg-primary/30/40"
                       : isLastMoveSquare
                       ? "bg-amber-500/20"
                       : ""
@@ -271,12 +271,12 @@ export function ChessBoard({
                 >
                   {/* File & Rank Coordinates for corner squares */}
                   {fileIdx === 0 && (
-                    <span className="absolute top-0.5 left-1 text-[9px] font-bold opacity-40 text-slate-300">
+                    <span className="absolute top-0.5 left-1 text-[9px] font-bold opacity-40 text-foreground">
                       {rank}
                     </span>
                   )}
                   {rankIdx === 7 && (
-                    <span className="absolute bottom-0.5 right-1 text-[9px] font-bold opacity-40 text-slate-300">
+                    <span className="absolute bottom-0.5 right-1 text-[9px] font-bold opacity-40 text-foreground">
                       {file}
                     </span>
                   )}
@@ -292,9 +292,9 @@ export function ChessBoard({
                   {isLegalTarget && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
                       {piece ? (
-                        <div className="w-4/5 h-4/5 rounded-full border-4 border-indigo-400/80 animate-pulse" />
+                        <div className="w-4/5 h-4/5 rounded-full border-4 border-primary/80 animate-pulse" />
                       ) : (
-                        <div className="w-3.5 h-3.5 rounded-full bg-indigo-400/80 shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
+                        <div className="w-3.5 h-3.5 rounded-full bg-primary/80 shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
                       )}
                     </div>
                   )}

@@ -1,6 +1,6 @@
 import { SELF } from "cloudflare:test";
 import { SignJWT } from "jose";
-import type { ServerMessage } from "@playden/protocol";
+import type { ServerMessage } from "@playora/protocol";
 
 export const TEST_SECRET = "test-jwt-secret-that-is-long-enough-for-hs256";
 export const ATTACKER_SECRET = "attacker-secret-which-is-also-long-enough-ok";
@@ -54,7 +54,7 @@ export class TestClient {
   }
 
   static async connect(roomId: string, query = ""): Promise<TestClient> {
-    const res = await SELF.fetch(`https://playden.test/rooms/${roomId}/ws${query}`, {
+    const res = await SELF.fetch(`https://playora.test/rooms/${roomId}/ws${query}`, {
       headers: { Upgrade: "websocket" },
     });
     const ws = res.webSocket;

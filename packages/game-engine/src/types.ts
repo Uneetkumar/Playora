@@ -1,4 +1,4 @@
-import type { Player, GameId, GameResult } from "@playden/game-types";
+import type { Player, GameId, GameResult } from "@playora/game-types";
 
 export interface BaseGameState {
   sequenceNumber: number;

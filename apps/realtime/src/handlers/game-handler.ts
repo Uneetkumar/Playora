@@ -1,6 +1,6 @@
 import type { WebSocket as CFWebSocket } from "@cloudflare/workers-types";
-import { gameEngineRegistry } from "@playden/game-engine";
-import type { AnyGameEngine, BaseGameAction, BaseGameState } from "@playden/game-engine";
+import { gameEngineRegistry } from "@playora/game-engine";
+import type { AnyGameEngine, BaseGameAction, BaseGameState } from "@playora/game-engine";
 
 import type { RoomContext } from "../durable-objects/room-context.js";
 import { readAttachment } from "../durable-objects/room-state.js";

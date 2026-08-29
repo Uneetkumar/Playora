@@ -4,7 +4,7 @@
   "bootstrap-sha": "HEAD",
   "packages": {
     ".": {
-      "package-name": "playden",
+      "package-name": "playora",
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
       "draft": false,

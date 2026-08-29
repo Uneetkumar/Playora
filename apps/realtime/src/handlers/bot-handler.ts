@@ -1,7 +1,7 @@
 import type { WebSocket as CFWebSocket } from "@cloudflare/workers-types";
-import type { ProtocolPlayer } from "@playden/protocol";
-import { botRegistry, type AiLevel } from "@playden/bot-engine";
-import type { BaseGameAction, BaseGameState } from "@playden/game-engine";
+import type { ProtocolPlayer } from "@playora/protocol";
+import { botRegistry, type AiLevel } from "@playora/bot-engine";
+import type { BaseGameAction, BaseGameState } from "@playora/game-engine";
 
 import type { RoomContext } from "../durable-objects/room-context.js";
 import { nextSeatIndex, playerCount, toRoomStatePayload } from "../durable-objects/room-state.js";

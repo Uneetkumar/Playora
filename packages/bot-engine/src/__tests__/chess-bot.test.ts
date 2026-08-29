@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { Chess } from "chess.js";
-import { ChessEngine } from "@playden/game-engine";
-import type { ChessGameState } from "@playden/game-engine";
-import type { Player } from "@playden/game-types";
+import { ChessEngine } from "@playora/game-engine";
+import type { ChessGameState } from "@playora/game-engine";
+import type { Player } from "@playora/game-types";
 import { ChessBot } from "../chess/ChessBot.js";
 import { AI_LEVELS, type AiLevel } from "../types.js";
 

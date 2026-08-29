@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { AbstractGameEngine } from "../engine.js";
 import { gameEngineRegistry } from "../registry.js";
 import type { BaseGameState, BaseGameAction, BaseGameConfig } from "../types.js";
-import type { GameId, GameResult, Player } from "@playden/game-types";
+import type { GameId, GameResult, Player } from "@playora/game-types";
 
 interface TestState extends BaseGameState {
   count: number;

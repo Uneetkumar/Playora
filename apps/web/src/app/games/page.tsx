@@ -6,10 +6,10 @@ import {
   CardContent,
   Badge,
   Button,
-} from "@playden/ui";
+} from "@playora/ui";
 import { Users, Clock, Eye, Play } from "lucide-react";
 import { isGameImplemented } from "../../lib/play/modes";
-import type { GameId } from "@playden/game-types";
+import type { GameId } from "@playora/game-types";
 import Link from "next/link";
 
 export default function GamesPage() {
@@ -81,12 +81,12 @@ export default function GamesPage() {
 
   return (
     <div className="container mx-auto max-w-7xl px-4 py-10 sm:px-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between pb-8 border-b border-slate-800">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between pb-8 border-b border-border">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
             Game Catalog
           </h1>
-          <p className="mt-2 text-slate-400">
+          <p className="mt-2 text-muted-foreground">
             Browse supported multiplayer game engines and start or join rooms.
           </p>
         </div>
@@ -101,7 +101,7 @@ export default function GamesPage() {
         {gamesList.map((game) => (
           <Card
             key={game.id}
-            className="flex flex-col justify-between hover:border-slate-700 transition-all bg-slate-900/40"
+            className="flex flex-col justify-between hover:border-border transition-all bg-card/40"
           >
             <div>
               <CardHeader>
@@ -120,19 +120,19 @@ export default function GamesPage() {
                 </CardDescription>
               </CardHeader>
 
-              <CardContent className="space-y-2.5 text-xs text-slate-400">
+              <CardContent className="space-y-2.5 text-xs text-muted-foreground">
                 <div className="flex items-center space-x-2">
-                  <Users className="h-4 w-4 text-indigo-400" />
+                  <Users className="h-4 w-4 text-primary" />
                   <span>
                     {game.minPlayers} - {game.maxPlayers} Players
                   </span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Clock className="h-4 w-4 text-indigo-400" />
+                  <Clock className="h-4 w-4 text-primary" />
                   <span>{game.duration}</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Eye className="h-4 w-4 text-indigo-400" />
+                  <Eye className="h-4 w-4 text-primary" />
                   <span>{game.spectators ? "Spectator Mode Supported" : "No Spectators"}</span>
                 </div>
               </CardContent>

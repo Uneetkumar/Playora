@@ -1,5 +1,5 @@
 {
-  "name": "@playden/realtime",
+  "name": "@playora/realtime",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,16 +14,17 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@playden/auth": "workspace:*",
-    "@playden/bot-engine": "workspace:*",
-    "@playden/game-engine": "workspace:*",
-    "@playden/game-types": "workspace:*",
-    "@playden/protocol": "workspace:*"
+    "@playora/auth": "workspace:*",
+    "@playora/bot-engine": "workspace:*",
+    "@playora/game-engine": "workspace:*",
+    "@playora/game-types": "workspace:*",
+    "@playora/progression": "workspace:*",
+    "@playora/protocol": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^4.20250214.0",
-    "@playden/config": "workspace:*",
+    "@playora/config": "workspace:*",
     "jose": "^6.2.10",
     "rimraf": "^6.0.1",
     "typescript": "^5.7.3",

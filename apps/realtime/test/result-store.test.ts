@@ -62,7 +62,8 @@ describe("SupabaseResultStore", () => {
     const { impl, calls } = fakeFetch();
     const store = new SupabaseResultStore(URL_BASE, KEY, impl);
 
-    await expect(store.recordMatch(record())).resolves.toEqual({ ok: true });
+    // The game id comes back so progression does not have to re-query it.
+    await expect(store.recordMatch(record())).resolves.toEqual({ ok: true, gameId: "game-1" });
 
     expect(calls).toHaveLength(3);
     expect(calls[1]?.url).toContain("/game_sessions");
@@ -120,8 +121,8 @@ describe("SupabaseResultStore", () => {
 });
 
 describe("recordMatchSafely", () => {
-  it("does nothing when no store is configured", async () => {
-    await expect(recordMatchSafely(null, record())).resolves.toBeUndefined();
+  it("reports no-op when no store is configured", async () => {
+    await expect(recordMatchSafely(null, record())).resolves.toMatchObject({ ok: false });
   });
 
   it("swallows store failures so a match is never broken by the database", async () => {
@@ -130,6 +131,8 @@ describe("recordMatchSafely", () => {
         throw new Error("postgres exploded");
       },
     };
-    await expect(recordMatchSafely(throwing, record())).resolves.toBeUndefined();
+    // Reports failure rather than rethrowing, so progression is skipped
+    // but the match is unaffected.
+    await expect(recordMatchSafely(throwing, record())).resolves.toMatchObject({ ok: false });
   });
 });

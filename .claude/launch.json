@@ -6,7 +6,7 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [
         "--filter",
-        "@playden/web",
+        "@playora/web",
         "dev"
       ],
       "port": 8000,
@@ -17,10 +17,11 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": [
         "--filter",
-        "@playden/realtime",
+        "@playora/realtime",
         "dev"
       ],
-      "port": 8787
+      "port": 8787,
+      "autoPort": false
     }
   ]
 }

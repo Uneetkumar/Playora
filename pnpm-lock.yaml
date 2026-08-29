@@ -44,19 +44,22 @@ importers:
 
   apps/realtime:
     dependencies:
-      '@playden/auth':
+      '@playora/auth':
         specifier: workspace:*
         version: link:../../packages/auth
-      '@playden/bot-engine':
+      '@playora/bot-engine':
         specifier: workspace:*
         version: link:../../packages/bot-engine
-      '@playden/game-engine':
+      '@playora/game-engine':
         specifier: workspace:*
         version: link:../../packages/game-engine
-      '@playden/game-types':
+      '@playora/game-types':
         specifier: workspace:*
         version: link:../../packages/game-types
-      '@playden/protocol':
+      '@playora/progression':
+        specifier: workspace:*
+        version: link:../../packages/progression
+      '@playora/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
     devDependencies:
@@ -66,7 +69,7 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^4.20250214.0
         version: 4.20260702.1
-      '@playden/config':
+      '@playora/config':
         specifier: workspace:*
         version: link:../../packages/config
       jose:
@@ -87,25 +90,25 @@ importers:
 
   apps/web:
     dependencies:
-      '@playden/auth':
+      '@playora/auth':
         specifier: workspace:*
         version: link:../../packages/auth
-      '@playden/bot-engine':
+      '@playora/bot-engine':
         specifier: workspace:*
         version: link:../../packages/bot-engine
-      '@playden/database':
+      '@playora/database':
         specifier: workspace:*
         version: link:../../packages/database
-      '@playden/game-engine':
+      '@playora/game-engine':
         specifier: workspace:*
         version: link:../../packages/game-engine
-      '@playden/game-types':
+      '@playora/game-types':
         specifier: workspace:*
         version: link:../../packages/game-types
-      '@playden/protocol':
+      '@playora/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@playden/ui':
+      '@playora/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       '@supabase/ssr':
@@ -148,7 +151,7 @@ importers:
         specifier: ^5.0.3
         version: 5.0.15(@types/react@19.2.18)(react@19.2.8)
     devDependencies:
-      '@playden/config':
+      '@playora/config':
         specifier: workspace:*
         version: link:../../packages/config
       '@playwright/test':
@@ -184,14 +187,14 @@ importers:
 
   packages/auth:
     dependencies:
-      '@playden/game-types':
+      '@playora/game-types':
         specifier: workspace:*
         version: link:../game-types
       jose:
         specifier: ^6.2.10
         version: 6.2.10
     devDependencies:
-      '@playden/config':
+      '@playora/config':
         specifier: workspace:*
         version: link:../config
       rimraf:
@@ -206,17 +209,17 @@ importers:
 
   packages/bot-engine:
     dependencies:
-      '@playden/game-engine':
+      '@playora/game-engine':
         specifier: workspace:*
         version: link:../game-engine
-      '@playden/game-types':
+      '@playora/game-types':
         specifier: workspace:*
         version: link:../game-types
       chess.js:
         specifier: ^1.4.0
         version: 1.4.0
     devDependencies:
-      '@playden/config':
+      '@playora/config':
         specifier: workspace:*
         version: link:../config
       rimraf:
@@ -237,14 +240,14 @@ importers:
 
   packages/database:
     dependencies:
-      '@playden/game-types':
+      '@playora/game-types':
         specifier: workspace:*
         version: link:../game-types
       '@supabase/supabase-js':
         specifier: ^2.48.1
         version: 2.112.4
     devDependencies:
-      '@playden/config':
+      '@playora/config':
         specifier: workspace:*
         version: link:../config
       rimraf:
@@ -259,14 +262,14 @@ importers:
 
   packages/game-engine:
     dependencies:
-      '@playden/game-types':
+      '@playora/game-types':
         specifier: workspace:*
         version: link:../game-types
       chess.js:
         specifier: ^1.4.0
         version: 1.4.0
     devDependencies:
-      '@playden/config':
+      '@playora/config':
         specifier: workspace:*
         version: link:../config
       rimraf:
@@ -281,7 +284,26 @@ importers:
 
   packages/game-types:
     devDependencies:
-      '@playden/config':
+      '@playora/config':
+        specifier: workspace:*
+        version: link:../config
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@22.20.1)(vite@7.3.6(@types/node@22.20.1)(jiti@1.21.7))
+
+  packages/progression:
+    dependencies:
+      '@playora/game-types':
+        specifier: workspace:*
+        version: link:../game-types
+    devDependencies:
+      '@playora/config':
         specifier: workspace:*
         version: link:../config
       rimraf:
@@ -296,14 +318,14 @@ importers:
 
   packages/protocol:
     dependencies:
-      '@playden/game-types':
+      '@playora/game-types':
         specifier: workspace:*
         version: link:../game-types
       zod:
         specifier: ^3.24.2
         version: 3.25.76
     devDependencies:
-      '@playden/config':
+      '@playora/config':
         specifier: workspace:*
         version: link:../config
       rimraf:
@@ -331,7 +353,7 @@ importers:
         specifier: ^3.0.1
         version: 3.6.0
     devDependencies:
-      '@playden/config':
+      '@playora/config':
         specifier: workspace:*
         version: link:../config
       '@types/react':

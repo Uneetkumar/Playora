@@ -1,5 +1,5 @@
 import { Chess } from "chess.js";
-import type { Player, GameId } from "@playden/game-types";
+import type { Player, GameId } from "@playora/game-types";
 import { AbstractGameEngine } from "../engine.js";
 import type { ActionValidationResult, ActionResult } from "../types.js";
 import type {

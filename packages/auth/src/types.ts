@@ -1,4 +1,4 @@
-import type { User } from "@playden/game-types";
+import type { User } from "@playora/game-types";
 
 export interface AuthTokens {
   accessToken: string;

@@ -2,6 +2,7 @@ import type { DurableObjectNamespace } from "@cloudflare/workers-types";
 
 export interface Env {
   ROOM_DO: DurableObjectNamespace;
+  MATCHMAKING_DO: DurableObjectNamespace;
   ENVIRONMENT?: string;
 
   /**

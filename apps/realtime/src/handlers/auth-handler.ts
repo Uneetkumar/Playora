@@ -1,7 +1,7 @@
 import type { WebSocket as CFWebSocket } from "@cloudflare/workers-types";
-import type { ProtocolPlayer } from "@playden/protocol";
-import { SupabaseTokenVerifier, TokenVerificationError } from "@playden/auth";
-import type { VerifiedIdentity } from "@playden/auth";
+import type { ProtocolPlayer } from "@playora/protocol";
+import { SupabaseTokenVerifier, TokenVerificationError } from "@playora/auth";
+import type { VerifiedIdentity } from "@playora/auth";
 
 import type { RoomContext } from "../durable-objects/room-context.js";
 import {

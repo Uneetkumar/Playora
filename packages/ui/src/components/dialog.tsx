@@ -18,25 +18,25 @@ export function Dialog({ isOpen, onClose, title, description, children, classNam
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
 
       {/* Content */}
       <div
         className={cn(
-          "relative z-10 w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-900 p-6 text-slate-100 shadow-2xl animate-in fade-in-0 zoom-in-95 duration-200",
+          "relative z-10 w-full max-w-lg rounded-2xl border border-border bg-card p-6 text-foreground shadow-2xl animate-in fade-in-0 zoom-in-95 duration-200",
           className
         )}
       >
         <div className="flex items-center justify-between pb-3">
           <div>
             <h2 className="text-lg font-bold text-white">{title}</h2>
-            {description && <p className="text-sm text-slate-400 mt-0.5">{description}</p>}
+            {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-border hover:text-white transition-colors"
           >
             <X className="h-5 w-5" />
           </button>

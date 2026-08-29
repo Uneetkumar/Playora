@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { isValidRoomCode, normalizeRoomCode } from "@playden/game-types";
-import type { GameId, RoomSummary } from "@playden/game-types";
+import { isValidRoomCode, normalizeRoomCode } from "@playora/game-types";
+import type { GameId, RoomSummary } from "@playora/game-types";
 
 interface ApiRoom {
   id: string;

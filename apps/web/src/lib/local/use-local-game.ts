@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { ChessEngine } from "@playden/game-engine";
-import type { ChessAction, ChessGameState, ChessPlayerView } from "@playden/game-engine";
-import { botRegistry, type AiLevel } from "@playden/bot-engine";
-import type { GameResult, Player } from "@playden/game-types";
+import { ChessEngine } from "@playora/game-engine";
+import type { ChessAction, ChessGameState, ChessPlayerView } from "@playora/game-engine";
+import { botRegistry, type AiLevel } from "@playora/bot-engine";
+import type { GameResult, Player } from "@playora/game-types";
 
 export type LocalMode = "pass-and-play" | "vs-ai";
 

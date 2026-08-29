@@ -28,7 +28,7 @@ Query parameters are treated as untrusted input. `?userId=` is ignored entirely
 — it is not read anywhere in the Durable Object. Player identity, display name,
 avatar and guest status all come from verified JWT claims.
 
-Verification lives in `@playden/auth` (`SupabaseTokenVerifier`) and prefers
+Verification lives in `@playora/auth` (`SupabaseTokenVerifier`) and prefers
 asymmetric JWKS so no shared secret is deployed to the edge; it falls back to
 the legacy HS256 project secret when configured. Signature, expiry, issuer and
 audience are all checked.
@@ -111,7 +111,7 @@ impersonation, room lifecycle and host authority, storage durability, resync,
 and abuse controls.
 
 ```bash
-pnpm --filter @playden/realtime test
+pnpm --filter @playora/realtime test
 ```
 
 Tokens are minted locally with HS256 against a test secret bound in

@@ -2,9 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Button, Input } from "@playden/ui";
+import { Button, Input } from "@playora/ui";
 import { Hash, ArrowRight, Loader2 } from "lucide-react";
-import { ROOM_CODE_LENGTH } from "@playden/game-types";
+import { ROOM_CODE_LENGTH } from "@playora/game-types";
 import { useRooms } from "../../hooks/use-rooms";
 
 /**
@@ -34,7 +34,7 @@ export function JoinByCode({ className }: { className?: string }) {
       <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
         <div className="relative flex-1">
           <Hash
-            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
+            className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden
           />
           <label htmlFor="join-code" className="sr-only">

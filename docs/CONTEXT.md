@@ -6,7 +6,7 @@ zero loss of context. Read this file first, then `docs/ARCHITECTURE.md`.
 **Maintenance rule:** update the *Status Ledger*, *Decision Log*, and *Next Action*
 sections at the end of every milestone. Everything else changes rarely.
 
-**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** rooms persisted; only Chess is implemented
+**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** progression built (migration 00004 not yet applied)
 
 ---
 
@@ -29,7 +29,7 @@ Paste this into the new session:
 | Offline vs AI | no | no | browser | ✅ works |
 | Offline pass & play | no | no | browser | ✅ works |
 | Online with friends (room code) | guest or Google | yes | Durable Object | ✅ **verified** by `pnpm sim` |
-| Online vs random (Quick Match) | guest or Google | yes | Durable Object | ❌ no matchmaking |
+| Online vs random (Quick Match) | guest or Google | yes | Durable Object | ✅ **live**, verified by `pnpm verify:matchmaking` |
 | Online vs AI | guest or Google | yes | DO + server-side bot | ✅ **live**, BOT badge in lobby |
 | Same wifi, no internet | no | LAN only | peer device | ❌ deferred, see D4 |
 
@@ -50,9 +50,9 @@ Key non-negotiables: server is authoritative; never trust client game state; gam
 rules never in React; high-frequency state never in Postgres; bots never bypass
 `GameEngine` validation; strict TypeScript, no `any`.
 
-**Name: Playden.** Package scope is `@playden/*`; the Cloudflare Worker is
-`playden-realtime`. Rename from `@game-platform/*` was completed in Slice 0
-across 51 files before the first commit.
+**Name: Playora.** Tagline "Play. Connect. Compete." Package scope `@playora/*`,
+Worker `playora-realtime`. Renamed from Playden on 2026-08-29 when the UI/UX
+design pack arrived branded PLAYORA — 241 references in one pass, before publish.
 
 ---
 
@@ -85,6 +85,7 @@ packages/
   database/     Supabase clients — ⚠️ DEAD CODE, zero importers
   ui/           7 shadcn-style components
   bot-engine/   BotEngine interface + ChessBot (alpha-beta, 7 levels)
+  progression/  Elo rating, XP, levels, rank tiers (pure, 25 tests)
   config/       5 tsconfig presets
 supabase/
   migrations/00001_initial_schema.sql   11 tables, FKs, indexes, RLS
@@ -120,7 +121,7 @@ Three defects are load-bearing; do not build features on top of them.
 ### ✅ F1 — Identity is forgeable end-to-end — **FIXED (Slice 2)**
 The Durable Object no longer reads `userId` from the query string at all. A
 socket carries no identity until an `AUTH` message is verified against Supabase's
-signing keys (`SupabaseTokenVerifier` in `@playden/auth`, JWKS-first with legacy
+signing keys (`SupabaseTokenVerifier` in `@playora/auth`, JWKS-first with legacy
 HS256 fallback; signature, expiry, issuer and audience all checked). Until then
 only `PING` is accepted. `GAME_ACTION.playerId` is set from the verified session.
 
@@ -171,6 +172,43 @@ guest path is proven. Rooms/results persistence remains Slice 3.
 ### 🟠 Secondary
 
 ### ✅ Resolved this session
+- **Progression built.** `packages/progression` holds Elo, XP, levels and rank
+  tiers as pure functions with 25 tests — the spec asks for tested rating maths
+  (§25), which rules out putting it in SQL.
+  Migration `00004` adds `game_ratings` (per user **per game**) and
+  `rating_history`, plus XP/level/streaks on profiles.
+  `00001` had a single global `profiles.rating`, which cannot express "strong at
+  chess, new to racing" — it is now marked deprecated in a column comment.
+  The Worker applies progression after the result is written, never before.
+- **Three systems kept separate** (§11, §104.6/7): platform XP/level measures
+  participation, game rating measures skill, rank is derived from rating and not
+  stored. Bot and offline matches award XP but **do not** move rating (§13).
+- **Mobile had no navigation at all.** The only nav was `hidden md:flex`, so on
+  a phone you could reach the home page and then were stuck — a functional bug,
+  not a styling gap. Added `MobileNav`: bottom bar with Home / Games / Play /
+  Friends / Profile, Play raised as the primary action, 44px touch targets,
+  `env(safe-area-inset-bottom)` for the iOS home indicator, and `aria-current`
+  plus a screen-reader label so the active tab is not signalled by colour alone
+  (§32). Verified at 375x812.
+- Brand tagline wrapped and crowded the mobile header; hidden below `sm`.
+- **Quick Match shipped and verified.** `useMatchmaking` + a panel covering
+  searching / match found / timeout / cancelled / error with human-readable copy
+  (spec §4, §50). `pnpm verify:matchmaking` proves it end to end: 9/9 — two real
+  guests queued, not matched while alone, paired into the same room, each sees
+  the other as opponent, and the room is persisted **and private** so matched
+  rooms are never publicly listed.
+- **Playora design system adopted.** `packages/ui/src/tokens.ts` is the single
+  source for colour, spacing, radius, type, elevation, motion and z-index. Exact
+  pack palette (#6C5DD3 / #38BDF8 / #22D3EE / #FF4D8D / #0D0E14 / #151722),
+  Poppins display + Inter body via `next/font`, 8px grid, 12/16px radii.
+  **382 hardcoded colours across 22 files** replaced with tokens — the brief
+  forbids hardcoded values, and light mode is impossible without them.
+- **Light mode designed, not inverted** (explicit brief requirement), and
+  `prefers-reduced-motion` honoured globally.
+- **Renamed Playden → Playora** across 241 references; gate green after.
+- Applying Poppins immediately exposed a clipped hero: my global `h1`
+  letter-spacing compounded with `tracking-tight`, and `bg-clip-text` crops the
+  last glyph of a wide face. Both fixed.
 - **"All games open Chess" — root cause found.** Two separate problems:
   1. Only Chess has an engine. UNO, UNO No Mercy, Car Race and Bike Race are
      catalog rows with no rules (Phases 9-13). Every surface now derives
@@ -256,7 +294,7 @@ guest path is proven. Rooms/results persistence remains Slice 3.
   0.13+ requires it, and pinning an older pool would have meant a stale workerd.
   This surfaced that `__tests__` were being compiled into `dist/` and collected
   twice; tsconfigs now exclude tests from build output.
-- **Slice 0 complete.** Scope renamed to `@playden/*`; git repo initialised with
+- **Slice 0 complete.** Scope renamed to `@playora/*`; git repo initialised with
   `main` + `develop`; all 22 lint errors fixed with real types (not suppressions);
   E2E suite repaired and passing; version system implemented; CI workflows added.
   Full gate green — see §5.
@@ -296,7 +334,7 @@ Then §93 Quick Play → §94 AI → §8 social → UNO → racing → voice.
 | # | Decision | Status |
 |---|---|---|
 | D4 | Same-wifi play approach | ✅ **WebRTC + QR signalling, built last** (2026-08-29) |
-| D1 | ~~Repo / product name~~ | ✅ **Playden** (2026-08-29) |
+| D1 | ~~Repo / product name~~ | ✅ **Playora** (2026-08-29) |
 | D2 | Supabase JWT signing: asymmetric (ES256/RS256 via JWKS, preferred) vs legacy HS256 shared secret | ⏳ depends on what the dashboard offers |
 | D3 | Cloudflare plan — Durable Objects may require Workers Paid (~$5/mo); verify current terms | ⏳ not blocking local dev |
 
@@ -304,6 +342,17 @@ Then §93 Quick Play → §94 AI → §8 social → UNO → racing → voice.
 
 ## 9. Decision log
 
+- **2026-08-29** — Renamed to Playora immediately rather than later. The pack,
+  tagline and all 70 screens say Playora; nothing was published yet, so the cost
+  only ever grows.
+- **2026-08-29** — The design pack's suggested stack (Node/Express/Socket.io/
+  MongoDB) is **not** adopted. The pack labels it "for reference", its README
+  names the prompt as the source of truth, and the prompt specifies no stack.
+  The master spec mandates Cloudflare + Supabase, which is built and verified.
+- **2026-08-29** — Restyle existing screens before building new ones. The pack
+  specifies 70 screens, most resting on features that do not exist yet
+  (leaderboards, seasons, admin, analytics); building shells first would mean
+  rebuilding them.
 - **2026-08-29** — Playability derives from the engine registry, never from a
   per-screen flag. A catalog entry and a working game are different things, and
   the UI must not be able to claim otherwise.
@@ -351,7 +400,7 @@ Then §93 Quick Play → §94 AI → §8 social → UNO → racing → voice.
   use HS256 with a bound test secret, which is a real Supabase verification path,
   not a backdoor. There is no way to authenticate without a valid signature in
   any environment.
-- **2026-08-29** — Product named **Playden** (play + den: a place you go to play
+- **2026-08-29** — Product named **Playora** (play + den: a place you go to play
   with people). Chosen for being game-agnostic, matching the "PLAY TOGETHER"
   landing thesis, and near-certainly available as a coined compound.
 - **2026-08-29** — Promoted `roomId` / `sessionId` from `ChessConfig` to
@@ -445,14 +494,16 @@ secrets production. **The Worker does not read `.env.local`.**
 - [ ] Then verify the Google sign-in round trip the same way guest was verified
 
 ### Next
-1. **Google sign-in round trip** — provider is ON, but the flow needs a human to
-   enter Google credentials. Only Uneet can verify this.
-2. **Quick Match matchmaking** (§93) — last unbuilt online mode.
-3. **End-to-end result persistence check** — create a room through the API, play
-   it to a finish, confirm `game_sessions` / `game_results` rows appear.
-4. **Rating / XP / history** on top of persisted results (§11-13, §16).
-5. **UNO** (§55) — the next actual game. Everything above is platform work.
-6. **Same-wifi via QR** — deferred by D4, build last.
+1. **Apply migration `00004`** to Supabase, then verify progression end to end
+   (play a match, confirm `game_ratings` and `rating_history` rows).
+2. **Progression UI** — profile with level/XP bar and per-game rating cards,
+   match history, leaderboard. The data model is ready.
+3. **UNO** — second game, the real test of the plugin architecture.
+4. **Same-wifi via QR** — deferred by D4, build last.
+
+### Blocked on Uneet
+- Google sign-in round trip (needs a human to enter Google credentials).
+- Rename the GitHub repo `Playden` → `Playora` (GitHub redirects the old URL).
 
 ### In progress — Slice 3: rooms + persistence
 

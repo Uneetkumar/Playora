@@ -62,8 +62,27 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        success: "hsl(var(--success))",
+        warning: "hsl(var(--warning))",
+        pink: "hsl(var(--pink))",
+      },
+      fontFamily: {
+        display: ["var(--font-display)", "Poppins", "system-ui", "sans-serif"],
+        sans: ["var(--font-body)", "Inter", "system-ui", "sans-serif"],
+      },
+      screens: {
+        // Sizes the brief calls out individually, so layouts can be designed
+        // for them rather than scaled down from desktop.
+        xs: "320px",
+        "sm-plus": "390px",
+        mobile: "430px",
+      },
+      boxShadow: {
+        "glow-primary": "0 0 24px -4px rgb(108 93 211 / 0.45)",
+        raised: "0 8px 24px -8px rgb(0 0 0 / 0.6)",
       },
       borderRadius: {
+        xl: "var(--radius-lg)",
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",

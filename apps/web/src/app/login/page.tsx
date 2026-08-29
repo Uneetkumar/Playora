@@ -10,7 +10,7 @@ import {
   CardContent,
   Button,
   Input,
-} from "@playden/ui";
+} from "@playora/ui";
 import { Gamepad2, User, ArrowRight, ShieldCheck, AlertTriangle, Loader2 } from "lucide-react";
 import { useAuthStore } from "../../lib/store/auth-store";
 import { GoogleMark } from "../../components/auth/google-mark";
@@ -61,13 +61,13 @@ function LoginContent() {
 
   return (
     <div className="flex flex-1 items-center justify-center px-4 py-16">
-      <Card className="w-full max-w-md border-slate-800 bg-slate-900/90 shadow-2xl backdrop-blur-xl">
+      <Card className="w-full max-w-md border-border bg-card/90 shadow-2xl backdrop-blur-xl">
         <CardHeader className="text-center pb-6">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-600 shadow-xl shadow-indigo-600/30 mb-4">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-xl shadow-primary/30 mb-4">
             <Gamepad2 className="h-8 w-8 text-white" />
           </div>
           <CardTitle className="text-2xl font-black text-white">Play together</CardTitle>
-          <CardDescription className="text-slate-400 mt-1">
+          <CardDescription className="text-muted-foreground mt-1">
             Sign in with Google, or jump straight in as a guest.
           </CardDescription>
         </CardHeader>
@@ -102,7 +102,7 @@ function LoginContent() {
           <Button
             variant="outline"
             disabled={!isConfigured || pending !== null}
-            className="w-full justify-center gap-3 h-11 border-slate-700 bg-slate-950/80 hover:bg-slate-800"
+            className="w-full justify-center gap-3 h-11 border-border bg-background/80 hover:bg-border"
             onClick={handleGoogle}
           >
             {pending === "google" ? (
@@ -117,21 +117,21 @@ function LoginContent() {
 
           <div className="relative flex items-center justify-center">
             <div className="absolute inset-0 flex items-center" aria-hidden>
-              <div className="w-full border-t border-slate-800" />
+              <div className="w-full border-t border-border" />
             </div>
-            <span className="relative bg-slate-900 px-3 text-xs uppercase tracking-widest text-slate-500 font-semibold">
+            <span className="relative bg-card px-3 text-xs uppercase tracking-widest text-muted-foreground font-semibold">
               Or play instantly
             </span>
           </div>
 
           <form onSubmit={handleGuest} className="space-y-4">
             <div>
-              <label htmlFor="guest-name" className="text-xs font-semibold text-slate-300">
+              <label htmlFor="guest-name" className="text-xs font-semibold text-foreground">
                 Choose a nickname (optional)
               </label>
               <div className="relative mt-1">
                 <User
-                  className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500"
+                  className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
                   aria-hidden
                 />
                 <Input
@@ -149,7 +149,7 @@ function LoginContent() {
             <Button
               type="submit"
               disabled={!isConfigured || pending !== null}
-              className="w-full gap-2 h-11 shadow-indigo-500/25"
+              className="w-full gap-2 h-11 shadow-primary/25"
             >
               {pending === "guest" ? (
                 <>
@@ -165,7 +165,7 @@ function LoginContent() {
             </Button>
           </form>
 
-          <div className="flex items-center justify-center space-x-2 text-[11px] text-slate-500 pt-2 border-t border-slate-800/60">
+          <div className="flex items-center justify-center space-x-2 text-[11px] text-muted-foreground pt-2 border-t border-border/60">
             <ShieldCheck className="h-4 w-4 text-emerald-500" aria-hidden />
             <span>You can link a Google account later and keep your progress</span>
           </div>

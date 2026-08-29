@@ -32,7 +32,7 @@ export function ReactionOverlay({ reactions }: ReactionOverlayProps) {
             {item.emoji}
           </div>
           {item.senderName && (
-            <span className="text-[10px] bg-slate-900/80 text-slate-300 font-semibold px-2 py-0.5 rounded-full border border-slate-700/50 shadow mt-1">
+            <span className="text-[10px] bg-card/80 text-foreground font-semibold px-2 py-0.5 rounded-full border border-border/50 shadow mt-1">
               {item.senderName}
             </span>
           )}
@@ -48,13 +48,13 @@ export function ReactionPicker({
   onSelectReaction: (emoji: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-1.5 p-1.5 bg-slate-900/90 border border-slate-800 rounded-full shadow-lg backdrop-blur-md">
+    <div className="flex items-center gap-1.5 p-1.5 bg-card/90 border border-border rounded-full shadow-lg backdrop-blur-md">
       {AVAILABLE_REACTIONS.map((emoji) => (
         <button
           key={emoji}
           type="button"
           onClick={() => onSelectReaction(emoji)}
-          className="h-8 w-8 rounded-full flex items-center justify-center text-base hover:scale-125 hover:bg-slate-800 active:scale-95 transition-all duration-150"
+          className="h-8 w-8 rounded-full flex items-center justify-center text-base hover:scale-125 hover:bg-border active:scale-95 transition-all duration-150"
           title={`Send ${emoji}`}
         >
           {emoji}

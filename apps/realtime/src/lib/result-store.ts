@@ -10,8 +10,15 @@ export interface MatchRecord {
   result: MatchResult;
 }
 
+export interface RecordOutcome {
+  ok: boolean;
+  reason?: string;
+  /** Postgres game id, so progression does not have to look it up again. */
+  gameId?: string;
+}
+
 export interface ResultStore {
-  recordMatch(record: MatchRecord): Promise<{ ok: boolean; reason?: string }>;
+  recordMatch(record: MatchRecord): Promise<RecordOutcome>;
 }
 
 /** Bots have no profile row, so they can never be a foreign-keyed winner. */
@@ -31,11 +38,19 @@ export function isBotId(id: string | null): boolean {
  * an error: the match stays playable, it just isn't recorded.
  */
 export class SupabaseResultStore implements ResultStore {
+  private readonly fetchImpl: typeof fetch;
+
   constructor(
     private readonly supabaseUrl: string,
     private readonly serviceRoleKey: string,
-    private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
+    fetchImpl?: typeof fetch,
+  ) {
+    // The Workers runtime requires the global fetch to be invoked with
+    // globalThis as its receiver. Holding it as a class property and calling
+    // `this.fetchImpl(...)` throws "Illegal invocation" -- Node's fetch happens
+    // to tolerate it, so this only shows up on a real Worker.
+    this.fetchImpl = fetchImpl ?? globalThis.fetch.bind(globalThis);
+  }
 
   private headers(extra: Record<string, string> = {}): Record<string, string> {
     return {
@@ -46,7 +61,7 @@ export class SupabaseResultStore implements ResultStore {
     };
   }
 
-  async recordMatch(record: MatchRecord): Promise<{ ok: boolean; reason?: string }> {
+  async recordMatch(record: MatchRecord): Promise<RecordOutcome> {
     const base = this.supabaseUrl.replace(/\/+$/, "");
 
     const roomRes = await this.fetchImpl(
@@ -90,7 +105,7 @@ export class SupabaseResultStore implements ResultStore {
     });
     if (!resultRes.ok) return { ok: false, reason: `result write failed (${resultRes.status})` };
 
-    return { ok: true };
+    return { ok: true, gameId: room.game_id };
   }
 }
 
@@ -112,8 +127,8 @@ export function createResultStore(env: {
 export async function recordMatchSafely(
   store: ResultStore | null,
   record: MatchRecord,
-): Promise<void> {
-  if (!store) return;
+): Promise<RecordOutcome> {
+  if (!store) return { ok: false, reason: "no store configured" };
   try {
     const outcome = await store.recordMatch(record);
     if (outcome.ok) {
@@ -121,7 +136,9 @@ export async function recordMatchSafely(
     } else {
       log.warn("result.not_persisted", { roomCode: record.roomCode, reason: outcome.reason });
     }
+    return outcome;
   } catch (err) {
     log.error("result.persist_failed", { roomCode: record.roomCode, ...errorFields(err) });
+    return { ok: false, reason: "exception" };
   }
 }

@@ -46,7 +46,7 @@ This document details the multi-tier production architecture of the **Game Platf
 - **Role**: Distributed, single-threaded actors running on Cloudflare edge workers.
 - Each active game room maps to a dedicated `RoomDurableObject` instance.
 - Handles WebSocket upgrades, client authentication, heartbeat pings/pongs, and player presence.
-- Executes the deterministic `@playden/game-engine` instances in-memory.
+- Executes the deterministic `@playora/game-engine` instances in-memory.
 - Guarantees strict ordering of actions without database locks.
 
 ### 3. Next.js App Router (Frontend Platform)

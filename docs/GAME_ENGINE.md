@@ -1,6 +1,6 @@
 # Game Engine Contract & Extensibility
 
-`@playden/game-engine` provides a generic, decoupled abstraction for implementing multiplayer games.
+`@playora/game-engine` provides a generic, decoupled abstraction for implementing multiplayer games.
 
 ## Design Philosophy
 
@@ -43,7 +43,7 @@ export interface GameEngine<
 ## Registering a New Game
 
 ```typescript
-import { gameEngineRegistry } from "@playden/game-engine";
+import { gameEngineRegistry } from "@playora/game-engine";
 import { ChessGameEngine } from "./ChessGameEngine";
 
 // Register engine factory

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ROOM_CODE_LENGTH } from "@playden/game-types";
+import { ROOM_CODE_LENGTH } from "@playora/game-types";
 
 /**
  * Request shapes for the room API.

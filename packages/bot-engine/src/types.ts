@@ -1,5 +1,5 @@
-import type { BaseGameAction, BaseGameState } from "@playden/game-engine";
-import type { GameId } from "@playden/game-types";
+import type { BaseGameAction, BaseGameState } from "@playora/game-engine";
+import type { GameId } from "@playora/game-types";
 
 /**
  * AI difficulty. Deliberately separate from platform level and from game rating

@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
-import type { AuthSession, AuthState, AuthUser } from "@playden/auth";
+import type { AuthSession, AuthState, AuthUser } from "@playora/auth";
 import { getSupabaseBrowserClient } from "../supabase/client";
 import { isSupabaseConfigured } from "../env";
 

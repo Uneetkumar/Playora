@@ -1,5 +1,5 @@
 {
-  "extends": "@playden/config/typescript/worker.json",
+  "extends": "@playora/config/typescript/worker.json",
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src"

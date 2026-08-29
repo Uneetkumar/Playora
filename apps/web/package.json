@@ -1,5 +1,5 @@
 {
-  "name": "@playden/web",
+  "name": "@playora/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,13 +13,13 @@
     "clean": "rimraf .next dist"
   },
   "dependencies": {
-    "@playden/auth": "workspace:*",
-    "@playden/bot-engine": "workspace:*",
-    "@playden/database": "workspace:*",
-    "@playden/game-engine": "workspace:*",
-    "@playden/game-types": "workspace:*",
-    "@playden/protocol": "workspace:*",
-    "@playden/ui": "workspace:*",
+    "@playora/auth": "workspace:*",
+    "@playora/bot-engine": "workspace:*",
+    "@playora/database": "workspace:*",
+    "@playora/game-engine": "workspace:*",
+    "@playora/game-types": "workspace:*",
+    "@playora/protocol": "workspace:*",
+    "@playora/ui": "workspace:*",
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
     "chess.js": "^1.4.0",
@@ -35,7 +35,7 @@
     "zustand": "^5.0.3"
   },
   "devDependencies": {
-    "@playden/config": "workspace:*",
+    "@playora/config": "workspace:*",
     "@playwright/test": "^1.50.1",
     "@types/node": "^22.13.4",
     "@types/react": "^19.0.8",

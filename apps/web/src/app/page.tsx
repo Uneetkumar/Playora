@@ -7,11 +7,11 @@ import {
   CardDescription,
   CardContent,
   Badge,
-} from "@playden/ui";
+} from "@playora/ui";
 import { Gamepad2, Zap, Shield, Globe2, ArrowRight, Play, Users, Trophy } from "lucide-react";
 import { JoinByCode } from "../components/rooms/join-by-code";
 import { isGameImplemented } from "../lib/play/modes";
-import type { GameId } from "@playden/game-types";
+import type { GameId } from "@playora/game-types";
 
 export default function HomePage() {
   const featuredGames = [
@@ -65,7 +65,7 @@ export default function HomePage() {
   return (
     <div className="flex flex-col">
       {/* Hero Section */}
-      <section className="relative overflow-hidden py-20 lg:py-28 border-b border-slate-800/60 bg-gradient-to-b from-indigo-950/30 via-[#080c14] to-[#080c14]">
+      <section className="relative overflow-hidden py-20 lg:py-28 border-b border-border/60 bg-gradient-to-b from-primary/10/30 via-[#080c14] to-[#080c14]">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.25),rgba(255,255,255,0))]" />
 
         <div className="container relative mx-auto max-w-7xl px-4 sm:px-6 text-center">
@@ -73,21 +73,23 @@ export default function HomePage() {
             ⚡ Free to play · No download · Works offline
           </Badge>
 
-          <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-6xl lg:text-7xl">
-            Next-Gen Multiplayer <br />
-            <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-              Gaming Platform
+          <h1 className="text-4xl font-extrabold text-foreground sm:text-6xl lg:text-7xl">
+            PLAY TOGETHER. <br />
+            {/* inline-block + trailing padding: bg-clip-text otherwise crops the
+                final glyph of a wide display face. */}
+            <span className="inline-block bg-gradient-to-r from-primary via-secondary to-pink bg-clip-text pr-[0.12em] text-transparent">
+              WIN TOGETHER.
             </span>
           </h1>
 
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-400 sm:text-xl">
-            Play chess against the computer, pass the device to a friend, or challenge
-            someone online. No account needed to start.
+          <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground sm:text-xl">
+            Play games with friends or players around the world. Free, no download,
+            and it works offline too.
           </p>
 
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
             <Link href="/play">
-              <Button size="lg" className="gap-2 shadow-lg shadow-indigo-600/30">
+              <Button size="lg" className="gap-2 shadow-lg shadow-primary/30">
                 <Play className="h-5 w-5 fill-current" />
                 <span>Play Now</span>
               </Button>
@@ -102,7 +104,7 @@ export default function HomePage() {
           </div>
 
           <div className="mx-auto mt-10 w-full max-w-md">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Got a code from a friend?
             </p>
             <JoinByCode />
@@ -111,12 +113,12 @@ export default function HomePage() {
       </section>
 
       {/* Architecture Highlights */}
-      <section className="py-16 bg-slate-950/40 border-b border-slate-800/60">
+      <section className="py-16 bg-background/40 border-b border-border/60">
         <div className="container mx-auto max-w-7xl px-4 sm:px-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="bg-slate-900/40 border-slate-800">
+            <Card className="bg-card/40 border-border">
               <CardHeader>
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-400 mb-2">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary mb-2">
                   <Zap className="h-6 w-6" />
                 </div>
                 <CardTitle>Edge Realtime</CardTitle>
@@ -127,7 +129,7 @@ export default function HomePage() {
               </CardHeader>
             </Card>
 
-            <Card className="bg-slate-900/40 border-slate-800">
+            <Card className="bg-card/40 border-border">
               <CardHeader>
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-500/10 text-purple-400 mb-2">
                   <Shield className="h-6 w-6" />
@@ -140,7 +142,7 @@ export default function HomePage() {
               </CardHeader>
             </Card>
 
-            <Card className="bg-slate-900/40 border-slate-800">
+            <Card className="bg-card/40 border-border">
               <CardHeader>
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400 mb-2">
                   <Globe2 className="h-6 w-6" />
@@ -162,12 +164,12 @@ export default function HomePage() {
           <div className="flex items-center justify-between mb-8">
             <div>
               <h2 className="text-2xl font-bold text-white">Upcoming & Supported Games</h2>
-              <p className="text-sm text-slate-400 mt-1">
+              <p className="text-sm text-muted-foreground mt-1">
                 Modular games built on the platform engine framework
               </p>
             </div>
             <Link href="/games">
-              <Button variant="ghost" size="sm" className="gap-1 text-indigo-400">
+              <Button variant="ghost" size="sm" className="gap-1 text-primary">
                 <span>View All</span>
                 <ArrowRight className="h-4 w-4" />
               </Button>
@@ -178,26 +180,26 @@ export default function HomePage() {
             {featuredGames.map((game) => (
               <Card
                 key={game.id}
-                className="group hover:border-slate-700 transition-all duration-300 hover:shadow-indigo-500/10"
+                className="group hover:border-border transition-all duration-300 hover:shadow-primary/10"
               >
                 <div
                   className={`h-28 rounded-t-xl bg-gradient-to-br ${game.color} p-4 flex flex-col justify-between`}
                 >
                   <div className="flex justify-between items-center">
-                    <Badge variant="secondary" className="text-xs bg-slate-900/80">
+                    <Badge variant="secondary" className="text-xs bg-card/80">
                       {game.category}
                     </Badge>
                     <Badge variant="success" className="text-xs">
                       {game.status}
                     </Badge>
                   </div>
-                  <div className="flex items-center space-x-2 text-xs text-slate-300 font-medium">
+                  <div className="flex items-center space-x-2 text-xs text-foreground font-medium">
                     <Users className="h-3.5 w-3.5" />
                     <span>{game.players}</span>
                   </div>
                 </div>
                 <CardHeader>
-                  <CardTitle className="text-lg group-hover:text-indigo-400 transition-colors">
+                  <CardTitle className="text-lg group-hover:text-primary transition-colors">
                     {game.name}
                   </CardTitle>
                   <CardDescription className="line-clamp-2">{game.description}</CardDescription>

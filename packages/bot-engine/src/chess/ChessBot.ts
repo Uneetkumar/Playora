@@ -1,6 +1,6 @@
 import { Chess, type Move } from "chess.js";
-import type { ChessAction, ChessGameState } from "@playden/game-engine";
-import type { GameId } from "@playden/game-types";
+import type { ChessAction, ChessGameState } from "@playora/game-engine";
+import type { GameId } from "@playora/game-types";
 import { AI_LEVELS, type AiLevel, type BotEngine } from "../types.js";
 import { MATE_SCORE, evaluate, pieceValue } from "./evaluation.js";
 

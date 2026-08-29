@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { ChessEngine } from "../chess/ChessEngine.js";
 import { gameEngineRegistry } from "../registry.js";
-import type { Player } from "@playden/game-types";
+import type { Player } from "@playora/game-types";
 import type { ChessAction } from "../chess/types.js";
 
 describe("ChessEngine Server-Authoritative Rules", () => {

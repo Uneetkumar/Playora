@@ -2,12 +2,12 @@
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: [
-    '@playden/ui',
-    '@playden/auth',
-    '@playden/database',
-    '@playden/game-types',
-    '@playden/protocol',
-    '@playden/game-engine'
+    '@playora/ui',
+    '@playora/auth',
+    '@playora/database',
+    '@playora/game-types',
+    '@playora/protocol',
+    '@playora/game-engine'
   ]
 };
 
