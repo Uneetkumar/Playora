@@ -8,9 +8,10 @@
     "dev": "wrangler dev",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/",
+    "lint": "eslint src/ test/",
     "deploy": "wrangler deploy",
-    "clean": "rimraf dist .wrangler"
+    "clean": "rimraf dist .wrangler",
+    "test": "vitest run"
   },
   "dependencies": {
     "@playden/auth": "workspace:*",
@@ -19,10 +20,13 @@
     "@playden/protocol": "workspace:*"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^4.20250214.0",
     "@playden/config": "workspace:*",
+    "jose": "^6.2.10",
     "rimraf": "^6.0.1",
     "typescript": "^5.7.3",
+    "vitest": "4.1.11",
     "wrangler": "^3.109.2"
   }
 }

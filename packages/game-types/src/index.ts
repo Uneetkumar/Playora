@@ -2,6 +2,7 @@ export * from "./user.js";
 export * from "./player.js";
 export * from "./game.js";
 export * from "./room.js";
+export * from "./room-code.js";
 export * from "./session.js";
 export * from "./result.js";
 export * from "./presence.js";

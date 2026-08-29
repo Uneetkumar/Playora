@@ -3,683 +3,519 @@ import type {
   WebSocket as CFWebSocket,
   Response as CFResponse,
 } from "@cloudflare/workers-types";
-import type { Env, ClientConnectionAttachment } from "../types.js";
 import {
   parseClientMessage,
   serializeProtocolMessage,
+  type ClientMessage,
   type ServerMessage,
-  type ProtocolPlayer,
 } from "@playden/protocol";
 import { gameEngineRegistry } from "@playden/game-engine";
-import type { AnyGameEngine, BaseGameAction, BaseGameState } from "@playden/game-engine";
+import { SupabaseTokenVerifier } from "@playden/auth";
 import type { GameId } from "@playden/game-types";
 
-interface ActiveConnection {
-  ws: CFWebSocket;
-  meta: ClientConnectionAttachment;
-}
+import type { Env } from "../types.js";
+import { RateLimiter, type RateLimitKind } from "../lib/rate-limit.js";
+import { log, errorFields } from "../lib/logger.js";
+import { authenticateConnection } from "../handlers/auth-handler.js";
+import { applyGameAction, finishGame, startGame } from "../handlers/game-handler.js";
+import type { RoomContext } from "./room-context.js";
+import {
+  AUTH_DEADLINE_MS,
+  DEFAULT_GRACE_PERIOD_SECONDS,
+  createRoom,
+  readAttachment,
+  reassignHost,
+  toRoomStatePayload,
+  type ConnectionAttachment,
+  type PersistedRoom,
+} from "./room-state.js";
 
+const ROOM_KEY = "room";
+const CHAT_MAX_LENGTH = 500;
+// Matching control characters is the point: they are stripped from chat input
+// so they cannot break rendering or smuggle terminal escapes.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001F\u007F]/g;
+
+/**
+ * Authoritative live state for a single room.
+ *
+ * This class owns lifecycle only — sockets, storage, alarms and routing.
+ * Authentication lives in `handlers/auth-handler.ts` and gameplay in
+ * `handlers/game-handler.ts`, both reached through the narrow `RoomContext`
+ * seam so neither has to know about socket or storage mechanics.
+ *
+ * Two invariants govern the whole module:
+ *
+ *  1. **Identity is never taken from the client.** A connection carries no
+ *     identity until an AUTH message has been cryptographically verified.
+ *     Query parameters and message bodies are untrusted input
+ *     (spec sections 63, 83, 104.1).
+ *
+ *  2. **All state is durable.** Room and game state live in Durable Object
+ *     storage and are restored on construction, and sockets use the hibernation
+ *     API. Eviction is routine and must never destroy a match (spec section 61).
+ */
 export class RoomDurableObject {
   private state: DurableObjectState;
   protected env: Env;
-  private connections = new Map<string, ActiveConnection>(); // connectionId -> ActiveConnection
-  private userToConnection = new Map<string, string>(); // userId -> connectionId
-
-  private roomId: string = "";
-  private roomCode: string = "";
-  private hostUserId: string = "";
-  private gameId: GameId = "chess";
-  private status: "waiting" | "starting" | "in_game" | "finished" | "abandoned" = "waiting";
-  private players = new Map<string, ProtocolPlayer>();
-  private spectators = new Map<string, ProtocolPlayer>();
-  private disconnectTimers = new Map<string, ReturnType<typeof setTimeout>>(); // userId -> timer
-  private sequenceNumber: number = 0;
-  private currentSessionId: string | null = null;
-  private currentGameState: BaseGameState | null = null;
-  private createdAt: number = Date.now();
+  private room: PersistedRoom | null = null;
+  private rateLimiter = new RateLimiter();
+  private verifier: SupabaseTokenVerifier | null = null;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
     this.env = env;
+
+    // Restore before any request is served, so a revived object never serves
+    // an empty room to a reconnecting player.
+    this.state.blockConcurrencyWhile(async () => {
+      this.room = (await this.state.storage.get<PersistedRoom>(ROOM_KEY)) ?? null;
+    });
   }
+
+  // ---------------------------------------------------------------------------
+  // HTTP
+  // ---------------------------------------------------------------------------
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
-    // WebSocket Upgrade
     if (request.headers.get("Upgrade") === "websocket") {
-      const pair = new WebSocketPair();
-      const client = pair[0];
-      const server = pair[1] as unknown as CFWebSocket;
-
-      const connectionId = crypto.randomUUID();
-      const userId = url.searchParams.get("userId") || `guest_${connectionId.slice(0, 6)}`;
-      const username = url.searchParams.get("username") || `Player_${connectionId.slice(0, 4)}`;
-      const roomId = url.searchParams.get("roomId") || this.state.id.toString();
-      const gameParam = (url.searchParams.get("gameId") as GameId) || "chess";
-      const asSpectator = url.searchParams.get("spectator") === "true";
-
-      if (!this.roomId) {
-        this.roomId = roomId;
-        this.roomCode = roomId.length > 8 ? roomId.slice(0, 6).toUpperCase() : roomId.toUpperCase();
-        this.gameId = gameParam;
-        this.createdAt = Date.now();
-      }
-
-      const isReconnect = this.players.has(userId) || this.spectators.has(userId);
-
-      if (!this.hostUserId && !asSpectator) {
-        this.hostUserId = userId;
-      }
-
-      const existingPlayer = this.players.get(userId) || this.spectators.get(userId);
-      const assignedRole = existingPlayer
-        ? existingPlayer.role
-        : this.hostUserId === userId
-        ? "host"
-        : asSpectator
-        ? "spectator"
-        : "player";
-
-      const meta: ClientConnectionAttachment = {
-        connectionId,
-        userId,
-        username: existingPlayer?.username || username,
-        displayName: existingPlayer?.displayName || username,
-        avatarUrl: existingPlayer?.avatarUrl || null,
-        role: assignedRole,
-        isGuest: userId.startsWith("guest_"),
-        joinedAt: existingPlayer?.joinedAt || Date.now(),
-        lastPingAt: Date.now(),
-      };
-
-      this.handleWebSocket(server, meta, isReconnect);
-
-      return new Response(null, {
-        status: 101,
-        webSocket: client as unknown as CFResponse["webSocket"],
-      });
+      return this.handleUpgrade(url);
     }
 
-    // HTTP Room Info endpoint
     if (url.pathname.endsWith("/status")) {
+      const room = this.room;
       return Response.json({
-        roomId: this.roomId,
-        roomCode: this.roomCode,
-        gameId: this.gameId,
-        status: this.status,
-        playerCount: this.players.size,
-        spectatorCount: this.spectators.size,
-        activeConnections: this.connections.size,
-        sequenceNumber: this.sequenceNumber,
-        currentSessionId: this.currentSessionId,
+        exists: room !== null,
+        roomId: room?.roomId ?? null,
+        roomCode: room?.roomCode ?? null,
+        gameId: room?.gameId ?? null,
+        status: room?.status ?? null,
+        playerCount: room ? Object.keys(room.players).length : 0,
+        spectatorCount: room ? Object.keys(room.spectators).length : 0,
+        activeConnections: this.state.getWebSockets().length,
+        sequenceNumber: room?.sequenceNumber ?? 0,
+        currentSessionId: room?.currentSessionId ?? null,
       });
     }
 
     return new Response("Not Found", { status: 404 });
   }
 
-  private handleWebSocket(ws: CFWebSocket, meta: ClientConnectionAttachment, isReconnect: boolean) {
-    ws.accept();
+  private async handleUpgrade(url: URL): Promise<Response> {
+    const pair = new WebSocketPair();
+    const client = pair[0];
+    const server = pair[1] as unknown as CFWebSocket;
 
-    // Clear any disconnect grace timer if player was reconnecting
-    const pendingTimer = this.disconnectTimers.get(meta.userId);
-    if (pendingTimer !== undefined) {
-      clearTimeout(pendingTimer);
-      this.disconnectTimers.delete(meta.userId);
+    const roomId = url.searchParams.get("roomId") || this.state.id.toString();
+    const gameId = (url.searchParams.get("gameId") as GameId | null) ?? "chess";
+
+    if (!this.room) {
+      const maxPlayers = gameEngineRegistry.has(gameId)
+        ? gameEngineRegistry.get(gameId).maxPlayers
+        : 2;
+      this.room = createRoom({
+        roomId,
+        roomCode: deriveRoomCode(roomId),
+        gameId,
+        maxPlayers,
+        isPrivate: url.searchParams.get("private") === "true",
+        now: Date.now(),
+      });
+      await this.persist();
     }
 
-    // Close any previous socket for this user
-    const previousConnId = this.userToConnection.get(meta.userId);
-    if (previousConnId && previousConnId !== meta.connectionId) {
-      const prev = this.connections.get(previousConnId);
-      if (prev) {
-        try {
-          prev.ws.close(1000, "Replaced by new connection");
-        } catch (err) {
-          console.warn("[room] failed to close superseded socket", { roomId: this.roomId, userId: meta.userId, err });
-        }
-        this.connections.delete(previousConnId);
-      }
-    }
+    // Hibernation: the runtime, not this object, owns the socket lifecycle.
+    this.state.acceptWebSocket(server);
 
-    this.connections.set(meta.connectionId, { ws, meta });
-    this.userToConnection.set(meta.userId, meta.connectionId);
-
-    let playerRecord = this.players.get(meta.userId) || this.spectators.get(meta.userId);
-
-    if (!playerRecord) {
-      playerRecord = {
-        id: meta.connectionId,
-        userId: meta.userId,
-        username: meta.username,
-        displayName: meta.displayName,
-        avatarUrl: meta.avatarUrl,
-        role: meta.role,
-        isReady: false,
-        seatIndex: meta.role === "spectator" ? -1 : this.players.size,
-        status: "connected",
-        joinedAt: meta.joinedAt,
-        lastPingAt: meta.lastPingAt,
-        isGuest: meta.isGuest,
-      };
-
-      if (meta.role === "spectator") {
-        this.spectators.set(meta.userId, playerRecord);
-      } else {
-        this.players.set(meta.userId, playerRecord);
-      }
-    } else {
-      playerRecord.status = "connected";
-      playerRecord.id = meta.connectionId;
-      playerRecord.lastPingAt = Date.now();
-    }
-
-    // 1. Send CONNECTED message
-    const connectedMsg: ServerMessage = {
-      type: "CONNECTED",
-      connectionId: meta.connectionId,
-      userId: meta.userId,
-      serverTimestamp: Date.now(),
+    const attachment: ConnectionAttachment = {
+      connectionId: crypto.randomUUID(),
+      userId: null, // established only by a verified AUTH message
+      displayName: "",
+      avatarUrl: null,
+      isGuest: false,
+      asSpectator: url.searchParams.get("spectator") === "true",
+      connectedAt: Date.now(),
+      lastSeenAt: Date.now(),
     };
-    ws.send(serializeProtocolMessage(connectedMsg));
+    server.serializeAttachment(attachment);
 
-    // 2. Broadcast PLAYER_JOINED or PLAYER_RECONNECTED
-    if (isReconnect) {
-      this.broadcast({
-        type: "PLAYER_RECONNECTED",
-        roomId: this.roomId,
-        playerId: meta.userId,
-      });
-    } else {
-      this.broadcast({
-        type: "PLAYER_JOINED",
-        roomId: this.roomId,
-        player: playerRecord,
-      });
-    }
+    // Unauthenticated sockets are swept by the alarm if AUTH never arrives.
+    await this.scheduleAlarm();
 
-    // 3. Send full ROOM_STATE to the joining client
-    ws.send(serializeProtocolMessage(this.buildRoomStateMessage()));
-
-    // 4. If game is currently in progress, send current game state to client
-    if (this.status === "in_game" && this.currentGameState && gameEngineRegistry.has(this.gameId)) {
-      const engine = gameEngineRegistry.get(this.gameId);
-      const playerView = engine.getPlayerView(this.currentGameState, meta.userId);
-      const gameStateMsg: ServerMessage = {
-        type: "GAME_STATE",
-        roomId: this.roomId,
-        sessionId: this.currentSessionId || "",
-        sequenceNumber: this.sequenceNumber,
-        state: playerView,
-      };
-      ws.send(serializeProtocolMessage(gameStateMsg));
-    }
-
-    // Listen for client messages
-    ws.addEventListener("message", (event) => {
-      this.handleMessage(meta.connectionId, event.data);
-    });
-
-    ws.addEventListener("close", () => {
-      this.handleDisconnect(meta.connectionId);
-    });
-
-    ws.addEventListener("error", () => {
-      this.handleDisconnect(meta.connectionId);
+    return new Response(null, {
+      status: 101,
+      webSocket: client as unknown as CFResponse["webSocket"],
     });
   }
 
-  private handleMessage(connectionId: string, rawData: unknown) {
-    const conn = this.connections.get(connectionId);
-    if (!conn) return;
+  // ---------------------------------------------------------------------------
+  // WebSocket lifecycle (hibernation API)
+  // ---------------------------------------------------------------------------
 
-    const parsed = parseClientMessage(rawData);
+  async webSocketMessage(ws: CFWebSocket, raw: string | ArrayBuffer): Promise<void> {
+    const attachment = readAttachment(ws);
+    if (!attachment || !this.room) return;
+
+    const parsed = parseClientMessage(typeof raw === "string" ? raw : "");
     if (!parsed.success) {
-      const errorMsg: ServerMessage = {
-        type: "ERROR",
-        code: "BAD_REQUEST",
-        message: parsed.error,
-      };
-      conn.ws.send(serializeProtocolMessage(errorMsg));
+      this.send(ws, { type: "ERROR", code: "BAD_REQUEST", message: parsed.error });
       return;
     }
 
     const msg = parsed.data;
+    attachment.lastSeenAt = Date.now();
+
+    // PING is the only traffic permitted before authentication.
+    if (msg.type === "PING") {
+      this.touch(ws, attachment);
+      return;
+    }
+
+    if (msg.type === "AUTH") {
+      await authenticateConnection(this.context(), this.getVerifier(), ws, attachment, msg.token);
+      return;
+    }
+
+    if (!attachment.userId) {
+      this.send(ws, {
+        type: "ERROR",
+        code: "UNAUTHENTICATED",
+        message: "Send an AUTH message with a valid access token before any other action.",
+      });
+      return;
+    }
+
+    ws.serializeAttachment(attachment);
+    await this.route(ws, attachment.userId, attachment, msg);
+  }
+
+  async webSocketClose(ws: CFWebSocket): Promise<void> {
+    await this.handleDisconnect(ws, "disconnected");
+  }
+
+  async webSocketError(ws: CFWebSocket, error: unknown): Promise<void> {
+    log.warn("socket.error", { roomId: this.room?.roomId, ...errorFields(error) });
+    await this.handleDisconnect(ws, "disconnected");
+  }
+
+  // ---------------------------------------------------------------------------
+  // Message routing
+  // ---------------------------------------------------------------------------
+
+  private async route(
+    ws: CFWebSocket,
+    userId: string,
+    attachment: ConnectionAttachment,
+    msg: ClientMessage,
+  ): Promise<void> {
+    const room = this.room;
+    if (!room) return;
+    const ctx = this.context();
 
     switch (msg.type) {
-      case "PING": {
-        conn.meta.lastPingAt = Date.now();
-        const player = this.players.get(conn.meta.userId) || this.spectators.get(conn.meta.userId);
-        if (player) {
-          player.lastPingAt = Date.now();
-        }
-        break;
-      }
-
-      case "READY": {
-        const player = this.players.get(conn.meta.userId);
-        if (player) {
-          player.isReady = true;
-          this.broadcast({
-            type: "PLAYER_READY",
-            roomId: this.roomId,
-            playerId: conn.meta.userId,
-            isReady: true,
-          });
-        }
-        break;
-      }
-
+      case "READY":
       case "UNREADY": {
-        const player = this.players.get(conn.meta.userId);
-        if (player) {
-          player.isReady = false;
-          this.broadcast({
-            type: "PLAYER_READY",
-            roomId: this.roomId,
-            playerId: conn.meta.userId,
-            isReady: false,
-          });
-        }
-        break;
-      }
-
-      case "START_GAME": {
-        if (conn.meta.role !== "host") {
-          conn.ws.send(
-            serializeProtocolMessage({
-              type: "ERROR",
-              code: "FORBIDDEN",
-              message: "Only the room host can start the game.",
-            })
-          );
-          return;
-        }
-
-        if (!gameEngineRegistry.has(this.gameId)) {
-          conn.ws.send(
-            serializeProtocolMessage({
-              type: "ERROR",
-              code: "NOT_IMPLEMENTED",
-              message: `Game engine '${this.gameId}' is not registered.`,
-            })
-          );
-          return;
-        }
-
-        const engine = gameEngineRegistry.get(this.gameId);
-        const playerList = Array.from(this.players.values());
-
-        const validation = engine.validatePlayerCount(playerList);
-        if (!validation.valid) {
-          conn.ws.send(
-            serializeProtocolMessage({
-              type: "ERROR",
-              code: "INVALID_PLAYER_COUNT",
-              message: validation.reason || "Invalid player count to start game.",
-            })
-          );
-          return;
-        }
-
-        this.status = "in_game";
-        this.sequenceNumber = 1;
-        this.currentSessionId = crypto.randomUUID();
-
-        // Initialize server-authoritative game state
-        this.currentGameState = engine.init(playerList, {
-          roomId: this.roomId,
-          sessionId: this.currentSessionId,
-          ...(msg.customRules || {}),
+        const player = room.players[userId];
+        if (!player) return;
+        player.isReady = msg.type === "READY";
+        await this.persist();
+        ctx.broadcast({
+          type: "PLAYER_READY",
+          roomId: room.roomId,
+          playerId: userId,
+          isReady: player.isReady,
         });
-
-        // Broadcast GAME_STARTED
-        this.broadcast({
-          type: "GAME_STARTED",
-          roomId: this.roomId,
-          sessionId: this.currentSessionId,
-          gameId: this.gameId,
-          players: playerList,
-          initialState: engine.getPlayerView(this.currentGameState, null),
-          startedAt: Date.now(),
-        });
-
-        // Send individual tailored GAME_STATE to each player
-        this.broadcastGameState(engine);
-        break;
+        return;
       }
 
-      case "GAME_ACTION": {
-        if (this.status !== "in_game" || !this.currentGameState) {
-          conn.ws.send(
-            serializeProtocolMessage({
-              type: "ERROR",
-              code: "INVALID_STATE",
-              message: "No active game in progress.",
-            })
-          );
-          return;
-        }
+      case "START_GAME":
+        await startGame(ctx, ws, userId, msg.customRules);
+        return;
 
-        if (!gameEngineRegistry.has(this.gameId)) return;
-        const engine = gameEngineRegistry.get(this.gameId);
-
-        const action = {
-          type: msg.actionType,
-          playerId: conn.meta.userId,
-          payload: msg.payload,
-          timestamp: Date.now(),
-          clientActionId: msg.clientActionId,
-        };
-
-        const validation = engine.validateAction(this.currentGameState, action);
-        if (!validation.valid) {
-          conn.ws.send(
-            serializeProtocolMessage({
-              type: "ERROR",
-              code: "ILLEGAL_MOVE",
-              message: validation.reason || "Illegal action",
-              details: { clientActionId: msg.clientActionId },
-            })
-          );
-          return;
-        }
-
-        try {
-          const actionResult = engine.executeAction(this.currentGameState, action);
-          this.currentGameState = actionResult.state;
-          this.sequenceNumber = this.currentGameState.sequenceNumber;
-
-          // Broadcast resulting state
-          this.broadcastGameState(engine, action);
-
-          // Broadcast events if any
-          if (actionResult.events && actionResult.events.length > 0) {
-            for (const ev of actionResult.events) {
-              this.broadcast({
-                type: "GAME_EVENT",
-                roomId: this.roomId,
-                sessionId: this.currentSessionId || "",
-                eventType: (ev as { type?: string }).type ?? "EVENT",
-                payload: ev,
-              });
-            }
-          }
-
-          // Check if game is over
-          if (engine.isGameOver(this.currentGameState)) {
-            const matchResult = engine.calculateResult(this.currentGameState, this.roomId);
-            this.status = "finished";
-            this.broadcast({
-              type: "GAME_FINISHED",
-              roomId: this.roomId,
-              sessionId: this.currentSessionId || "",
-              result: {
-                winnerId: matchResult.winnerId,
-                scores: matchResult.scores,
-                durationSeconds: matchResult.durationSeconds,
-                reason: matchResult.reason,
-              },
-            });
-          }
-        } catch (err) {
-          conn.ws.send(
-            serializeProtocolMessage({
-              type: "ERROR",
-              code: "EXECUTION_ERROR",
-              message: err instanceof Error ? err.message : "Failed to execute game action.",
-            })
-          );
-        }
-        break;
-      }
+      case "GAME_ACTION":
+        if (!this.allow(ws, attachment.connectionId, "gameAction")) return;
+        await applyGameAction(ctx, ws, userId, msg.actionType, msg.payload, msg.clientActionId);
+        return;
 
       case "CHAT_SEND": {
-        const sanitized = msg.message.trim().slice(0, 500);
-        if (!sanitized) return;
-
-        const chatMsg: ServerMessage = {
+        if (!this.allow(ws, attachment.connectionId, "chat")) return;
+        const message = sanitizeChat(msg.message);
+        if (!message) return;
+        ctx.broadcast({
           type: "CHAT_MESSAGE",
           chat: {
             id: crypto.randomUUID(),
-            roomId: this.roomId,
-            senderId: conn.meta.userId,
-            senderName: conn.meta.displayName,
-            senderAvatarUrl: conn.meta.avatarUrl,
-            message: sanitized,
+            roomId: room.roomId,
+            senderId: userId,
+            senderName: attachment.displayName,
+            senderAvatarUrl: attachment.avatarUrl,
+            message,
             timestamp: Date.now(),
           },
-        };
-        this.broadcast(chatMsg);
-        break;
+        });
+        return;
       }
 
-      case "REACTION_SEND": {
-        const reactionMsg: ServerMessage = {
+      case "REACTION_SEND":
+        if (!this.allow(ws, attachment.connectionId, "reaction")) return;
+        ctx.broadcast({
           type: "REACTION",
-          roomId: this.roomId,
-          senderId: conn.meta.userId,
+          roomId: room.roomId,
+          senderId: userId,
           emoji: msg.emoji,
           timestamp: Date.now(),
-        };
-        this.broadcast(reactionMsg);
-        break;
-      }
+        });
+        return;
 
       case "RESYNC": {
-        let gameStateView: unknown = undefined;
-        if (this.currentGameState && gameEngineRegistry.has(this.gameId)) {
-          const engine = gameEngineRegistry.get(this.gameId);
-          gameStateView = engine.getPlayerView(this.currentGameState, conn.meta.userId);
+        let gameState: unknown;
+        if (room.currentGameState && gameEngineRegistry.has(room.gameId)) {
+          gameState = gameEngineRegistry
+            .get(room.gameId)
+            .getPlayerView(room.currentGameState, userId);
         }
-
-        conn.ws.send(
-          serializeProtocolMessage({
-            type: "RESYNC_STATE",
-            roomId: this.roomId,
-            room: this.buildRoomStatePayload(),
-            gameState: gameStateView,
-            sequenceNumber: this.sequenceNumber,
-          })
-        );
-        break;
+        this.send(ws, {
+          type: "RESYNC_STATE",
+          roomId: room.roomId,
+          room: toRoomStatePayload(room),
+          gameState,
+          sequenceNumber: room.sequenceNumber,
+        });
+        return;
       }
 
-      case "LEAVE_ROOM": {
-        this.handleDisconnect(connectionId, "voluntary");
-        break;
-      }
+      case "LEAVE_ROOM":
+        await this.handleDisconnect(ws, "voluntary");
+        this.closeSocket(ws, 1000, "Left room");
+        return;
 
       default:
-        break;
+        return;
     }
   }
 
-  private broadcastGameState(engine: AnyGameEngine, lastAction?: BaseGameAction) {
-    const state = this.currentGameState;
-    if (!state) return;
+  // ---------------------------------------------------------------------------
+  // Disconnect, grace period and alarms
+  // ---------------------------------------------------------------------------
 
-    for (const { ws, meta } of this.connections.values()) {
-      const playerView = engine.getPlayerView(state, meta.userId);
-      const gameStateMsg: ServerMessage = {
-        type: "GAME_STATE",
-        roomId: this.roomId,
-        sessionId: this.currentSessionId || "",
-        sequenceNumber: this.sequenceNumber,
-        state: playerView,
-        lastAction: lastAction
-          ? {
-              type: lastAction.type,
-              playerId: lastAction.playerId,
-              payload: lastAction.payload,
-              clientActionId: lastAction.clientActionId,
-            }
-          : undefined,
-      };
-      try {
-        ws.send(serializeProtocolMessage(gameStateMsg));
-      } catch (err) {
-        console.warn("[room] game state send failed", { roomId: this.roomId, userId: meta.userId, err });
-      }
-    }
-  }
+  private async handleDisconnect(
+    ws: CFWebSocket,
+    reason: "voluntary" | "disconnected",
+  ): Promise<void> {
+    const attachment = readAttachment(ws);
+    const room = this.room;
+    if (!attachment || !room) return;
 
-  private handleDisconnect(
-    connectionId: string,
-    reason: "voluntary" | "disconnected" = "disconnected"
-  ) {
-    const conn = this.connections.get(connectionId);
-    if (!conn) return;
+    this.rateLimiter.forget(attachment.connectionId);
 
-    const userId = conn.meta.userId;
-    this.connections.delete(connectionId);
-    this.userToConnection.delete(userId);
+    const userId = attachment.userId;
+    if (!userId) return; // never authenticated; nothing to preserve
 
-    const player = this.players.get(userId);
-    const spectator = this.spectators.get(userId);
+    // A superseded socket must not evict the session that replaced it.
+    const stillConnected = this.state.getWebSockets().some((other) => {
+      if (other === ws) return false;
+      return readAttachment(other)?.userId === userId;
+    });
+    if (stillConnected) return;
 
-    if (reason === "voluntary" || this.status === "waiting" || this.status === "finished") {
-      // Direct removal
-      this.players.delete(userId);
-      this.spectators.delete(userId);
+    const record = room.players[userId] ?? room.spectators[userId];
+    if (!record) return;
 
-      // Reassign host if host left
-      if (this.hostUserId === userId && this.players.size > 0) {
-        const nextHost = Array.from(this.players.values())[0];
-        if (nextHost) {
-          this.hostUserId = nextHost.userId;
-          nextHost.role = "host";
-        }
-      }
+    if (reason !== "voluntary" && room.status === "in_game") {
+      record.status = "disconnected";
+      room.disconnectDeadlines[userId] = Date.now() + DEFAULT_GRACE_PERIOD_SECONDS * 1000;
+      await this.persist();
+      await this.scheduleAlarm();
 
-      this.broadcast({
-        type: "PLAYER_LEFT",
-        roomId: this.roomId,
-        playerId: userId,
-        reason,
-      });
-    } else {
-      // During active game: Grace period for reconnect
-      if (player) {
-        player.status = "disconnected";
-      }
-      if (spectator) {
-        spectator.status = "disconnected";
-      }
-
-      this.broadcast({
+      this.context().broadcast({
         type: "PLAYER_DISCONNECTED",
-        roomId: this.roomId,
+        roomId: room.roomId,
         playerId: userId,
-        gracePeriodSeconds: 60,
+        gracePeriodSeconds: DEFAULT_GRACE_PERIOD_SECONDS,
       });
-
-      // 60-second grace timer before seat forfeited
-      const timer = setTimeout(() => {
-        if (this.players.get(userId)?.status === "disconnected") {
-          this.players.delete(userId);
-          this.spectators.delete(userId);
-          this.broadcast({
-            type: "PLAYER_LEFT",
-            roomId: this.roomId,
-            playerId: userId,
-            reason: "timeout",
-          });
-
-          // Check if match should end due to abandonment
-          if (this.status === "in_game" && this.currentGameState && gameEngineRegistry.has(this.gameId)) {
-            const remainingPlayers = Array.from(this.players.values()).filter((p) => p.status === "connected");
-            if (remainingPlayers.length === 1 && remainingPlayers[0]) {
-              // Award remaining player win
-              const winPlayer = remainingPlayers[0];
-              this.status = "finished";
-              this.broadcast({
-                type: "GAME_FINISHED",
-                roomId: this.roomId,
-                sessionId: this.currentSessionId || "",
-                result: {
-                  winnerId: winPlayer.userId,
-                  scores: [
-                    {
-                      playerId: winPlayer.userId,
-                      userId: winPlayer.userId,
-                      rank: 1,
-                      score: 1,
-                      isWinner: true,
-                    },
-                    {
-                      playerId: userId,
-                      userId: userId,
-                      rank: 2,
-                      score: 0,
-                      isWinner: false,
-                    },
-                  ],
-                  durationSeconds: Math.floor((Date.now() - this.createdAt) / 1000),
-                  reason: "disconnect",
-                },
-              });
-            }
-          }
-        }
-      }, 60000);
-
-      this.disconnectTimers.set(userId, timer);
+      log.info("player.disconnected", { roomId: room.roomId, userId, grace: true });
+      return;
     }
 
-    if (this.connections.size === 0 && this.status !== "in_game") {
-      this.status = "abandoned";
+    await this.removePlayer(userId, reason);
+  }
+
+  private async removePlayer(
+    userId: string,
+    reason: "voluntary" | "kicked" | "timeout" | "disconnected",
+  ): Promise<void> {
+    const room = this.room;
+    if (!room) return;
+
+    delete room.players[userId];
+    delete room.spectators[userId];
+    delete room.disconnectDeadlines[userId];
+
+    if (room.hostUserId === userId) reassignHost(room);
+    await this.persist();
+
+    this.context().broadcast({
+      type: "PLAYER_LEFT",
+      roomId: room.roomId,
+      playerId: userId,
+      reason,
+    });
+    log.info("player.left", { roomId: room.roomId, userId, reason });
+
+    await this.checkAbandonment(userId);
+  }
+
+  /** Awards the match when everyone but one player has forfeited their seat. */
+  private async checkAbandonment(departedUserId: string): Promise<void> {
+    const room = this.room;
+    if (!room || room.status !== "in_game") return;
+
+    const remaining = Object.values(room.players).filter((p) => p.status === "connected");
+    const survivor = remaining[0];
+    if (remaining.length !== 1 || !survivor) return;
+
+    await finishGame(this.context(), {
+      winnerId: survivor.userId,
+      scores: [
+        { playerId: survivor.userId, userId: survivor.userId, rank: 1, score: 1, isWinner: true },
+        { playerId: departedUserId, userId: departedUserId, rank: 2, score: 0, isWinner: false },
+      ],
+      durationSeconds: Math.floor((Date.now() - (room.startedAt ?? room.createdAt)) / 1000),
+      reason: "disconnect",
+    });
+  }
+
+  /**
+   * Sweeps expired grace periods and unauthenticated sockets.
+   *
+   * Alarms survive eviction; the setTimeout this replaced did not.
+   */
+  async alarm(): Promise<void> {
+    const room = this.room;
+    if (!room) return;
+    const now = Date.now();
+
+    for (const [userId, deadline] of Object.entries(room.disconnectDeadlines)) {
+      if (deadline <= now) {
+        log.info("player.grace_expired", { roomId: room.roomId, userId });
+        await this.removePlayer(userId, "timeout");
+      }
+    }
+
+    for (const ws of this.state.getWebSockets()) {
+      const meta = readAttachment(ws);
+      if (meta && !meta.userId && now - meta.connectedAt > AUTH_DEADLINE_MS) {
+        this.closeSocket(ws, 1008, "Authentication timeout");
+      }
+    }
+
+    await this.scheduleAlarm();
+  }
+
+  private async scheduleAlarm(): Promise<void> {
+    const room = this.room;
+    if (!room) return;
+
+    const deadlines = Object.values(room.disconnectDeadlines);
+    for (const ws of this.state.getWebSockets()) {
+      const meta = readAttachment(ws);
+      if (meta && !meta.userId) deadlines.push(meta.connectedAt + AUTH_DEADLINE_MS);
+    }
+    if (deadlines.length === 0) return;
+
+    const next = Math.min(...deadlines);
+    const existing = await this.state.storage.getAlarm();
+    if (existing === null || existing > next) {
+      await this.state.storage.setAlarm(next);
     }
   }
 
-  private buildRoomStatePayload() {
-    const playersObj: Record<string, ProtocolPlayer> = {};
-    for (const [id, player] of this.players.entries()) {
-      playersObj[id] = player;
-    }
-    const spectatorsObj: Record<string, ProtocolPlayer> = {};
-    for (const [id, spec] of this.spectators.entries()) {
-      spectatorsObj[id] = spec;
-    }
+  // ---------------------------------------------------------------------------
+  // RoomContext implementation
+  // ---------------------------------------------------------------------------
 
+  private context(): RoomContext {
+    const room = this.room;
+    if (!room) throw new Error("Room accessed before initialisation.");
     return {
-      id: this.roomId,
-      code: this.roomCode,
-      name: `Room ${this.roomCode}`,
-      hostId: this.hostUserId,
-      gameId: this.gameId,
-      status: this.status,
-      settings: {
-        maxPlayers: 2,
-        isPrivate: false,
-        gameMode: "casual" as const,
-        allowSpectators: true,
-        customRules: {},
-      },
-      players: playersObj,
-      spectators: spectatorsObj,
-      currentSessionId: this.currentSessionId,
-      createdAt: this.createdAt,
-      updatedAt: Date.now(),
+      room,
+      sockets: () => this.state.getWebSockets(),
+      attachmentOf: (ws) => readAttachment(ws),
+      send: (ws, msg) => this.send(ws, msg),
+      broadcast: (msg) => this.broadcast(msg),
+      closeSocket: (ws, code, reason) => this.closeSocket(ws, code, reason),
+      persist: () => this.persist(),
     };
   }
 
-  private buildRoomStateMessage(): ServerMessage {
-    return {
-      type: "ROOM_STATE",
-      room: this.buildRoomStatePayload(),
-    };
+  private getVerifier(): SupabaseTokenVerifier {
+    this.verifier ??= new SupabaseTokenVerifier({
+      supabaseUrl: this.env.SUPABASE_URL,
+      jwtSecret: this.env.SUPABASE_JWT_SECRET,
+    });
+    return this.verifier;
   }
 
-  private broadcast(msg: ServerMessage) {
-    const serialized = serializeProtocolMessage(msg);
-    for (const { ws } of this.connections.values()) {
+  private allow(ws: CFWebSocket, connectionId: string, kind: RateLimitKind): boolean {
+    if (this.rateLimiter.consume(connectionId, kind)) return true;
+    this.send(ws, {
+      type: "ERROR",
+      code: "RATE_LIMITED",
+      message: "You are doing that too quickly. Please slow down.",
+    });
+    return false;
+  }
+
+  private touch(ws: CFWebSocket, attachment: ConnectionAttachment): void {
+    const room = this.room;
+    if (room && attachment.userId) {
+      const record = room.players[attachment.userId] ?? room.spectators[attachment.userId];
+      if (record) record.lastPingAt = attachment.lastSeenAt;
+    }
+    ws.serializeAttachment(attachment);
+  }
+
+  private closeSocket(ws: CFWebSocket, code: number, reason: string): void {
+    try {
+      ws.close(code, reason);
+    } catch (err) {
+      log.warn("socket.close_failed", errorFields(err));
+    }
+  }
+
+  private send(ws: CFWebSocket, msg: ServerMessage): void {
+    try {
+      ws.send(serializeProtocolMessage(msg));
+    } catch (err) {
+      log.warn("socket.send_failed", { type: msg.type, ...errorFields(err) });
+    }
+  }
+
+  private broadcast(msg: ServerMessage): void {
+    const payload = serializeProtocolMessage(msg);
+    for (const ws of this.state.getWebSockets()) {
+      // Never leak room data to a socket that has not authenticated.
+      if (!readAttachment(ws)?.userId) continue;
       try {
-        ws.send(serialized);
+        ws.send(payload);
       } catch (err) {
-        console.warn("[room] broadcast send failed", { roomId: this.roomId, type: msg.type, err });
+        log.warn("socket.broadcast_failed", { type: msg.type, ...errorFields(err) });
       }
     }
   }
+
+  private async persist(): Promise<void> {
+    if (this.room) await this.state.storage.put(ROOM_KEY, this.room);
+  }
+}
+
+function deriveRoomCode(roomId: string): string {
+  return roomId.length > 8 ? roomId.slice(0, 6).toUpperCase() : roomId.toUpperCase();
+}
+
+function sanitizeChat(input: string): string {
+  return input.replace(CONTROL_CHARS, "").trim().slice(0, CHAT_MAX_LENGTH);
 }

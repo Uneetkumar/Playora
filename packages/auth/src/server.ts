@@ -1,26 +1,29 @@
-import type { AuthUser } from "./types.js";
-import { parseBearerToken, verifyGuestToken } from "./session.js";
+import { SupabaseTokenVerifier, type TokenVerifierConfig } from "./verify.js";
+import type { VerifiedIdentity } from "./verify.js";
+import { parseBearerToken } from "./session.js";
 
-export interface TokenVerifier {
-  verifySupabaseToken(jwt: string): Promise<AuthUser | null>;
-}
-
+/**
+ * Authenticates inbound HTTP requests by verifying the bearer token.
+ *
+ * Returns null rather than throwing so callers can respond with a 401 without
+ * leaking which part of verification failed.
+ */
 export class ServerAuthVerifier {
-  constructor(private tokenVerifier?: TokenVerifier) {}
+  private verifier: SupabaseTokenVerifier;
 
-  async authenticateRequest(authHeader: string | null | undefined): Promise<AuthUser | null> {
+  constructor(config: TokenVerifierConfig) {
+    this.verifier = new SupabaseTokenVerifier(config);
+  }
+
+  async authenticateRequest(
+    authHeader: string | null | undefined,
+  ): Promise<VerifiedIdentity | null> {
     const token = parseBearerToken(authHeader);
     if (!token) return null;
-
-    // Check if guest token
-    const guestUser = verifyGuestToken(token);
-    if (guestUser) return guestUser;
-
-    // Check if Supabase JWT
-    if (this.tokenVerifier) {
-      return this.tokenVerifier.verifySupabaseToken(token);
+    try {
+      return await this.verifier.verify(token);
+    } catch {
+      return null;
     }
-
-    return null;
   }
 }

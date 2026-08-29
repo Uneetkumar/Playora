@@ -34,7 +34,7 @@ export function useRoomSocket({
     "connecting" | "connected" | "disconnected" | "reconnecting"
   >("connecting");
 
-  const { user, initialize: initAuth, signInAsGuest } = useAuthStore();
+  const { session, initialize: initAuth, signInAsGuest } = useAuthStore();
   const {
     setRoom,
     setConnected,
@@ -51,7 +51,7 @@ export function useRoomSocket({
 
   // Ensure an authenticated user or guest identity exists
   useEffect(() => {
-    initAuth();
+    void initAuth();
   }, [initAuth]);
 
   const sendMessage = useCallback((msg: ClientMessage) => {
@@ -60,14 +60,21 @@ export function useRoomSocket({
     }
   }, []);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!roomId) return;
 
-    let activeUser = user;
-    if (!activeUser) {
-      const guestSession = signInAsGuest();
-      activeUser = guestSession.user;
+    // Anyone can play immediately; a guest gets a real Supabase
+    // anonymous session rather than a locally-minted token.
+    let activeSession = session;
+    if (!activeSession) {
+      activeSession = await signInAsGuest();
     }
+    if (!activeSession) {
+      setConnectionStatus("disconnected");
+      setError("Could not start a session. Check that Supabase is configured.");
+      return;
+    }
+    const accessToken = activeSession.tokens.accessToken;
 
     if (socketRef.current) {
       try {
@@ -81,24 +88,31 @@ export function useRoomSocket({
     setConnectionStatus("connecting");
 
     const realtimeHost =
-      process.env.NEXT_PUBLIC_REALTIME_URL || "http://localhost:8787";
-    const wsProtocol = realtimeHost.startsWith("https") ? "wss:" : "ws:";
-    const hostWithoutProtocol = realtimeHost.replace(/^https?:\/\//, "");
+      process.env.NEXT_PUBLIC_REALTIME_WS_URL || "ws://localhost:8787";
+    const wsProtocol = /^(https|wss)/.test(realtimeHost) ? "wss:" : "ws:";
+    const hostWithoutProtocol = realtimeHost.replace(/^(https?|wss?):\/\//, "");
 
+    // No identity in the URL: the server establishes it from the AUTH
+    // message below and treats query parameters as untrusted.
     const wsUrl = `${wsProtocol}//${hostWithoutProtocol}/rooms/${encodeURIComponent(
       roomId
-    )}/ws?userId=${encodeURIComponent(activeUser.id)}&username=${encodeURIComponent(
-      activeUser.displayName || activeUser.username
-    )}&gameId=${encodeURIComponent(gameId)}&spectator=${asSpectator}`;
+    )}/ws?gameId=${encodeURIComponent(gameId)}&spectator=${asSpectator}`;
 
     try {
       const ws = new WebSocket(wsUrl);
       socketRef.current = ws;
 
       ws.onopen = () => {
-        setConnected(true);
-        setConnectionStatus("connected");
         setError(null);
+
+        // The server rejects every other message until this is verified.
+        ws.send(
+          serializeProtocolMessage({
+            type: "AUTH",
+            token: accessToken,
+            isGuest: activeSession.user.isGuest,
+          })
+        );
 
         // Start heartbeat ping
         if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
@@ -125,6 +139,8 @@ export function useRoomSocket({
 
         switch (msg.type) {
           case "CONNECTED":
+            setConnected(true);
+            setConnectionStatus("connected");
             break;
 
           case "ROOM_STATE": {
@@ -293,7 +309,7 @@ export function useRoomSocket({
 
         // Auto reconnect after 2 seconds
         reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
+          void connect();
         }, 2000);
       };
 
@@ -310,7 +326,7 @@ export function useRoomSocket({
     roomId,
     gameId,
     asSpectator,
-    user,
+    session,
     signInAsGuest,
     setConnecting,
     setConnected,
@@ -329,7 +345,7 @@ export function useRoomSocket({
   ]);
 
   useEffect(() => {
-    connect();
+    void connect();
     return () => {
       if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);

@@ -6,7 +6,7 @@ zero loss of context. Read this file first, then `docs/ARCHITECTURE.md`.
 **Maintenance rule:** update the *Status Ledger*, *Decision Log*, and *Next Action*
 sections at the end of every milestone. Everything else changes rarely.
 
-**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** 0 complete → Phase 1
+**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** Slice 3 in progress
 
 ---
 
@@ -85,7 +85,7 @@ docs/
 | Check | Result |
 |---|---|
 | `pnpm typecheck` | ✅ 14/14 |
-| `pnpm test` | ✅ 20 tests, 4 files |
+| `pnpm test` | ✅ **73 tests**, 10 files (auth 20, realtime 19, game-types 18, engine 11, protocol 3, db 2) |
 | `pnpm build` | ✅ 9 routes |
 | `pnpm version:check` | ✅ in sync at 0.1.0 |
 | `pnpm lint` | ✅ clean |
@@ -100,45 +100,69 @@ Reproduce with: `pnpm install && pnpm version:check && pnpm lint && pnpm typeche
 Phases 0–3 are ~70% complete *in shape*, but the foundation is **not trustworthy**.
 Three defects are load-bearing; do not build features on top of them.
 
-### 🔴 F1 — Identity is forgeable end-to-end
-`apps/realtime/src/durable-objects/RoomDurableObject.ts:55` reads identity
-straight from the URL query string:
-```ts
-const userId = url.searchParams.get("userId") || `guest_${connectionId.slice(0,6)}`;
-```
-Any client can be any user: impersonate the host, start games, play the
-opponent's turn, resign for them. The protocol defines an `AUTH` message; the DO
-never handles it. Violates spec §63, §83, §104.1.
+### ✅ F1 — Identity is forgeable end-to-end — **FIXED (Slice 2)**
+The Durable Object no longer reads `userId` from the query string at all. A
+socket carries no identity until an `AUTH` message is verified against Supabase's
+signing keys (`SupabaseTokenVerifier` in `@playden/auth`, JWKS-first with legacy
+HS256 fallback; signature, expiry, issuer and audience all checked). Until then
+only `PING` is accepted. `GAME_ACTION.playerId` is set from the verified session.
 
-Underneath: `packages/auth/src/session.ts` `verifyGuestToken()` only *string-parses*
-`guest_token_{id}_{ts}` — no signature, no secret. And
-`apps/web/src/app/login/page.tsx:46` — the "Sign in with Google" button calls
-`signInAsGuest({ preferredUsername: "Google_Player" })`. **There is no Supabase
-Auth and no OAuth anywhere in the repo.**
+Proven by test, not assertion: `apps/realtime/test/auth.test.ts` connects with
+`?userId=<victim>` and authenticates as an attacker — the established identity is
+the attacker's, not the victim's. Forged signatures, `alg: none`, expired tokens,
+wrong issuer and wrong audience are all rejected.
 
-### 🔴 F2 — The Durable Object persists nothing
-Zero uses of `state.storage`, `blockConcurrencyWhile`, `setAlarm`, or the
-WebSocket Hibernation API. All room + game state lives in instance fields. DO
-eviction is routine on idle and silently destroys the room and any in-progress
-match. The 60s reconnect grace is a `setTimeout` that also dies on eviction.
-This defeats §61 rather than implementing it.
+**Still outstanding:** the web client cannot obtain a real Supabase token until
+Slice 1, so the app cannot connect end-to-end yet. This is correct behaviour —
+it previously "worked" only because it was insecure.
 
-### 🔴 F3 — Supabase is dead code
-`@playden/database` has zero importers in either app; there are **no API
-routes at all**. Consequence: no profiles, no `game_sessions`, no results, no
-history, no rating, no XP. `GAME_FINISHED` broadcasts to sockets and vanishes.
-Rooms are client-side fiction — `apps/web/src/app/rooms/page.tsx:70` generates a
-code and navigates; the room list is a hardcoded empty array. Join-by-code works
-only incidentally because the worker does `idFromName(roomCode)`; no privacy or
-capacity enforcement.
+### ✅ F2 — The Durable Object persists nothing — **FIXED (Slice 2)**
+Room and game state persist to `state.storage` and restore via
+`blockConcurrencyWhile` on construction. Sockets use the WebSocket Hibernation
+API with `serializeAttachment`, so connections survive eviction. The `setTimeout`
+disconnect grace was replaced with `state.setAlarm()`. Verified by tests that
+read storage directly after a game starts.
+
+### 🟡 F3 — Supabase is dead code — **PARTIALLY FIXED (Slice 1)**
+Auth is now wired end to end in code: `@supabase/ssr` browser + server clients,
+session-refresh middleware, `/auth/callback` OAuth exchange, Zod-validated public
+env, and an auth store backed by real Supabase sessions. The forgeable guest
+token system is **deleted** — `guest.ts` and `client.ts` are gone, and guests now
+get a genuine Supabase anonymous session.
+
+`supabase/migrations/00002_auth_profile_bootstrap.sql` ties `profiles.id` to
+`auth.users(id)`, creates a profile on signup (guests included), and handles the
+guest→Google upgrade by refreshing display fields while keeping the same user id
+— so ratings, history and achievements survive the link (spec §12).
+
+**Not verified.** No Supabase project exists yet, so neither sign-in path has
+been exercised against a live server. It compiles, lints, typechecks and builds;
+that is not the same as working. Rooms/results persistence is still Slice 3.
 
 ### 🟠 Secondary
-- No chat/reaction rate limiting (§24, §83)
-- `maxPlayers: 2` hardcoded — `RoomDurableObject.ts:645` (§27 violation)
-- Stale host role: `conn.meta.role` snapshotted at connect, so after host transfer
-  the old host still passes the `START_GAME` check (`RoomDurableObject.ts:285`)
 
 ### ✅ Resolved this session
+- **Durable Object split.** 898 → 521 lines, with `handlers/auth-handler.ts`
+  (173) and `handlers/game-handler.ts` (280) reached through a narrow
+  `RoomContext` seam. All 19 integration tests passed unchanged, which is what
+  made the refactor safe to do.
+- **Unawaited storage writes fixed.** The upgrade path used
+  `void this.persist()`, so a socket could be accepted before the room was
+  durable and the write could be dropped on teardown. Now awaited. Found via a
+  test-teardown race, not by reading the code.
+- **Slice 1 code written (unverified).** See F3 above. The old auth test
+  claiming to "reject forged guest tokens" only tested malformed strings — a
+  well-formed forgery would have passed. Replaced with real signature tests.
+- **Slice 2 complete.** See F1/F2 above. Also fixed in passing: chat/reaction/
+  action rate limiting (token buckets), hardcoded `maxPlayers: 2` (now from the
+  engine), stale host role (re-read from authoritative state at check time),
+  and a client/env mismatch where the hook read `NEXT_PUBLIC_REALTIME_URL` while
+  `.env.example` defined `NEXT_PUBLIC_REALTIME_WS_URL` — so the variable never
+  applied.
+- **Upgraded to vitest 4** monorepo-wide. `@cloudflare/vitest-pool-workers`
+  0.13+ requires it, and pinning an older pool would have meant a stale workerd.
+  This surfaced that `__tests__` were being compiled into `dist/` and collected
+  twice; tsconfigs now exclude tests from build output.
 - **Slice 0 complete.** Scope renamed to `@playden/*`; git repo initialised with
   `main` + `develop`; all 22 lint errors fixed with real types (not suppressions);
   E2E suite repaired and passing; version system implemented; CI workflows added.
@@ -165,8 +189,8 @@ impersonatable, non-persistent realtime layer means rewriting them later.
 | Slice | Scope | Blocked by |
 |---|---|---|
 | ~~0 — Hygiene~~ | ✅ **DONE** — rename, git init, 22 lint fixes, E2E repair, version system, CI | — |
-| **1 — Real identity** (§12) | Supabase Auth: Google OAuth + `signInAnonymously()` guests; delete forgeable token; verify JWTs via JWKS + `jose`; `@supabase/ssr` middleware; `/auth/callback`; profile bootstrap trigger; guest→Google linking preserving history | **Supabase credentials** |
-| **2 — Trusted realtime** (§63, §61) | `AUTH` as mandatory first message, identity from verified claims only; WebSocket Hibernation API; persist to `state.storage` + `blockConcurrencyWhile` restore; `setAlarm()` grace period; token-bucket rate limiting; re-read host role at check time. Tested with `@cloudflare/vitest-pool-workers` | nothing (JWT verify testable with locally-signed tokens) |
+| 🟡 1 — Real identity | Code complete; **awaiting credentials to verify** end to end | Supabase project |
+| ~~2 — Trusted realtime~~ | ✅ **DONE** — AUTH gate, hibernation, storage, alarms, rate limiting, 19 integration tests | — |
 | **3 — Rooms + persistence** (§6, §69) | Real room create/list/join with privacy + capacity enforcement; DO writes `game_sessions` / `game_results` to Supabase via Worker secret | Slices 1–2 |
 | **4 — Close the §92 loop** | Result screen, Elo rating, XP, history, stats, Play Again; multiplayer simulation harness (2/4/8 clients, concurrent rooms) per §86 | Slice 3 |
 
@@ -186,6 +210,21 @@ Then §93 Quick Play → §94 AI → §8 social → UNO → racing → voice.
 
 ## 9. Decision log
 
+- **2026-08-29** — Deleted the guest-token system outright rather than keeping
+  it behind a flag. Two auth paths, one of them forgeable, is worse than a
+  temporary gap.
+- **2026-08-29** — Google credentials live only in the Supabase dashboard; the
+  app never sees them, so there is no `GOOGLE_CLIENT_SECRET` in this repo.
+- **2026-08-29** — `env.ts` degrades to a visible setup notice rather than
+  throwing, so an unconfigured checkout still renders instead of white-screening.
+- **2026-08-29** — Slice 2 shipped before Slice 1 because it needed no
+  credentials, and it is the higher-severity finding. Consequence: the web app
+  cannot connect until Slice 1 lands. Accepted deliberately — an insecure
+  working state is not worth preserving.
+- **2026-08-29** — No dev-only auth bypass, despite the temporary breakage. Tests
+  use HS256 with a bound test secret, which is a real Supabase verification path,
+  not a backdoor. There is no way to authenticate without a valid signature in
+  any environment.
 - **2026-08-29** — Product named **Playden** (play + den: a place you go to play
   with people). Chosen for being game-agnostic, matching the "PLAY TOGETHER"
   landing thesis, and near-certainly available as a coined compound.
@@ -262,34 +301,47 @@ secrets production. **The Worker does not read `.env.local`.**
 
 ## 12. Next Action
 
-**Slice 0 is complete.** Two tracks now run in parallel:
+### Immediate — verify Slice 1 (blocked on credentials)
+All the code is in place. Once `docs/ENVIRONMENT_SETUP.md` steps 0–3 are done:
 
-### Track A — Slice 2: Trusted realtime  ← *start here, no credentials needed*
-The highest-severity finding (F1) with no external dependency. In
-`apps/realtime/src/durable-objects/RoomDurableObject.ts`:
+1. `pnpm dev`, open `/login` — the amber "not configured" notice should be gone.
+2. **Play as guest** → a Supabase anonymous session; check `profiles` has a row
+   with `is_guest = true`.
+3. **Continue with Google** → `/auth/callback` → signed in; `profiles` row created.
+4. Open a room in two browsers → both should reach `CONNECTED` (this is the real
+   proof that Slice 1 and Slice 2 meet correctly).
+5. Link Google from a guest account → same `profiles.id`, `is_guest` flips false.
 
-1. Handle the `AUTH` message; refuse every other message until a valid JWT
-   arrives. Identity from verified claims only — delete the `userId` query-param
-   read at line ~55.
-2. Migrate to the WebSocket Hibernation API (`state.acceptWebSocket` +
-   `serializeAttachment`) so connections survive eviction.
-3. Persist room + game state to `state.storage`; restore in the constructor via
-   `blockConcurrencyWhile`.
-4. Replace the `setTimeout` disconnect grace with `state.setAlarm()`.
-5. Token-bucket rate limiting on `CHAT_SEND` / `REACTION_SEND`.
-6. Re-read host role from `this.players` at check time (fixes the stale-role bug).
-7. Remove the hardcoded `maxPlayers: 2`.
+Anything failing here is a Slice 1 bug, not a Slice 3 dependency.
 
-Test with `@cloudflare/vitest-pool-workers`: impersonation rejected, state
-survives eviction, reconnect resyncs correctly.
+### In progress — Slice 3: rooms + persistence
 
-### Track B — Slice 1: Real identity  ← *blocked on user*
-Needs Supabase provisioned. See `docs/ENVIRONMENT_SETUP.md`:
-- [ ] Step 0 — rotate/recreate the leaked Supabase project
-- [ ] Steps 1–2 — anonymous sign-ins enabled, Google provider configured
-- [ ] Step 3 — `apps/web/.env.local` + `apps/realtime/.dev.vars` filled
+Done:
+- `packages/game-types/src/room-code.ts` — codes drawn from an alphabet with no
+  O/0/I/1/L, normalisation for lowercase and separators, 18 tests.
+- `apps/web/src/app/api/rooms/route.ts` — `GET` lists public waiting rooms,
+  `POST` creates one. Host comes from the session; a `hostId` in the body is
+  ignored. Code generated server-side with retry on unique violation.
+- `apps/web/src/app/api/rooms/[code]/route.ts` — resolves a code with capacity
+  and lifecycle checks *before* a socket opens, so players get a clear message
+  instead of a connect-then-close.
+- `supabase/migrations/00003_room_access_policies.sql` — the missing INSERT/
+  UPDATE/DELETE policies. `game_sessions`/`game_results` stay client-unwritable;
+  the Worker writes them with the service-role key.
+
+Remaining:
+- Wire `apps/web/src/app/rooms/page.tsx` to the API — it still invents a code
+  client-side and renders a hardcoded empty room list.
+- Durable Object → Supabase write on `GAME_FINISHED` (hook point is
+  `finishGame()` in `handlers/game-handler.ts`). Needs rooms to exist in
+  Postgres first, which is why the registry came first.
+- Reconcile the DO's room id with the Postgres room UUID.
+
+### Carried-forward limitations
+- No integration test covers the browser→Worker auth handshake end to end;
+  add one once credentials exist.
 
 ### Working agreement
-Commit with Conventional Commits on `feature/*` branches off `develop`
-(§90). The full gate must stay green: `pnpm version:check && pnpm lint &&
-pnpm typecheck && pnpm test && pnpm build`.
+Uneet commits and pushes; do not commit on his behalf. Conventional Commits on
+`feature/*` off `develop`. Gate must stay green:
+`pnpm version:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build`

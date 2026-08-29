@@ -1,30 +1,22 @@
 import type { DurableObjectNamespace } from "@cloudflare/workers-types";
-import type { Player, Room, GameSession } from "@playden/game-types";
 
 export interface Env {
   ROOM_DO: DurableObjectNamespace;
   ENVIRONMENT?: string;
+
+  /**
+   * Supabase project URL. Used to derive the JWKS endpoint and the expected
+   * token issuer. Preferred over a shared secret: only public keys reach the
+   * edge. Set via `wrangler secret put` / `.dev.vars`.
+   */
   SUPABASE_URL?: string;
+
+  /**
+   * Legacy HS256 project JWT secret. Only needed for projects that have not
+   * migrated to asymmetric signing keys.
+   */
+  SUPABASE_JWT_SECRET?: string;
+
+  /** Server-only. Never exposed to the browser. Used from Slice 3 onward. */
   SUPABASE_SERVICE_ROLE_KEY?: string;
-}
-
-export interface ClientConnectionAttachment {
-  connectionId: string;
-  userId: string;
-  username: string;
-  displayName: string;
-  avatarUrl: string | null;
-  role: "host" | "player" | "spectator";
-  isGuest: boolean;
-  joinedAt: number;
-  lastPingAt: number;
-}
-
-export interface RoomDOState {
-  room: Room;
-  session: GameSession | null;
-  players: Map<string, Player>;
-  spectators: Map<string, Player>;
-  chatHistory: unknown[];
-  sequenceNumber: number;
 }

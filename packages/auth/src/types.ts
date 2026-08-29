@@ -3,11 +3,13 @@ import type { User } from "@playden/game-types";
 export interface AuthTokens {
   accessToken: string;
   refreshToken?: string;
+  /** Epoch milliseconds. */
   expiresAt: number;
 }
 
 export interface AuthUser extends User {
   email?: string | null;
+  /** "guest" corresponds to a Supabase anonymous session. */
   provider: "google" | "guest" | "email";
 }
 
@@ -17,16 +19,6 @@ export interface AuthSession {
 }
 
 export type OAuthProvider = "google";
-
-export interface SignInWithOAuthOptions {
-  provider: OAuthProvider;
-  redirectTo?: string;
-}
-
-export interface GuestSignInOptions {
-  preferredUsername?: string;
-  avatarUrl?: string;
-}
 
 export interface AuthState {
   user: AuthUser | null;

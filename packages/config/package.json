@@ -4,5 +4,8 @@
   "private": true,
   "files": [
     "typescript"
-  ]
+  ],
+  "devDependencies": {
+    "vitest": "^4.1.11"
+  }
 }
