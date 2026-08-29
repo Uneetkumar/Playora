@@ -67,7 +67,7 @@ export default function HomePage() {
 
         <div className="container relative mx-auto max-w-7xl px-4 sm:px-6 text-center">
           <Badge variant="default" className="mb-6 px-3 py-1 text-xs">
-            ⚡ Ultra-low Latency Cloudflare Durable Objects Realtime
+            ⚡ Free to play · No download · Works offline
           </Badge>
 
           <h1 className="text-4xl font-extrabold tracking-tight text-white sm:text-6xl lg:text-7xl">
@@ -78,12 +78,12 @@ export default function HomePage() {
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-lg text-slate-400 sm:text-xl">
-            Production-grade modular architecture powered by Cloudflare Durable Objects, Supabase,
-            Next.js, and extensible deterministic game engines.
+            Play chess against the computer, pass the device to a friend, or challenge
+            someone online. No account needed to start.
           </p>
 
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
-            <Link href="/rooms">
+            <Link href="/play">
               <Button size="lg" className="gap-2 shadow-lg shadow-indigo-600/30">
                 <Play className="h-5 w-5 fill-current" />
                 <span>Play Now</span>
@@ -193,10 +193,14 @@ export default function HomePage() {
                   <CardDescription className="line-clamp-2">{game.description}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Link href={`/rooms?game=${game.id}`}>
-                    <Button variant="outline" className="w-full gap-2">
-                      <Trophy className="h-4 w-4 text-indigo-400" />
-                      <span>Find Rooms</span>
+                  <Link href={game.id === "chess" ? "/play" : `/rooms?game=${game.id}`}>
+                    <Button className="w-full gap-2" variant={game.id === "chess" ? "default" : "outline"}>
+                      {game.id === "chess" ? (
+                        <Play className="h-4 w-4 fill-current" />
+                      ) : (
+                        <Trophy className="h-4 w-4 text-indigo-400" />
+                      )}
+                      <span>{game.id === "chess" ? "Play" : "Find Rooms"}</span>
                     </Button>
                   </Link>
                 </CardContent>

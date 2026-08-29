@@ -15,7 +15,9 @@
     "version:check": "node scripts/sync-version.mjs --check",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
-    "clean": "turbo clean && rimraf node_modules"
+    "clean": "turbo clean && rimraf node_modules",
+    "env:init": "node scripts/check-env.mjs --init",
+    "env:check": "node scripts/check-env.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

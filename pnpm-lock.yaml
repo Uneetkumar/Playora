@@ -84,6 +84,9 @@ importers:
       '@playden/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@playden/bot-engine':
+        specifier: workspace:*
+        version: link:../../packages/bot-engine
       '@playden/database':
         specifier: workspace:*
         version: link:../../packages/database
@@ -181,6 +184,31 @@ importers:
       jose:
         specifier: ^6.2.10
         version: 6.2.10
+    devDependencies:
+      '@playden/config':
+        specifier: workspace:*
+        version: link:../config
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@types/node@22.20.1)(vite@7.3.6(@types/node@22.20.1)(jiti@1.21.7))
+
+  packages/bot-engine:
+    dependencies:
+      '@playden/game-engine':
+        specifier: workspace:*
+        version: link:../game-engine
+      '@playden/game-types':
+        specifier: workspace:*
+        version: link:../game-types
+      chess.js:
+        specifier: ^1.4.0
+        version: 1.4.0
     devDependencies:
       '@playden/config':
         specifier: workspace:*

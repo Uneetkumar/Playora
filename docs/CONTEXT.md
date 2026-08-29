@@ -6,7 +6,7 @@ zero loss of context. Read this file first, then `docs/ARCHITECTURE.md`.
 **Maintenance rule:** update the *Status Ledger*, *Decision Log*, and *Next Action*
 sections at the end of every milestone. Everything else changes rarely.
 
-**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** Slice 3 in progress
+**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** Slice 1 VERIFIED against live Supabase
 
 ---
 
@@ -21,6 +21,22 @@ Paste this into the new session:
 ---
 
 ## 2. What this project is
+
+### The six play modes (product definition, 2026-08-29)
+
+| Mode | Login | Internet | Runs on | Status |
+|---|---|---|---|---|
+| Offline vs AI | no | no | browser | ✅ works |
+| Offline pass & play | no | no | browser | ✅ works |
+| Online with friends (room code) | guest or Google | yes | Durable Object | 🟡 server done, UI half-wired |
+| Online vs random (Quick Match) | guest or Google | yes | Durable Object | ❌ no matchmaking |
+| Online vs AI | guest or Google | yes | DO + server-side bot | ❌ bot is client-only |
+| Same wifi, no internet | no | LAN only | peer device | ❌ deferred, see D4 |
+
+`apps/web/src/lib/play/modes.ts` is the single source of truth; home, games and
+the play hub all read from it, so a mode is never advertised in one place and
+missing in another.
+
 
 A production-quality browser-based multiplayer gaming platform — **one platform,
 many games**, not five game sites. Platform owns identity, social, matchmaking,
@@ -68,6 +84,7 @@ packages/
   auth/         ⚠️ currently fake — see §6
   database/     Supabase clients — ⚠️ DEAD CODE, zero importers
   ui/           7 shadcn-style components
+  bot-engine/   BotEngine interface + ChessBot (alpha-beta, 7 levels)
   config/       5 tsconfig presets
 supabase/
   migrations/00001_initial_schema.sql   11 tables, FKs, indexes, RLS
@@ -85,7 +102,7 @@ docs/
 | Check | Result |
 |---|---|
 | `pnpm typecheck` | ✅ 14/14 |
-| `pnpm test` | ✅ **73 tests**, 10 files (auth 20, realtime 19, game-types 18, engine 11, protocol 3, db 2) |
+| `pnpm test` | ✅ **92 tests**, 11 files (auth 20, realtime 19, bot 19, game-types 18, engine 11, protocol 3, db 2) |
 | `pnpm build` | ✅ 9 routes |
 | `pnpm version:check` | ✅ in sync at 0.1.0 |
 | `pnpm lint` | ✅ clean |
@@ -123,7 +140,7 @@ API with `serializeAttachment`, so connections survive eviction. The `setTimeout
 disconnect grace was replaced with `state.setAlarm()`. Verified by tests that
 read storage directly after a game starts.
 
-### 🟡 F3 — Supabase is dead code — **PARTIALLY FIXED (Slice 1)**
+### ✅ F3 — Supabase is dead code — **FIXED AND VERIFIED (Slice 1)**
 Auth is now wired end to end in code: `@supabase/ssr` browser + server clients,
 session-refresh middleware, `/auth/callback` OAuth exchange, Zod-validated public
 env, and an auth store backed by real Supabase sessions. The forgeable guest
@@ -135,13 +152,40 @@ get a genuine Supabase anonymous session.
 guest→Google upgrade by refreshing display fields while keeping the same user id
 — so ratings, history and achievements survive the link (spec §12).
 
-**Not verified.** No Supabase project exists yet, so neither sign-in path has
-been exercised against a live server. It compiles, lints, typechecks and builds;
-that is not the same as working. Rooms/results persistence is still Slice 3.
+**Verified end to end against the live project** (`pvjdziltmjwcchjbukaa`,
+ap-south-1) on 2026-08-29:
+
+| Check | Result |
+|---|---|
+| Anonymous sign-in | real ES256 JWT issued |
+| JWT claims | `iss`, `aud: authenticated`, `is_anonymous: true` |
+| `00002` trigger | auto-created profile, `is_guest: true`, rating 1200 |
+| `SupabaseTokenVerifier` vs live JWKS | **accepted** — no shared secret at the edge |
+| Tampered token | rejected, `TOKEN_INVALID_SIGNATURE` |
+| Browser guest login | nickname "UneetTest" → profile `uneettest` |
+| Games catalog via anon key | 5 rows readable — RLS confirmed |
+
+Still open: **Google provider is not enabled** in the dashboard, so only the
+guest path is proven. Rooms/results persistence remains Slice 3.
 
 ### 🟠 Secondary
 
 ### ✅ Resolved this session
+- **"Why can't I just play?" fixed.** Every route funnelled into Create/Join
+  Room. Home's hero CTA, home game cards and the games list now lead to `/play`,
+  a hub showing all six modes with the three ready ones playable in one click.
+  Home copy also replaced engineering jargon ("Cloudflare Durable Objects
+  Realtime") with what a player actually gets.
+- **Quick Play shipped and verified in a browser.** Offline Pass & Play and
+  Play-with-AI both work with no Supabase, no auth and no server — the first
+  genuinely playable path in the product. Confirmed by playing: e4, AI replied
+  Nc6, move list and clocks updated; Pass & Play flips the board per turn.
+- **ChessBot latency bounded.** A depth-5 search took **20s** in the opening and
+  **124s** in a midgame position. A node cap could not fix it (chess.js costs
+  ~100us/node and varies wildly by position), so the search now runs to a
+  wall-clock deadline and returns its best line so far. Worst case is ~1.5s in
+  any position. Levels 6-7 are therefore depth-limited in practice; genuine
+  master strength needs Stockfish WASM (spec section 54 already lists it).
 - **Durable Object split.** 898 → 521 lines, with `handlers/auth-handler.ts`
   (173) and `handlers/game-handler.ts` (280) reached through a narrow
   `RoomContext` seam. All 19 integration tests passed unchanged, which is what
@@ -202,6 +246,7 @@ Then §93 Quick Play → §94 AI → §8 social → UNO → racing → voice.
 
 | # | Decision | Status |
 |---|---|---|
+| D4 | Same-wifi play approach | ✅ **WebRTC + QR signalling, built last** (2026-08-29) |
 | D1 | ~~Repo / product name~~ | ✅ **Playden** (2026-08-29) |
 | D2 | Supabase JWT signing: asymmetric (ES256/RS256 via JWKS, preferred) vs legacy HS256 shared secret | ⏳ depends on what the dashboard offers |
 | D3 | Cloudflare plan — Durable Objects may require Workers Paid (~$5/mo); verify current terms | ⏳ not blocking local dev |
@@ -210,6 +255,21 @@ Then §93 Quick Play → §94 AI → §8 social → UNO → racing → voice.
 
 ## 9. Decision log
 
+- **2026-08-29** — Same-wifi play will use WebRTC with QR-code signalling, built
+  *after* the other five modes. A browser cannot host a LAN server (no listening
+  socket, no mDNS), so QR exchange is the only true browser-only answer. It also
+  shares no code with the online modes, whereas those compound.
+- **2026-08-29** — Play modes derived from the engine and bot registries rather
+  than hardcoded per screen, so availability cannot drift between pages.
+- **2026-08-29** — Added offline/AI Quick Play ahead of the remaining online
+  work. It needs no credentials, so it makes the product demonstrable today and
+  exercises ChessEngine through a second, independent caller.
+- **2026-08-29** — Offline and AI games are unrated and unsaved (spec section
+  13). The UI says so on screen rather than silently discarding results.
+- **2026-08-29** — Bots return *actions* run through `engine.executeAction`,
+  never direct state mutation (spec section 104.5). The bot tests assert this by
+  construction: `executeAction` throws on an illegal action, so a passing test
+  proves the move survived full validation.
 - **2026-08-29** — Deleted the guest-token system outright rather than keeping
   it behind a flag. Two auth paths, one of them forgeable, is worse than a
   temporary gap.
@@ -283,6 +343,15 @@ build, plus a separate Playwright E2E job.
 
 ## 11. Environment status
 
+**Live project:** `pvjdziltmjwcchjbukaa` · ap-south-1 (Mumbai) · new-style keys
+(`sb_publishable_` / `sb_secret_`) · **asymmetric ES256** JWT signing, so the
+Worker verifies via JWKS and no secret is deployed to the edge.
+
+`pnpm env:check` reports 6/6. Anonymous sign-ins ON. Google provider OFF.
+
+⚠️ The Supabase secret key and Google client secret were both pasted into chat
+during setup. Fine for local dev; rotate both before any real deployment.
+
 Full walkthrough: **`docs/ENVIRONMENT_SETUP.md`**.
 
 | Service | Needed for | Status |
@@ -301,18 +370,18 @@ secrets production. **The Worker does not read `.env.local`.**
 
 ## 12. Next Action
 
-### Immediate — verify Slice 1 (blocked on credentials)
-All the code is in place. Once `docs/ENVIRONMENT_SETUP.md` steps 0–3 are done:
+### Playable right now, no setup needed
+`pnpm dev` → `/play` → Pass & Play or Play with AI. Works offline.
 
-1. `pnpm dev`, open `/login` — the amber "not configured" notice should be gone.
-2. **Play as guest** → a Supabase anonymous session; check `profiles` has a row
-   with `is_guest = true`.
-3. **Continue with Google** → `/auth/callback` → signed in; `profiles` row created.
-4. Open a room in two browsers → both should reach `CONNECTED` (this is the real
-   proof that Slice 1 and Slice 2 meet correctly).
-5. Link Google from a guest account → same `profiles.id`, `is_guest` flips false.
+### Immediate — finish auth
+- [ ] Enable the **Google** provider (credentials already created; client id
+      `2787402...apps.googleusercontent.com`, redirect URI already correct)
+- [ ] Then verify the Google sign-in round trip the same way guest was verified
 
-Anything failing here is a Slice 1 bug, not a Slice 3 dependency.
+### Next — prove the realtime handshake
+Run `wrangler dev` alongside the web app and confirm a browser guest session's
+token is accepted by `RoomDurableObject`'s AUTH gate. This is the first time
+Slice 1 and Slice 2 meet in the real product rather than in tests.
 
 ### In progress — Slice 3: rooms + persistence
 

@@ -142,10 +142,14 @@ export default function GamesPage() {
             </div>
 
             <div className="p-6 pt-0">
-              <Link href={game.isPlayable ? `/rooms` : `/rooms`}>
-                <Button className="w-full gap-2" variant={game.isPlayable ? "default" : "outline"}>
+              <Link href={game.isPlayable ? "/play" : "/games"}>
+                <Button
+                  className="w-full gap-2"
+                  variant={game.isPlayable ? "default" : "outline"}
+                  disabled={!game.isPlayable}
+                >
                   <Play className="h-4 w-4 fill-current" />
-                  <span>{game.isPlayable ? "Play Chess" : "View Rooms"}</span>
+                  <span>{game.isPlayable ? "Play" : "Coming soon"}</span>
                 </Button>
               </Link>
             </div>

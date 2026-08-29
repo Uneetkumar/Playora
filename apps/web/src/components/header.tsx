@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Gamepad2, Users, Trophy, LogIn, Swords } from "lucide-react";
+import { Gamepad2, Users, Trophy, LogIn, Swords, Zap } from "lucide-react";
 import { useAuthStore } from "../lib/store/auth-store";
 import { Avatar, Button, Badge } from "@playden/ui";
 
@@ -18,6 +18,7 @@ export function Header() {
   const navLinks = [
     { href: "/", label: "Home", icon: Swords },
     { href: "/games", label: "Games", icon: Gamepad2 },
+    { href: "/play", label: "Play", icon: Zap },
     { href: "/rooms", label: "Rooms", icon: Trophy },
     { href: "/friends", label: "Friends", icon: Users },
   ];
