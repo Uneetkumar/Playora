@@ -139,7 +139,13 @@ export default function GamesPage() {
             </div>
 
             <div className="p-6 pt-0">
-              <Link href={isGameImplemented(game.id as GameId) ? "/play" : "/games"}>
+              <Link
+                href={
+                  isGameImplemented(game.id as GameId)
+                    ? `/play?game=${game.id}`
+                    : "/games"
+                }
+              >
                 <Button
                   className="w-full gap-2"
                   variant={isGameImplemented(game.id as GameId) ? "default" : "outline"}

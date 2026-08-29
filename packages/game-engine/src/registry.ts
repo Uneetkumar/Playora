@@ -2,6 +2,7 @@ import type { GameId } from "@playora/game-types";
 import type { AnyGameEngine } from "./types.js";
 import { ChessEngine } from "./chess/ChessEngine.js";
 import { UnoEngine } from "./uno/UnoEngine.js";
+import { UnoNoMercyEngine } from "./uno/UnoNoMercyEngine.js";
 
 export type GameEngineFactory = () => AnyGameEngine;
 
@@ -15,6 +16,7 @@ class GameEngineRegistry {
   private registerDefaults(): void {
     this.engines.set("chess", () => new ChessEngine());
     this.engines.set("uno", () => new UnoEngine());
+    this.engines.set("uno-no-mercy", () => new UnoNoMercyEngine());
   }
 
   register(gameId: GameId, factory: GameEngineFactory): void {

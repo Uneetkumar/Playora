@@ -26,6 +26,7 @@
     "chess.js": "^1.4.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "framer-motion": "^13.1.1",
     "lucide-react": "^0.475.0",
     "next": "15.1.7",
     "phaser": "^3.88.2",

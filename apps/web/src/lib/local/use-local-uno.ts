@@ -1,9 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { UnoEngine } from "@playora/game-engine";
+import { UnoEngine, UnoNoMercyEngine } from "@playora/game-engine";
 import type { UnoAction, UnoColor, UnoGameState, UnoPlayerView } from "@playora/game-engine";
-import type { GameResult, Player } from "@playora/game-types";
+import type { GameId, GameResult, Player } from "@playora/game-types";
 
 export const LOCAL_SEATS = ["local-p1", "local-p2", "local-p3", "local-p4"] as const;
 
@@ -14,8 +14,13 @@ export const LOCAL_SEATS = ["local-p1", "local-p2", "local-p3", "local-p4"] as c
  * diverge from online rules. Because all hands live on this device, the view is
  * rebuilt for whoever is on turn — the player passes the device along.
  */
-export function useLocalUno(playerCount = 2) {
-  const engine = React.useMemo(() => new UnoEngine(), []);
+export function useLocalUno(playerCount = 2, gameId: GameId = "uno") {
+  // No Mercy is a rule set on the same engine, so the view and actions are
+  // identical -- only the rules and deck differ.
+  const engine = React.useMemo(
+    () => (gameId === "uno-no-mercy" ? new UnoNoMercyEngine() : new UnoEngine()),
+    [gameId],
+  );
 
   const seats = React.useMemo(() => LOCAL_SEATS.slice(0, playerCount), [playerCount]);
 

@@ -7,7 +7,11 @@ export const UNO_COLORS: readonly UnoColor[] = ["red", "yellow", "green", "blue"
 export type UnoValue =
   | "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
   | "skip" | "reverse" | "draw2"
-  | "wild" | "wild_draw4";
+  | "wild" | "wild_draw4"
+  // No Mercy additions. Kept in the shared union so a variant deck can be
+  // dealt through the same engine rather than forking the whole type system.
+  | "draw4_color" | "skip_everyone" | "discard_all"
+  | "wild_draw6" | "wild_draw10" | "wild_reverse_draw4" | "wild_roulette";
 
 export interface UnoCard {
   id: string;
@@ -16,8 +20,39 @@ export interface UnoCard {
   value: UnoValue;
 }
 
+const WILD_VALUES = new Set<UnoValue>([
+  "wild",
+  "wild_draw4",
+  "wild_draw6",
+  "wild_draw10",
+  "wild_reverse_draw4",
+  "wild_roulette",
+]);
+
 export function isWild(card: UnoCard): boolean {
-  return card.value === "wild" || card.value === "wild_draw4";
+  return WILD_VALUES.has(card.value);
+}
+
+/** How many cards this card forces the next player to draw, if any. */
+export function drawPenaltyOf(value: UnoValue): number {
+  switch (value) {
+    case "draw2":
+      return 2;
+    case "wild_draw4":
+    case "draw4_color":
+    case "wild_reverse_draw4":
+      return 4;
+    case "wild_draw6":
+      return 6;
+    case "wild_draw10":
+      return 10;
+    default:
+      return 0;
+  }
+}
+
+export function isDrawCard(card: UnoCard): boolean {
+  return drawPenaltyOf(card.value) > 0;
 }
 
 export function isActionCard(card: UnoCard): boolean {
@@ -51,6 +86,11 @@ export interface UnoGameState extends BaseGameState {
   winnerId: string | null;
   /** Seeded so a match replays identically from the same starting state. */
   rngSeed: number;
+  /**
+   * Players knocked out by the No Mercy 25-card rule. They keep their seat in
+   * playerOrder so turn maths stays stable, but are skipped.
+   */
+  eliminated?: string[];
 }
 
 export interface UnoPlayCardPayload {

@@ -15,6 +15,11 @@ import type { PlayerReaction, GameId, Player, RoomSettings } from "@playora/game
 interface UseRoomSocketOptions {
   roomId: string;
   gameId?: string;
+  /**
+   * Hold the connection until the caller knows which game this room is for.
+   * Connecting with a placeholder and correcting it later restarts the socket.
+   */
+  ready?: boolean;
   asSpectator?: boolean;
   onReaction?: (reaction: PlayerReaction) => void;
   onError?: (error: string) => void;
@@ -23,6 +28,7 @@ interface UseRoomSocketOptions {
 export function useRoomSocket({
   roomId,
   gameId = "chess",
+  ready = true,
   asSpectator = false,
   onReaction,
   onError,
@@ -77,6 +83,9 @@ export function useRoomSocket({
 
   const connect = useCallback(async () => {
     if (!roomId) return;
+
+    // Nothing to connect to until the caller says the room is resolved.
+    if (!ready) return;
 
     // Wait for the stored session to be restored before deciding anything.
     // Acting while auth is still loading minted a brand new anonymous user
@@ -351,6 +360,7 @@ export function useRoomSocket({
   }, [
     roomId,
     gameId,
+    ready,
     asSpectator,
     authLoading,
     sessionToken,

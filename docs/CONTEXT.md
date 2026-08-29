@@ -6,7 +6,7 @@ zero loss of context. Read this file first, then `docs/ARCHITECTURE.md`.
 **Maintenance rule:** update the *Status Ledger*, *Decision Log*, and *Next Action*
 sections at the end of every milestone. Everything else changes rarely.
 
-**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** UNO playable (2 games)
+**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** 3 games; home dashboard shipped
 
 ---
 
@@ -172,6 +172,54 @@ guest path is proven. Rooms/results persistence remains Slice 3.
 ### 🟠 Secondary
 
 ### ✅ Resolved this session
+- **Home was a landing page, not the dashboard the design pack specifies.**
+  Raised three times before it was fixed. `/` now branches: strangers get the
+  landing page, signed-in players get `HomeDashboard` — Quick Play hero, Your
+  Progress with the XP bar, Continue Playing from real per-game ratings, Games,
+  Recent Matches from `game_results`, and search at the top. Sections with no
+  real data show an honest empty state with the next action, never invented
+  placeholder content.
+- **UNO board rebuilt with real card anatomy and motion** (framer-motion):
+  white border, coloured body, rotated white ellipse, centre glyph, mirrored
+  corner marks, conic-gradient wilds, UNO oval on card backs. Dealing stagger,
+  `layoutId` so a played card travels from hand to discard, fanned hand that
+  tightens as it grows, and rule-alert banners (SKIPPED / REVERSE / +2 / +4 /
+  +6 / +10 / WILD). All gated on `prefers-reduced-motion`.
+- **Double reconnect fixed.** The room page passed
+  `roomInfo?.gameSlug ?? currentRoom?.gameId ?? "chess"`, which changed twice per
+  load — once when the lookup resolved, again when ROOM_STATE arrived — tearing
+  the socket down each time. The hook now takes a `ready` flag and holds the
+  connection until the game is known. Third bug in this family (after the
+  infinite reconnect loop and the guest-identity loss); all three were React
+  effect dependencies that looked stable and were not.
+- **UNO No Mercy playable.** A rule set on `UnoEngine` per §17, not a second
+  engine: 168-card deck, stacking draw penalties, 0 passes hands, 7 swaps them,
+  Discard All, Skip Everyone, elimination at 25 cards. 22 tests.
+- **Changes needed a restart to appear — three real causes, all fixed:**
+  1. Library packages compile to `dist/` and had **no watch script**, so editing
+     `packages/*/src` did nothing until someone ran a build by hand. All eight
+     now run `tsc --watch` under `turbo dev`. Verified: editing a package source
+     rebuilt its `dist` in **1 second**.
+  2. `transpilePackages` was missing `@playora/progression` and
+     `@playora/bot-engine` — added later and never listed, so Next silently
+     ignored them.
+  3. Turbo capped concurrent persistent tasks at 10; with 2 apps + 8 watchers
+     that is exactly 10, so `turbo dev` refused to start. Concurrency now 16.
+  Also: `pnpm build` and `pnpm dev` both write `apps/web/.next`, so running them
+  together makes the dev server serve 500s. Documented.
+- **Catalog opened every game as Chess.** Cards linked to `/play` with no game,
+  and the play page defaulted to chess. They now link `/play?game=<id>`, which
+  the page honours.
+- **Removed the game switcher.** Choosing UNO from the catalog then being shown
+  a Chess tab is noise; a deliberate choice should not be second-guessed. A game
+  chosen explicitly locks the page to it, with a quiet "Choose a different game"
+  link. Landing on bare `/play` shows a chooser instead of guessing.
+- **Global game search on home.** Ranked over name, category, tags and
+  description; keyboard-first (arrows/Enter/Escape); results state plainly
+  whether a game is playable or which phase it is due in.
+- **Game catalog de-duplicated** into `lib/games/catalog.ts`. It was copied
+  across home and the games page — exactly how a search index drifts from the
+  thing it searches.
 - **UNO built and playable.** `UnoEngine` with the full rule set — 108-card
   deck, seeded deterministic shuffle, skip/reverse/draw2/wild/wild-draw-four,
   stacking penalties, UNO call with a two-card penalty for forgetting,
@@ -520,14 +568,20 @@ secrets production. **The Worker does not read `.env.local`.**
 - [ ] Then verify the Google sign-in round trip the same way guest was verified
 
 ### Next
-1. **UnoBot** so UNO gets offline/online AI like chess has.
-2. **Verify online UNO** through a room end to end (engine is registered, but
-   only local play has been exercised).
-3. **Home dashboard** (pack screen 04) — the home page is still a marketing
-   landing page, not the Quick Play / Continue Playing / Friends Online /
-   Your Progress dashboard the pack specifies.
-4. **Match history + leaderboard** — data is populated and indexed.
-5. **UNO No Mercy** — reuses UnoEngine per §17; then racing (Phaser).
+1. **Look at the new UNO board and the home dashboard.** Neither has been
+   visually confirmed — the browser pane returned 0x0 for the whole session, so
+   they are verified only by build and tests.
+2. **Match history and leaderboard pages** — data and indexes exist.
+3. **UnoBot**, so UNO and No Mercy get AI like chess has.
+4. **Racing (Car Race, Bike Race)** — Phaser plus server tick, snapshots,
+   prediction and reconciliation. Larger than the three existing games combined;
+   not started, and not worth faking.
+5. **Same-wifi via QR** — deferred by D4.
+
+### Known limitation
+The `game-ui-design` skill at `~/claude-skills/game-ui-design/` is written and
+structurally valid but **untested** — all six evaluation agents died on a session
+limit before producing anything.
 
 ### Blocked on Uneet
 - Google sign-in round trip (needs a human to enter Google credentials).

@@ -74,7 +74,7 @@ function RoomDetailsContent() {
     [currentRoom?.players]
   );
 
-  const { info: roomInfo } = useRoomInfo(roomCode);
+  const { info: roomInfo, isResolving: roomResolving } = useRoomInfo(roomCode);
 
   const {
     connectionStatus,
@@ -88,9 +88,11 @@ function RoomDetailsContent() {
     addBot,
   } = useRoomSocket({
     roomId: roomCode,
-    // Resolved from the server before connecting. Falling back to a hardcoded
-    // "chess" here silently turned every room into a chess room.
-    gameId: roomInfo?.gameSlug ?? currentRoom?.gameId ?? "chess",
+    // Resolved from the server before connecting. Deliberately does NOT fall
+    // back to currentRoom: that arrives after ROOM_STATE, so including it made
+    // gameId change mid-session and tore the socket down.
+    gameId: roomInfo?.gameSlug ?? "chess",
+    ready: !roomResolving,
     onReaction: handleIncomingReaction,
   });
 

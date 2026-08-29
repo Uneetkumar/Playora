@@ -34,17 +34,27 @@ export class UnoEngine extends AbstractGameEngine<
   UnoPlayerView
 > {
   readonly gameId: GameId = "uno";
-  readonly minPlayers = 2;
-  readonly maxPlayers = 4;
+  readonly minPlayers: number = 2;
+  readonly maxPlayers: number = 4;
+
+  /** Overridden by variants that use a different deck (e.g. No Mercy). */
+  protected buildDeckFor(_config: UnoConfig): UnoCard[] {
+    return buildDeck();
+  }
+
+  /** Cards dealt at the start. No Mercy deals more. */
+  protected defaultHandSize(): number {
+    return DEFAULT_HAND_SIZE;
+  }
 
   init(players: Player[], config: UnoConfig = {}): UnoGameState {
     const seed = seedFromString(
       config.randomSeed ?? config.sessionId ?? `uno-${players.map((p) => p.userId).join("-")}`,
     );
     const rng = createRng(seed);
-    const handSize = config.handSize ?? DEFAULT_HAND_SIZE;
+    const handSize = config.handSize ?? this.defaultHandSize();
 
-    const deck = shuffle(buildDeck(), rng);
+    const deck = shuffle(this.buildDeckFor(config), rng);
     const hands: Record<string, UnoCard[]> = {};
     const order = players.map((p) => p.userId);
 
@@ -88,7 +98,7 @@ export class UnoEngine extends AbstractGameEngine<
     return this.applyOpeningCard(state, starter);
   }
 
-  private applyOpeningCard(state: UnoGameState, card: UnoCard): UnoGameState {
+  protected applyOpeningCard(state: UnoGameState, card: UnoCard): UnoGameState {
     if (card.value === "skip") return { ...state, activePlayerId: this.nextPlayer(state, 1) };
     if (card.value === "reverse") {
       const reversed: UnoGameState = { ...state, direction: -1 };
@@ -204,7 +214,7 @@ export class UnoEngine extends AbstractGameEngine<
     }
   }
 
-  private playCard(
+  protected playCard(
     state: UnoGameState,
     playerId: string,
     payload: UnoPlayCardPayload,
@@ -267,7 +277,7 @@ export class UnoEngine extends AbstractGameEngine<
   }
 
   /** Resolves skip / reverse / draw2 / wild_draw4 and advances the turn. */
-  private applyCardEffect(
+  protected applyCardEffect(
     state: UnoGameState,
     card: UnoCard,
     events: UnoEvent[],
@@ -309,7 +319,7 @@ export class UnoEngine extends AbstractGameEngine<
     };
   }
 
-  private drawCard(state: UnoGameState, playerId: string): ActionResult<UnoGameState, UnoEvent> {
+  protected drawCard(state: UnoGameState, playerId: string): ActionResult<UnoGameState, UnoEvent> {
     const events: UnoEvent[] = [];
 
     // Serving a penalty: take the whole stack and lose the turn.
@@ -339,7 +349,7 @@ export class UnoEngine extends AbstractGameEngine<
     };
   }
 
-  private passTurn(state: UnoGameState, playerId: string): ActionResult<UnoGameState, UnoEvent> {
+  protected passTurn(state: UnoGameState, playerId: string): ActionResult<UnoGameState, UnoEvent> {
     void playerId;
     return {
       state: {
@@ -357,7 +367,7 @@ export class UnoEngine extends AbstractGameEngine<
    * Moves `count` cards to a hand, reshuffling the discard pile back into the
    * draw pile when it runs out (the top card stays in play).
    */
-  private drawCards(
+  protected drawCards(
     state: UnoGameState,
     playerId: string,
     count: number,
@@ -397,7 +407,7 @@ export class UnoEngine extends AbstractGameEngine<
   }
 
   /** Seat `steps` places along the current direction. */
-  private nextPlayer(state: UnoGameState, steps: number): string {
+  protected nextPlayer(state: UnoGameState, steps: number): string {
     const order = state.playerOrder;
     const current = order.indexOf(state.activePlayerId ?? order[0]!);
     const index = (((current + steps * state.direction) % order.length) + order.length) % order.length;

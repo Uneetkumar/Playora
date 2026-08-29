@@ -1,69 +1,102 @@
-# Development Guide
+# Development
 
-Welcome to the **Game Platform** codebase! This guide covers everything needed to set up, build, test, and run the monorepo locally.
+## One command
 
-## Prerequisites
-
-- **Node.js**: `v20.x` or `v22+` (v24 supported)
-- **pnpm**: `v9.x` or `v10+` (`corepack enable` recommended)
-
----
-
-## Quick Start
-
-### 1. Install Dependencies
-```bash
-pnpm install
-```
-
-### 2. Configure Environment Variables
-Copy `.env.example` to `.env.local` inside `apps/web/`:
-```bash
-cp .env.example apps/web/.env.local
-```
-
-### 3. Run Development Servers
-Start all applications and packages concurrently with Turborepo:
 ```bash
 pnpm dev
 ```
-- Web Application: `http://localhost:8000`
-- Realtime Worker: `http://localhost:8787`
 
----
+Starts everything at once via Turborepo:
 
-## Monorepo CLI Commands
+| Process | Port | What it does |
+|---|---|---|
+| `@playora/web` | 8000 | Next.js app |
+| `@playora/realtime` | 8787 | Cloudflare Worker + Durable Objects |
+| every `packages/*` | — | `tsc --watch`, rebuilding on change |
 
-| Command | Action |
-|---|---|
-| `pnpm dev` | Starts development servers in watch mode |
-| `pnpm build` | Builds all packages and applications via Turborepo |
-| `pnpm typecheck` | Runs TypeScript checks across all workspaces |
-| `pnpm test` | Runs unit tests (Vitest) |
-| `pnpm test:e2e` | Runs Playwright end-to-end tests |
-| `pnpm lint` | Runs ESLint on all projects |
-| `pnpm format` | Formats all code with Prettier |
-| `pnpm clean` | Cleans build artifacts and caches |
+Leave it running. Edits reload on their own — see below for why that needed
+fixing.
 
----
+## Why changes used to need a restart
 
-## Project Structure
+Three separate causes, all now addressed:
 
+1. **Workspace packages had no watcher.** They compile to `dist/`, and the web
+   app imports the built output — so editing `packages/game-engine/src/...` did
+   nothing until someone ran a build by hand. Every package now has a
+   `dev: tsc --watch` script, and `turbo dev` runs them in parallel.
+
+2. **`transpilePackages` was incomplete.** `@playora/progression` and
+   `@playora/bot-engine` were added later and never listed, so Next silently
+   ignored their changes. All eight packages are listed now.
+
+3. **The dev servers were being stopped after every verification run.** Nothing
+   was running to hot-reload into.
+
+## What still needs a restart
+
+Fast Refresh cannot pick these up — restart `pnpm dev` after changing:
+
+- `apps/web/.env.local` or `apps/realtime/.dev.vars` (env is read at boot)
+- `next.config.mjs`, `tailwind.config.ts`, `postcss.config.mjs`
+- `wrangler.toml` (bindings and migrations)
+- adding a **new** workspace package (Turborepo has to pick it up)
+
+Adding a file inside an existing package is fine — no restart needed.
+
+## Ports are fixed on purpose
+
+8000 and 8787 are not arbitrary. Both are baked into external configuration:
+
+- Google OAuth "Authorized JavaScript origins" → `http://localhost:8000`
+- Supabase redirect URL → `http://localhost:8000/auth/callback`
+- `NEXT_PUBLIC_REALTIME_WS_URL` → `ws://localhost:8787`
+
+`.claude/launch.json` pins both with `autoPort: false`. If a port is occupied by
+a stale process:
+
+```bash
+lsof -ti:8000 -ti:8787 | xargs kill -9
 ```
-playora/
-├── apps/
-│   ├── web/           # Next.js 15 App Router Frontend (Port 8000)
-│   └── realtime/      # Cloudflare Workers + Durable Objects (Port 8787)
-├── packages/
-│   ├── auth/          # Authentication & Guest Session logic
-│   ├── config/        # Centralized TypeScript/ESLint/Prettier configs
-│   ├── database/      # Supabase clients & DB schemas
-│   ├── game-engine/   # Abstract Game Engine & Registry
-│   ├── game-types/    # Shared Domain Models
-│   ├── protocol/      # WebSocket protocol & Zod validation
-│   └── ui/            # Shared UI components & Design system
-├── supabase/
-│   ├── migrations/    # Database schema migrations
-│   └── seed/          # Initial seed data
-└── docs/              # Architectural & Technical documentation
+
+## Checks
+
+```bash
+pnpm lint            # ESLint, strict
+pnpm typecheck       # tsc --noEmit across the monorepo
+pnpm test            # Vitest: unit + Durable Object integration
+pnpm test:e2e        # Playwright
+pnpm build           # production build
+pnpm version:check   # workspace versions in sync
 ```
+
+Run all of them before committing; CI runs the same set.
+
+**Stop `pnpm dev` before running `pnpm build`.** Both write to `apps/web/.next`,
+and running them together makes the dev server serve 500s until it recovers.
+
+**Note:** Vitest transpiles without typechecking, so a green `pnpm test` does
+not imply a green `pnpm typecheck`. Run both.
+
+## Live verification against real services
+
+These need `pnpm dev` running and Supabase configured
+(`pnpm env:check` to confirm):
+
+```bash
+pnpm sim                  # two-client match: auth, moves, chat, reconnect
+pnpm verify:matchmaking   # Quick Match pairs two real players
+pnpm verify:persistence    # a finished match reaches Postgres
+pnpm verify:progression    # rating, XP and streaks are applied
+```
+
+They use real Supabase sessions and a real Worker — no mocks.
+
+## Environment
+
+```bash
+pnpm env:init    # create .env.local and .dev.vars from templates
+pnpm env:check   # report what is set, and where to get what is missing
+```
+
+Full walkthrough: `docs/ENVIRONMENT_SETUP.md`.

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button, Card, CardContent, Badge } from "@playora/ui";
 import {
   Users,
@@ -16,15 +16,16 @@ import {
   Radio,
   Lock,
   Clock,
+  Zap,
 } from "lucide-react";
 import { AI_LEVELS, AI_LEVEL_LABELS, RECOMMENDED_AI_LEVEL } from "@playora/bot-engine";
 import type { AiLevel } from "@playora/bot-engine";
 import { getPlayModes, type PlayMode, type PlayModeId } from "../../lib/play/modes";
+import { GAME_CATALOG, isPlayable } from "../../lib/games/catalog";
 import { ChessGameView } from "../../games/chess/ChessGameView";
 import { useLocalGame, type LocalMode } from "../../lib/local/use-local-game";
 import { useLocalUno } from "../../lib/local/use-local-uno";
 import { UnoGameView } from "../../games/uno/UnoGameView";
-import { gameEngineRegistry } from "@playora/game-engine";
 import type { GameId } from "@playora/game-types";
 import { QuickMatch } from "../../components/play/quick-match";
 
@@ -39,25 +40,49 @@ const MODE_ICONS: Record<PlayModeId, React.ComponentType<{ className?: string }>
 
 type Started = { mode: LocalMode; aiLevel: AiLevel; gameId: GameId } | null;
 
-/** Only games with an engine are offered; the catalog may list more. */
-const PLAYABLE_GAMES: Array<{ id: GameId; name: string }> = (
-  [
-    { id: "chess" as GameId, name: "Chess" },
-    { id: "uno" as GameId, name: "UNO" },
-  ]
-).filter((g) => gameEngineRegistry.has(g.id));
+/**
+ * Playable games, derived from the shared catalog.
+ *
+ * This was a hardcoded pair, so registering a new engine did not make it
+ * appear here — exactly the drift the shared catalog exists to prevent.
+ */
+const PLAYABLE_GAMES: Array<{ id: GameId; name: string }> = GAME_CATALOG.filter(isPlayable).map(
+  (g) => ({ id: g.id, name: g.name }),
+);
 
 export default function PlayPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <PlayPageContent />
+    </React.Suspense>
+  );
+}
+
+function PlayPageContent() {
+  const searchParams = useSearchParams();
   const [started, setStarted] = React.useState<Started>(null);
   const [queueing, setQueueing] = React.useState(false);
-  const [gameId, setGameId] = React.useState<GameId>("chess");
+
+  // Honour ?game= so opening a game from the catalog selects that game rather
+  // than silently defaulting to chess.
+  const requested = searchParams?.get("game");
+  const isExplicit = Boolean(requested && PLAYABLE_GAMES.some((g) => g.id === requested));
+
+  const [gameId, setGameId] = React.useState<GameId | null>(
+    isExplicit ? (requested as GameId) : null,
+  );
 
   if (started) {
-    return started.gameId === "uno" ? (
-      <LocalUnoMatch onExit={() => setStarted(null)} />
+    return started.gameId === "uno" || started.gameId === "uno-no-mercy" ? (
+      <LocalUnoMatch gameId={started.gameId} onExit={() => setStarted(null)} />
     ) : (
       <LocalMatch started={started} onExit={() => setStarted(null)} />
     );
+  }
+
+  // Arrived with no game in mind: choose one first rather than guessing.
+  if (!gameId) {
+    return <GameChooser onChoose={setGameId} />;
   }
 
   if (queueing) {
@@ -79,7 +104,7 @@ export default function PlayPage() {
   return (
     <PlayHub
       gameId={gameId}
-      onSelectGame={setGameId}
+      lockedToGame={isExplicit}
       onStartLocal={(mode, aiLevel) => setStarted({ mode, aiLevel, gameId })}
       onQuickMatch={() => setQueueing(true)}
     />
@@ -88,12 +113,13 @@ export default function PlayPage() {
 
 function PlayHub({
   gameId,
-  onSelectGame,
+  lockedToGame,
   onStartLocal,
   onQuickMatch,
 }: {
   gameId: GameId;
-  onSelectGame: (id: GameId) => void;
+  /** True when the player picked this game deliberately, so no switcher. */
+  lockedToGame: boolean;
   onStartLocal: (mode: LocalMode, aiLevel: AiLevel) => void;
   onQuickMatch: () => void;
 }) {
@@ -135,27 +161,17 @@ function PlayHub({
         </p>
       </header>
 
-      {/* Game picker: only games with an engine behind them appear here. */}
-      {PLAYABLE_GAMES.length > 1 && (
-        <div className="mb-8 flex flex-wrap gap-2" role="tablist" aria-label="Choose a game">
-          {PLAYABLE_GAMES.map((game) => (
-            <button
-              key={game.id}
-              type="button"
-              role="tab"
-              aria-selected={game.id === gameId}
-              onClick={() => onSelectGame(game.id)}
-              className={`rounded-lg border px-4 py-2 font-display text-sm font-bold transition ${
-                game.id === gameId
-                  ? "border-primary bg-primary text-white"
-                  : "border-border bg-card text-muted-foreground hover:border-primary/50 hover:text-foreground"
-              }`}
-            >
-              {game.name}
-            </button>
-          ))}
-        </div>
-      )}
+      {/* No switcher: the player already chose this game, so showing the others
+          alongside it is noise. A quiet way back to the catalog is enough. */}
+      <div className="mb-8">
+        <Link
+          href="/games"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+          {lockedToGame ? "Choose a different game" : "All games"}
+        </Link>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         {ready.map((mode) => {
@@ -336,8 +352,8 @@ function LocalMatch({ started, onExit }: { started: NonNullable<Started>; onExit
 }
 
 
-function LocalUnoMatch({ onExit }: { onExit: () => void }) {
-  const game = useLocalUno(2);
+function LocalUnoMatch({ gameId, onExit }: { gameId: GameId; onExit: () => void }) {
+  const game = useLocalUno(2, gameId);
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-6 sm:px-6">
@@ -351,7 +367,9 @@ function LocalUnoMatch({ onExit }: { onExit: () => void }) {
             <WifiOff className="h-3 w-3" aria-hidden />
             Offline
           </Badge>
-          <Badge variant="secondary">Pass &amp; Play</Badge>
+          <Badge variant="secondary">
+            {gameId === "uno-no-mercy" ? "No Mercy" : "Pass & Play"}
+          </Badge>
           <Button variant="outline" size="sm" className="gap-2" onClick={game.restart}>
             <RotateCcw className="h-4 w-4" aria-hidden />
             Restart
@@ -382,6 +400,54 @@ function LocalUnoMatch({ onExit }: { onExit: () => void }) {
         onPass={game.pass}
         onRematch={game.restart}
       />
+    </div>
+  );
+}
+
+
+/**
+ * Shown only when someone lands on /play with no game in mind.
+ *
+ * Arriving from the catalog or search always carries ?game=, so this never
+ * appears in front of a player who has already decided.
+ */
+function GameChooser({ onChoose }: { onChoose: (id: GameId) => void }) {
+  return (
+    <div className="container mx-auto max-w-3xl px-4 py-10 sm:px-6">
+      <h1 className="font-display text-3xl font-extrabold text-foreground sm:text-4xl">
+        What do you want to play?
+      </h1>
+      <p className="mt-2 text-muted-foreground">Pick a game to see how you can play it.</p>
+
+      <div className="mt-8 grid gap-4 sm:grid-cols-2">
+        {PLAYABLE_GAMES.map((game) => (
+          <button
+            key={game.id}
+            type="button"
+            onClick={() => onChoose(game.id)}
+            className="group rounded-xl border border-border bg-card p-6 text-left transition-colors hover:border-primary"
+          >
+            <span className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/15">
+                <Zap className="h-5 w-5 text-primary" aria-hidden />
+              </span>
+              <span>
+                <span className="block font-display text-lg font-bold text-foreground">
+                  {game.name}
+                </span>
+                <span className="block text-xs text-muted-foreground">Ready to play</span>
+              </span>
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <Link
+        href="/games"
+        className="mt-6 inline-block text-sm text-muted-foreground hover:text-foreground"
+      >
+        Browse the full catalog
+      </Link>
     </div>
   );
 }

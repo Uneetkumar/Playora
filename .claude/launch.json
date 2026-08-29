@@ -2,24 +2,23 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev"],
+      "port": 8000,
+      "autoPort": false
+    },
+    {
       "name": "web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": [
-        "--filter",
-        "@playora/web",
-        "dev"
-      ],
+      "runtimeArgs": ["--filter", "@playora/web", "dev"],
       "port": 8000,
       "autoPort": false
     },
     {
       "name": "realtime",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": [
-        "--filter",
-        "@playora/realtime",
-        "dev"
-      ],
+      "runtimeArgs": ["--filter", "@playora/realtime", "dev"],
       "port": 8787,
       "autoPort": false
     }

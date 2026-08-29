@@ -1,3 +1,6 @@
+"use client";
+
+import * as React from "react";
 import Link from "next/link";
 import {
   Button,
@@ -10,10 +13,39 @@ import {
 } from "@playora/ui";
 import { Gamepad2, Zap, Shield, Globe2, ArrowRight, Play, Users, Trophy } from "lucide-react";
 import { JoinByCode } from "../components/rooms/join-by-code";
+import { GameSearch } from "../components/games/game-search";
+import { HomeDashboard } from "../components/home/home-dashboard";
+import { useAuthStore } from "../lib/store/auth-store";
 import { isGameImplemented } from "../lib/play/modes";
 import type { GameId } from "@playora/game-types";
 
 export default function HomePage() {
+  const { user, isLoading, initialize } = useAuthStore();
+
+  React.useEffect(() => {
+    void initialize();
+  }, [initialize]);
+
+  // Avoid flashing the landing page at someone who is already signed in.
+  if (isLoading) {
+    return (
+      <div className="container mx-auto max-w-6xl px-4 py-16" aria-busy="true">
+        <div className="h-12 w-64 animate-pulse rounded-lg bg-card" />
+        <div className="mt-6 grid gap-5 lg:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-48 animate-pulse rounded-xl bg-card" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (user) return <HomeDashboard />;
+
+  return <LandingPage />;
+}
+
+function LandingPage() {
   const featuredGames = [
     {
       id: "chess",
@@ -103,11 +135,19 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <div className="mx-auto mt-10 w-full max-w-md">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              Got a code from a friend?
-            </p>
-            <JoinByCode />
+          <div className="mx-auto mt-10 w-full max-w-md space-y-6">
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                Find a game
+              </p>
+              <GameSearch />
+            </div>
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                Got a code from a friend?
+              </p>
+              <JoinByCode />
+            </div>
           </div>
         </div>
       </section>
@@ -206,7 +246,7 @@ export default function HomePage() {
                 </CardHeader>
                 <CardContent>
                   {isGameImplemented(game.id as GameId) ? (
-                    <Link href="/play">
+                    <Link href={`/play?game=${game.id}`}>
                       <Button className="w-full gap-2">
                         <Play className="h-4 w-4 fill-current" />
                         <span>Play</span>
