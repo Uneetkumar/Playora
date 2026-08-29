@@ -3,6 +3,7 @@ node_modules
 .pnpm-store
 
 # Production builds
+*.tsbuildinfo
 dist
 build
 .next
