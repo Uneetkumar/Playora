@@ -6,7 +6,7 @@ zero loss of context. Read this file first, then `docs/ARCHITECTURE.md`.
 **Maintenance rule:** update the *Status Ledger*, *Decision Log*, and *Next Action*
 sections at the end of every milestone. Everything else changes rarely.
 
-**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** 0 (Foundation)
+**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** 0 complete → Phase 1
 
 ---
 
@@ -34,9 +34,9 @@ Key non-negotiables: server is authoritative; never trust client game state; gam
 rules never in React; high-frequency state never in Postgres; bots never bypass
 `GameEngine` validation; strict TypeScript, no `any`.
 
-**Repo name: NOT YET DECIDED.** See §8. Package scope is currently
-`@playden/*` (113 occurrences across 59 files — mechanical to rename, but
-do it *before* the first push).
+**Name: Playden.** Package scope is `@playden/*`; the Cloudflare Worker is
+`playden-realtime`. Rename from `@game-platform/*` was completed in Slice 0
+across 51 files before the first commit.
 
 ---
 
@@ -88,10 +88,10 @@ docs/
 | `pnpm test` | ✅ 20 tests, 4 files |
 | `pnpm build` | ✅ 9 routes |
 | `pnpm version:check` | ✅ in sync at 0.1.0 |
-| `pnpm lint` | ❌ **22 errors** (game-engine 13, realtime 9) |
-| E2E | ❌ broken assertion + not wired into `pnpm test` |
+| `pnpm lint` | ✅ clean |
+| `pnpm test:e2e` | ✅ 2/2 (Playwright, chromium) |
 
-Reproduce with: `pnpm install && pnpm typecheck && pnpm test && pnpm build && pnpm lint`
+Reproduce with: `pnpm install && pnpm version:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build`
 
 ---
 
@@ -137,11 +137,16 @@ capacity enforcement.
 - `maxPlayers: 2` hardcoded — `RoomDurableObject.ts:645` (§27 violation)
 - Stale host role: `conn.meta.role` snapshotted at connect, so after host transfer
   the old host still passes the `START_GAME` check (`RoomDurableObject.ts:285`)
-- `apps/web/e2e/smoke.spec.ts:20` asserts heading `"Live Game Rooms"`; the page
-  renders `"Game Rooms"`. Never caught because Playwright is not in `pnpm test`.
-- Not a git repo yet → spec §90 workflow not in effect
 
 ### ✅ Resolved this session
+- **Slice 0 complete.** Scope renamed to `@playden/*`; git repo initialised with
+  `main` + `develop`; all 22 lint errors fixed with real types (not suppressions);
+  E2E suite repaired and passing; version system implemented; CI workflows added.
+  Full gate green — see §5.
+- **Two latent bugs surfaced by removing `any`** in `RoomDurableObject.ts`:
+  `broadcastGameState` dereferenced `currentGameState` without a null guard, and
+  the disconnect-timer lookup passed a possibly-`undefined` handle to
+  `clearTimeout`. Both fixed. This is why §104.20 matters.
 - **Leaked `service_role` key.** `.env.example` contained a *live* Supabase
   `service_role` JWT (project ref `wlnzuxjbebkdnioliozd`, exp 2036) plus the real
   anon key and project URL — and `.gitignore:22` un-ignores that file, so it
@@ -159,7 +164,7 @@ impersonatable, non-persistent realtime layer means rewriting them later.
 
 | Slice | Scope | Blocked by |
 |---|---|---|
-| **0 — Hygiene** | `git init` + main/develop; fix 22 lint errors; fix E2E assertion; wire `test:e2e`; commit version system + CI | nothing |
+| ~~0 — Hygiene~~ | ✅ **DONE** — rename, git init, 22 lint fixes, E2E repair, version system, CI | — |
 | **1 — Real identity** (§12) | Supabase Auth: Google OAuth + `signInAnonymously()` guests; delete forgeable token; verify JWTs via JWKS + `jose`; `@supabase/ssr` middleware; `/auth/callback`; profile bootstrap trigger; guest→Google linking preserving history | **Supabase credentials** |
 | **2 — Trusted realtime** (§63, §61) | `AUTH` as mandatory first message, identity from verified claims only; WebSocket Hibernation API; persist to `state.storage` + `blockConcurrencyWhile` restore; `setAlarm()` grace period; token-bucket rate limiting; re-read host role at check time. Tested with `@cloudflare/vitest-pool-workers` | nothing (JWT verify testable with locally-signed tokens) |
 | **3 — Rooms + persistence** (§6, §69) | Real room create/list/join with privacy + capacity enforcement; DO writes `game_sessions` / `game_results` to Supabase via Worker secret | Slices 1–2 |
@@ -173,7 +178,7 @@ Then §93 Quick Play → §94 AI → §8 social → UNO → racing → voice.
 
 | # | Decision | Status |
 |---|---|---|
-| D1 | **Repo / product name** — drives GitHub repo + package scope rename | ⏳ **awaiting user** |
+| D1 | ~~Repo / product name~~ | ✅ **Playden** (2026-08-29) |
 | D2 | Supabase JWT signing: asymmetric (ES256/RS256 via JWKS, preferred) vs legacy HS256 shared secret | ⏳ depends on what the dashboard offers |
 | D3 | Cloudflare plan — Durable Objects may require Workers Paid (~$5/mo); verify current terms | ⏳ not blocking local dev |
 
@@ -181,6 +186,15 @@ Then §93 Quick Play → §94 AI → §8 social → UNO → racing → voice.
 
 ## 9. Decision log
 
+- **2026-08-29** — Product named **Playden** (play + den: a place you go to play
+  with people). Chosen for being game-agnostic, matching the "PLAY TOGETHER"
+  landing thesis, and near-certainly available as a coined compound.
+- **2026-08-29** — Promoted `roomId` / `sessionId` from `ChessConfig` to
+  `BaseGameConfig`: every game needs match context from the realtime layer, and
+  the duplication only surfaced once `any` was removed from the registry.
+- **2026-08-29** — Added `AnyGameEngine` (base-type-constrained) rather than
+  `GameEngine<any,...>` so the registry and realtime layer stay generic without
+  discarding type safety.
 - **2026-08-29** — Preserve the existing monorepo rather than restart. Protocol,
   game-engine, and schema are sound; the gap is trust, not structure.
 - **2026-08-29** — Fix foundation (auth + DO persistence) *before* any new game
@@ -248,15 +262,34 @@ secrets production. **The Worker does not read `.env.local`.**
 
 ## 12. Next Action
 
-**Slice 0 — Hygiene.** No blockers. Concretely:
+**Slice 0 is complete.** Two tracks now run in parallel:
 
-1. `git init`, create `main` + `develop`, verify `.dev.vars` and `.env.local` are
-   ignored, initial commit
-2. Fix the 22 lint errors: type the registry generics in
-   `packages/game-engine/src/registry.ts` (13 × `no-explicit-any`), remove `any`
-   and fill the 3 empty catch blocks in `RoomDurableObject.ts` (lines 137, 515, 671)
-3. Fix `apps/web/e2e/smoke.spec.ts:20` assertion; add `test:e2e` to the CI gate
-4. Gate: lint + typecheck + test + build + version:check all green
+### Track A — Slice 2: Trusted realtime  ← *start here, no credentials needed*
+The highest-severity finding (F1) with no external dependency. In
+`apps/realtime/src/durable-objects/RoomDurableObject.ts`:
 
-**In parallel, user to do:** rotate/recreate Supabase (ENVIRONMENT_SETUP Step 0),
-then Steps 1–3; and decide D1 (repo name).
+1. Handle the `AUTH` message; refuse every other message until a valid JWT
+   arrives. Identity from verified claims only — delete the `userId` query-param
+   read at line ~55.
+2. Migrate to the WebSocket Hibernation API (`state.acceptWebSocket` +
+   `serializeAttachment`) so connections survive eviction.
+3. Persist room + game state to `state.storage`; restore in the constructor via
+   `blockConcurrencyWhile`.
+4. Replace the `setTimeout` disconnect grace with `state.setAlarm()`.
+5. Token-bucket rate limiting on `CHAT_SEND` / `REACTION_SEND`.
+6. Re-read host role from `this.players` at check time (fixes the stale-role bug).
+7. Remove the hardcoded `maxPlayers: 2`.
+
+Test with `@cloudflare/vitest-pool-workers`: impersonation rejected, state
+survives eviction, reconnect resyncs correctly.
+
+### Track B — Slice 1: Real identity  ← *blocked on user*
+Needs Supabase provisioned. See `docs/ENVIRONMENT_SETUP.md`:
+- [ ] Step 0 — rotate/recreate the leaked Supabase project
+- [ ] Steps 1–2 — anonymous sign-ins enabled, Google provider configured
+- [ ] Step 3 — `apps/web/.env.local` + `apps/realtime/.dev.vars` filled
+
+### Working agreement
+Commit with Conventional Commits on `feature/*` branches off `develop`
+(§90). The full gate must stay green: `pnpm version:check && pnpm lint &&
+pnpm typecheck && pnpm test && pnpm build`.
