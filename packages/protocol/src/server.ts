@@ -36,6 +36,13 @@ export const ProtocolPlayerSchema = z.object({
   joinedAt: z.number(),
   lastPingAt: z.number(),
   isGuest: z.boolean(),
+  /**
+   * Bots are always identifiable (spec section 8: never pretend a bot is human).
+   * Defaulted so existing payloads remain valid.
+   */
+  isBot: z.boolean().default(false),
+  /** AI difficulty 1-7. Present only for bots. */
+  botLevel: z.number().int().min(1).max(7).optional(),
 });
 
 export type ProtocolPlayer = z.infer<typeof ProtocolPlayerSchema>;

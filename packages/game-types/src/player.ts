@@ -15,4 +15,11 @@ export interface Player {
   joinedAt: number;
   lastPingAt: number;
   isGuest: boolean;
+  /**
+   * Bots share the player model but are always distinguishable
+   * (spec section 8: never pretend a bot is a human).
+   */
+  isBot?: boolean;
+  /** AI difficulty 1-7. Present only for bots. */
+  botLevel?: number;
 }

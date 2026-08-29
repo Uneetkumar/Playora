@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@playden/auth": "workspace:*",
+    "@playden/bot-engine": "workspace:*",
     "@playden/game-engine": "workspace:*",
     "@playden/game-types": "workspace:*",
     "@playden/protocol": "workspace:*"

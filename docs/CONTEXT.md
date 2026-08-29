@@ -6,7 +6,7 @@ zero loss of context. Read this file first, then `docs/ARCHITECTURE.md`.
 **Maintenance rule:** update the *Status Ledger*, *Decision Log*, and *Next Action*
 sections at the end of every milestone. Everything else changes rarely.
 
-**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** Slice 1 VERIFIED against live Supabase
+**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** 4 of 6 play modes live and verified
 
 ---
 
@@ -28,9 +28,9 @@ Paste this into the new session:
 |---|---|---|---|---|
 | Offline vs AI | no | no | browser | ✅ works |
 | Offline pass & play | no | no | browser | ✅ works |
-| Online with friends (room code) | guest or Google | yes | Durable Object | 🟡 server done, UI half-wired |
+| Online with friends (room code) | guest or Google | yes | Durable Object | ✅ **verified** by `pnpm sim` |
 | Online vs random (Quick Match) | guest or Google | yes | Durable Object | ❌ no matchmaking |
-| Online vs AI | guest or Google | yes | DO + server-side bot | ❌ bot is client-only |
+| Online vs AI | guest or Google | yes | DO + server-side bot | ✅ **live**, BOT badge in lobby |
 | Same wifi, no internet | no | LAN only | peer device | ❌ deferred, see D4 |
 
 `apps/web/src/lib/play/modes.ts` is the single source of truth; home, games and
@@ -102,7 +102,7 @@ docs/
 | Check | Result |
 |---|---|
 | `pnpm typecheck` | ✅ 14/14 |
-| `pnpm test` | ✅ **92 tests**, 11 files (auth 20, realtime 19, bot 19, game-types 18, engine 11, protocol 3, db 2) |
+| `pnpm test` | ✅ **97 tests**, 12 files (realtime 24, auth 20, bot 19, game-types 18, engine 11, protocol 3, db 2) |
 | `pnpm build` | ✅ 9 routes |
 | `pnpm version:check` | ✅ in sync at 0.1.0 |
 | `pnpm lint` | ✅ clean |
@@ -171,6 +171,35 @@ guest path is proven. Rooms/results persistence remains Slice 3.
 ### 🟠 Secondary
 
 ### ✅ Resolved this session
+- **§92 first vertical slice PROVEN.** `pnpm sim` runs a full two-client match
+  against the live Worker and live Supabase: two real guest identities, host
+  authority, ready, start, 6 relayed moves, both clients converging on the same
+  FEN, distinct colours, illegal move rejected, chat, disconnect with 60s grace,
+  reconnect reclaiming the seat, and resync restoring the match. 16/16 checks.
+- **Server-side AI shipped.** `ADD_BOT` / `REMOVE_BOT` in the protocol,
+  `isBot` / `botLevel` on the player model, `handlers/bot-handler.ts` in the
+  Worker. Bot actions go through the **same** `executeAction` path as humans —
+  extracted specifically so a bot cannot bypass validation (§104.5). Verified
+  live: human played a3, server-side bot replied Nc6.
+- **Test env was not hermetic.** Adding `.dev.vars` broke 17 realtime tests: the
+  pool loads it, so the real `SUPABASE_URL` made the verifier enforce that
+  project's issuer and reject locally-signed test tokens. `vitest.config.ts` now
+  blanks those bindings explicitly. The tests had been passing only because the
+  file did not exist.
+- **Realtime handshake proven end to end.** A browser guest session's real
+  Supabase token is accepted by `RoomDurableObject`'s AUTH gate against live
+  JWKS: `auth.accepted userId=... isGuest=true`. Slices 1 and 2 meet correctly.
+- **Two client bugs found by running it, not by reading it:**
+  1. *Infinite reconnect loop.* `currentRoom` was a dependency of `connect`, so
+     every `ROOM_STATE` changed the callback identity, tore the socket down and
+     reconnected — ~80 connects/sec until the browser hit "Insufficient
+     resources". Fixed by reading room state via `useRoomStore.getState()`
+     inside the message handler and holding caller callbacks in refs.
+  2. *Guest identity lost on every page load.* The hook minted a new anonymous
+     Supabase user whenever `session` was null — including while `initialize()`
+     was still restoring it. Six accounts were created in a handful of reloads.
+     Fixed by gating the connect effect on `authLoading`. Verified: two reloads,
+     same `userId`, profile count unchanged.
 - **"Why can't I just play?" fixed.** Every route funnelled into Create/Join
   Room. Home's hero CTA, home game cards and the games list now lead to `/play`,
   a hub showing all six modes with the three ready ones playable in one click.
@@ -255,6 +284,17 @@ Then §93 Quick Play → §94 AI → §8 social → UNO → racing → voice.
 
 ## 9. Decision log
 
+- **2026-08-29** — Bots are seated as normal players carrying `isBot`, never as
+  a parallel entity type. One seat model keeps room, turn and result logic
+  game-agnostic, and makes "never pretend a bot is human" (§8) a data property
+  rather than a UI convention.
+- **2026-08-29** — `executeAction` extracted as the single action path. Humans
+  hit it after permission checks; bots hit it directly. Neither can reach the
+  engine any other way.
+- **2026-08-29** — Realtime verification is done against the live Worker plus
+  live Supabase, not mocks. Both client bugs above were invisible to the unit
+  and integration suites because they live in React effect wiring, not in the
+  protocol or engine. Browser verification stays part of "done".
 - **2026-08-29** — Same-wifi play will use WebRTC with QR-code signalling, built
   *after* the other five modes. A browser cannot host a LAN server (no listening
   socket, no mDNS), so QR exchange is the only true browser-only answer. It also
@@ -378,10 +418,14 @@ secrets production. **The Worker does not read `.env.local`.**
       `2787402...apps.googleusercontent.com`, redirect URI already correct)
 - [ ] Then verify the Google sign-in round trip the same way guest was verified
 
-### Next — prove the realtime handshake
-Run `wrangler dev` alongside the web app and confirm a browser guest session's
-token is accepted by `RoomDurableObject`'s AUTH gate. This is the first time
-Slice 1 and Slice 2 meet in the real product rather than in tests.
+### Next
+1. **Google sign-in round trip** — provider is now ON but the OAuth flow has not
+   been walked end to end in a browser.
+2. **Quick Match matchmaking** — the one remaining online mode (§93).
+3. **Slice 3 remainder** — wire `rooms/page.tsx` to the room API (it still
+   invents codes client-side), and persist `game_sessions` / `game_results` on
+   finish. Hook point: `finishGame()` in `handlers/game-handler.ts`.
+4. **Same-wifi via QR** — deferred by decision D4, build last.
 
 ### In progress — Slice 3: rooms + persistence
 

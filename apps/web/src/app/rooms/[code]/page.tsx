@@ -35,6 +35,7 @@ import {
   Sparkles,
   Lock,
   Globe2,
+  Bot,
 } from "lucide-react";
 
 function RoomDetailsContent() {
@@ -81,6 +82,7 @@ function RoomDetailsContent() {
     sendChatMessage,
     sendReaction,
     leaveRoom,
+    addBot,
   } = useRoomSocket({
     roomId: roomCode,
     gameId: currentRoom?.gameId || "chess",
@@ -392,6 +394,12 @@ function RoomDetailsContent() {
                               You
                             </Badge>
                           )}
+                          {player2?.isBot && (
+                            <Badge variant="warning" className="text-[10px] gap-1">
+                              <Bot className="h-3 w-3" />
+                              BOT
+                            </Badge>
+                          )}
                         </div>
                         <span className="text-xs text-slate-400">
                           {player2 ? "Plays Black ♚" : "Share room code or invite link"}
@@ -411,9 +419,22 @@ function RoomDetailsContent() {
                           </Badge>
                         )
                       ) : (
-                        <div className="flex items-center space-x-2 text-xs text-indigo-400 animate-pulse font-medium">
-                          <Sparkles className="h-3.5 w-3.5" />
-                          <span>Slot Open</span>
+                        <div className="flex items-center gap-3">
+                          <div className="hidden sm:flex items-center space-x-2 text-xs text-indigo-400 font-medium">
+                            <Sparkles className="h-3.5 w-3.5" />
+                            <span>Slot Open</span>
+                          </div>
+                          {isHost && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5"
+                              onClick={() => addBot(3)}
+                            >
+                              <Bot className="h-3.5 w-3.5" />
+                              <span>Play vs AI</span>
+                            </Button>
+                          )}
                         </div>
                       )}
                     </div>

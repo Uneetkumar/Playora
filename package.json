@@ -11,18 +11,20 @@
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:e2e": "pnpm --filter @playden/web test:e2e",
+    "sim": "node scripts/sim-match.mjs",
     "version:sync": "node scripts/sync-version.mjs",
     "version:check": "node scripts/sync-version.mjs --check",
+    "env:init": "node scripts/check-env.mjs --init",
+    "env:check": "node scripts/check-env.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
-    "clean": "turbo clean && rimraf node_modules",
-    "env:init": "node scripts/check-env.mjs --init",
-    "env:check": "node scripts/check-env.mjs"
+    "clean": "turbo clean && rimraf node_modules"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.50.1",
     "@types/node": "^22.13.4",
+    "chess.js": "^1.4.0",
     "eslint": "^9.20.1",
     "prettier": "^3.5.1",
     "rimraf": "^6.0.1",

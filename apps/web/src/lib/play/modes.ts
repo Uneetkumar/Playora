@@ -71,11 +71,10 @@ export function getPlayModes(gameId: GameId): PlayMode[] {
     {
       id: "online-ai",
       label: "Online vs AI",
-      tagline: "A rated game against the server AI",
+      tagline: "Add an AI opponent to your room",
       needsAuth: true,
       needsInternet: true,
-      status: "coming-soon",
-      note: "Server-side bots are not live yet",
+      status: hasEngine && hasBot ? "ready" : "coming-soon",
     },
     {
       id: "lan",

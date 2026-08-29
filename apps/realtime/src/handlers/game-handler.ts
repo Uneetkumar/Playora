@@ -136,7 +136,6 @@ export async function applyGameAction(
   }
 
   if (!gameEngineRegistry.has(room.gameId)) return;
-  const engine = gameEngineRegistry.get(room.gameId);
 
   const action: BaseGameAction = {
     type: actionType,
@@ -146,21 +145,51 @@ export async function applyGameAction(
     ...(clientActionId ? { clientActionId } : {}),
   };
 
+  const outcome = await executeAction(ctx, action);
+  if (!outcome.ok) {
+    ctx.send(ws, {
+      type: "ERROR",
+      code: outcome.code,
+      message: outcome.message,
+      details: { clientActionId },
+    });
+  }
+}
+
+export type ActionOutcome =
+  | { ok: true }
+  | { ok: false; code: "ILLEGAL_MOVE" | "EXECUTION_ERROR"; message: string };
+
+/**
+ * The single path every action takes -- human or bot.
+ *
+ * Bots call this with an action they generated, so they are subject to exactly
+ * the same validation as a player at a keyboard and can never reach a state a
+ * human could not (spec section 104.5).
+ */
+export async function executeAction(
+  ctx: RoomContext,
+  action: BaseGameAction,
+): Promise<ActionOutcome> {
+  const { room } = ctx;
+  if (!room.currentGameState || !gameEngineRegistry.has(room.gameId)) {
+    return { ok: false, code: "EXECUTION_ERROR", message: "No game in progress." };
+  }
+  const engine = gameEngineRegistry.get(room.gameId);
+
   const validation = engine.validateAction(room.currentGameState, action);
   if (!validation.valid) {
     log.info("action.rejected", {
       roomId: room.roomId,
-      userId,
-      actionType,
+      userId: action.playerId,
+      actionType: action.type,
       reason: validation.reason,
     });
-    ctx.send(ws, {
-      type: "ERROR",
+    return {
+      ok: false,
       code: "ILLEGAL_MOVE",
       message: validation.reason ?? "That move is not legal.",
-      details: { clientActionId },
-    });
-    return;
+    };
   }
 
   try {
@@ -184,13 +213,15 @@ export async function applyGameAction(
     if (engine.isGameOver(room.currentGameState)) {
       await finishGame(ctx, engine.calculateResult(room.currentGameState, room.roomId));
     }
+    return { ok: true };
   } catch (err) {
-    log.error("action.failed", { roomId: room.roomId, userId, actionType, ...errorFields(err) });
-    ctx.send(ws, {
-      type: "ERROR",
-      code: "EXECUTION_ERROR",
-      message: "That action could not be completed.",
+    log.error("action.failed", {
+      roomId: room.roomId,
+      userId: action.playerId,
+      actionType: action.type,
+      ...errorFields(err),
     });
+    return { ok: false, code: "EXECUTION_ERROR", message: "That action could not be completed." };
   }
 }
 

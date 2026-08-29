@@ -7,6 +7,8 @@ export const ClientMessageTypeSchema = z.enum([
   "READY",
   "UNREADY",
   "START_GAME",
+  "ADD_BOT",
+  "REMOVE_BOT",
   "GAME_ACTION",
   "CHAT_SEND",
   "REACTION_SEND",
@@ -51,6 +53,19 @@ export const StartGameMessageSchema = z.object({
   customRules: z.record(z.unknown()).optional(),
 });
 
+/** Host-only: seat an AI opponent at the requested difficulty. */
+export const AddBotMessageSchema = z.object({
+  type: z.literal("ADD_BOT"),
+  roomId: z.string(),
+  level: z.number().int().min(1).max(7).default(3),
+});
+
+export const RemoveBotMessageSchema = z.object({
+  type: z.literal("REMOVE_BOT"),
+  roomId: z.string(),
+  botId: z.string(),
+});
+
 export const GameActionMessageSchema = z.object({
   type: z.literal("GAME_ACTION"),
   roomId: z.string(),
@@ -90,6 +105,8 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   ReadyMessageSchema,
   UnreadyMessageSchema,
   StartGameMessageSchema,
+  AddBotMessageSchema,
+  RemoveBotMessageSchema,
   GameActionMessageSchema,
   ChatSendMessageSchema,
   ReactionSendMessageSchema,
@@ -104,6 +121,8 @@ export type LeaveRoomMessage = z.infer<typeof LeaveRoomMessageSchema>;
 export type ReadyMessage = z.infer<typeof ReadyMessageSchema>;
 export type UnreadyMessage = z.infer<typeof UnreadyMessageSchema>;
 export type StartGameMessage = z.infer<typeof StartGameMessageSchema>;
+export type AddBotMessage = z.infer<typeof AddBotMessageSchema>;
+export type RemoveBotMessage = z.infer<typeof RemoveBotMessageSchema>;
 export type GameActionMessage = z.infer<typeof GameActionMessageSchema>;
 export type ChatSendMessage = z.infer<typeof ChatSendMessageSchema>;
 export type ReactionSendMessage = z.infer<typeof ReactionSendMessageSchema>;

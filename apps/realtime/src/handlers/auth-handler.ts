@@ -152,6 +152,7 @@ export function admit(
     joinedAt: Date.now(),
     lastPingAt: Date.now(),
     isGuest: identity.isGuest,
+    isBot: false,
   };
 
   if (mustSpectate) room.spectators[identity.userId] = player;

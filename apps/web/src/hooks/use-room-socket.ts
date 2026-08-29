@@ -27,6 +27,13 @@ export function useRoomSocket({
   onReaction,
   onError,
 }: UseRoomSocketOptions) {
+  // Held in refs so a caller passing inline functions cannot retrigger the
+  // connection effect on every render.
+  const onReactionRef = useRef(onReaction);
+  const onErrorRef = useRef(onError);
+  onReactionRef.current = onReaction;
+  onErrorRef.current = onError;
+
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -34,7 +41,15 @@ export function useRoomSocket({
     "connecting" | "connected" | "disconnected" | "reconnecting"
   >("connecting");
 
-  const { session, initialize: initAuth, signInAsGuest } = useAuthStore();
+  const {
+    session,
+    isLoading: authLoading,
+    initialize: initAuth,
+    signInAsGuest,
+  } = useAuthStore();
+  // A new session object each render would restart the socket; the token
+  // string only changes on an actual refresh.
+  const sessionToken = session?.tokens.accessToken ?? null;
   const {
     setRoom,
     setConnected,
@@ -62,6 +77,11 @@ export function useRoomSocket({
 
   const connect = useCallback(async () => {
     if (!roomId) return;
+
+    // Wait for the stored session to be restored before deciding anything.
+    // Acting while auth is still loading minted a brand new anonymous user
+    // on every page load, so guests silently lost their identity and history.
+    if (authLoading) return;
 
     // Anyone can play immediately; a guest gets a real Supabase
     // anonymous session rather than a locally-minted token.
@@ -137,6 +157,12 @@ export function useRoomSocket({
 
         const msg: ServerMessage = parsed.data;
 
+        // Read the latest room from the store rather than closing over it.
+        // Capturing it in this callback made `connect` change identity on
+        // every ROOM_STATE, which tore the socket down and reconnected in a
+        // loop until the browser ran out of sockets.
+        const roomNow = useRoomStore.getState().currentRoom;
+
         switch (msg.type) {
           case "CONNECTED":
             setConnected(true);
@@ -173,9 +199,9 @@ export function useRoomSocket({
           }
 
           case "PLAYER_READY": {
-            if (currentRoom?.players[msg.playerId]) {
+            if (roomNow?.players[msg.playerId]) {
               updatePlayer({
-                ...currentRoom.players[msg.playerId]!,
+                ...roomNow.players[msg.playerId]!,
                 isReady: msg.isReady,
               });
             }
@@ -183,9 +209,9 @@ export function useRoomSocket({
           }
 
           case "PLAYER_DISCONNECTED": {
-            if (currentRoom?.players[msg.playerId]) {
+            if (roomNow?.players[msg.playerId]) {
               updatePlayer({
-                ...currentRoom.players[msg.playerId]!,
+                ...roomNow.players[msg.playerId]!,
                 status: "disconnected",
               });
             }
@@ -193,9 +219,9 @@ export function useRoomSocket({
           }
 
           case "PLAYER_RECONNECTED": {
-            if (currentRoom?.players[msg.playerId]) {
+            if (roomNow?.players[msg.playerId]) {
               updatePlayer({
-                ...currentRoom.players[msg.playerId]!,
+                ...roomNow.players[msg.playerId]!,
                 status: "connected",
               });
             }
@@ -216,9 +242,9 @@ export function useRoomSocket({
               turnDeadline: null,
             });
             setGameState(msg.initialState, 1);
-            if (currentRoom) {
+            if (roomNow) {
               setRoom({
-                ...currentRoom,
+                ...roomNow,
                 status: "in_game",
                 currentSessionId: msg.sessionId,
               });
@@ -245,7 +271,7 @@ export function useRoomSocket({
               timestamp: msg.timestamp,
             };
             addReaction(reactionItem);
-            onReaction?.(reactionItem);
+            onReactionRef.current?.(reactionItem);
             break;
           }
 
@@ -253,16 +279,16 @@ export function useRoomSocket({
             setLastResult({
               sessionId: msg.sessionId,
               roomId: msg.roomId,
-              gameId: (currentRoom?.gameId || "chess") as GameId,
+              gameId: (roomNow?.gameId || "chess") as GameId,
               winnerId: msg.result.winnerId,
               scores: msg.result.scores,
               durationSeconds: msg.result.durationSeconds,
               completedAt: new Date().toISOString(),
               reason: msg.result.reason,
             });
-            if (currentRoom) {
+            if (roomNow) {
               setRoom({
-                ...currentRoom,
+                ...roomNow,
                 status: "finished",
               });
             }
@@ -293,7 +319,7 @@ export function useRoomSocket({
 
           case "ERROR": {
             setError(msg.message);
-            onError?.(msg.message);
+            onErrorRef.current?.(msg.message);
             break;
           }
 
@@ -326,7 +352,8 @@ export function useRoomSocket({
     roomId,
     gameId,
     asSpectator,
-    session,
+    authLoading,
+    sessionToken,
     signInAsGuest,
     setConnecting,
     setConnected,
@@ -339,9 +366,6 @@ export function useRoomSocket({
     addMessage,
     addReaction,
     setLastResult,
-    currentRoom,
-    onReaction,
-    onError,
   ]);
 
   useEffect(() => {
@@ -404,6 +428,21 @@ export function useRoomSocket({
     [sendMessage, roomId]
   );
 
+  /** Host-only: seat a server-side AI opponent (spec section 9). */
+  const addBot = useCallback(
+    (level: number) => {
+      sendMessage({ type: "ADD_BOT", roomId, level });
+    },
+    [sendMessage, roomId],
+  );
+
+  const removeBot = useCallback(
+    (botId: string) => {
+      sendMessage({ type: "REMOVE_BOT", roomId, botId });
+    },
+    [sendMessage, roomId],
+  );
+
   const requestResync = useCallback(() => {
     sendMessage({ type: "RESYNC", roomId });
   }, [sendMessage, roomId]);
@@ -420,6 +459,8 @@ export function useRoomSocket({
     sendGameAction,
     sendChatMessage,
     sendReaction,
+    addBot,
+    removeBot,
     requestResync,
     leaveRoom,
   };

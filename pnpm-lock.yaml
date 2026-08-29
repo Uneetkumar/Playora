@@ -17,6 +17,9 @@ importers:
       '@types/node':
         specifier: ^22.13.4
         version: 22.20.1
+      chess.js:
+        specifier: ^1.4.0
+        version: 1.4.0
       eslint:
         specifier: ^9.20.1
         version: 9.39.5(jiti@1.21.7)(supports-color@7.2.0)
@@ -44,6 +47,9 @@ importers:
       '@playden/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@playden/bot-engine':
+        specifier: workspace:*
+        version: link:../../packages/bot-engine
       '@playden/game-engine':
         specifier: workspace:*
         version: link:../../packages/game-engine

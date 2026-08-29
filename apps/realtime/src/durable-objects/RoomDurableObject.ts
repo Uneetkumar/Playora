@@ -18,6 +18,7 @@ import { RateLimiter, type RateLimitKind } from "../lib/rate-limit.js";
 import { log, errorFields } from "../lib/logger.js";
 import { authenticateConnection } from "../handlers/auth-handler.js";
 import { applyGameAction, finishGame, startGame } from "../handlers/game-handler.js";
+import { addBot, removeBot, runBotTurns } from "../handlers/bot-handler.js";
 import type { RoomContext } from "./room-context.js";
 import {
   AUTH_DEADLINE_MS,
@@ -233,11 +234,21 @@ export class RoomDurableObject {
 
       case "START_GAME":
         await startGame(ctx, ws, userId, msg.customRules);
+        await runBotTurns(ctx);
+        return;
+
+      case "ADD_BOT":
+        await addBot(ctx, ws, userId, msg.level as Parameters<typeof addBot>[3]);
+        return;
+
+      case "REMOVE_BOT":
+        await removeBot(ctx, ws, userId, msg.botId);
         return;
 
       case "GAME_ACTION":
         if (!this.allow(ws, attachment.connectionId, "gameAction")) return;
         await applyGameAction(ctx, ws, userId, msg.actionType, msg.payload, msg.clientActionId);
+        await runBotTurns(ctx);
         return;
 
       case "CHAT_SEND": {
