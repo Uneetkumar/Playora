@@ -6,6 +6,7 @@ import { useRoomSocket } from "../../../hooks/use-room-socket";
 import { useRoomStore } from "../../../lib/store/room-store";
 import { useGameStore } from "../../../lib/store/game-store";
 import { useAuthStore } from "../../../lib/store/auth-store";
+import { useRoomInfo } from "../../../hooks/use-rooms";
 import { RoomChat } from "../../../components/chat/room-chat";
 import { ReactionOverlay, type FloatingReaction } from "../../../components/reactions/reaction-overlay";
 import { ChessGameView } from "../../../games/chess/ChessGameView";
@@ -73,6 +74,8 @@ function RoomDetailsContent() {
     [currentRoom?.players]
   );
 
+  const { info: roomInfo } = useRoomInfo(roomCode);
+
   const {
     connectionStatus,
     setReady,
@@ -85,7 +88,9 @@ function RoomDetailsContent() {
     addBot,
   } = useRoomSocket({
     roomId: roomCode,
-    gameId: currentRoom?.gameId || "chess",
+    // Resolved from the server before connecting. Falling back to a hardcoded
+    // "chess" here silently turned every room into a chess room.
+    gameId: roomInfo?.gameSlug ?? currentRoom?.gameId ?? "chess",
     onReaction: handleIncomingReaction,
   });
 

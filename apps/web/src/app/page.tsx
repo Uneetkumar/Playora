@@ -9,6 +9,9 @@ import {
   Badge,
 } from "@playden/ui";
 import { Gamepad2, Zap, Shield, Globe2, ArrowRight, Play, Users, Trophy } from "lucide-react";
+import { JoinByCode } from "../components/rooms/join-by-code";
+import { isGameImplemented } from "../lib/play/modes";
+import type { GameId } from "@playden/game-types";
 
 export default function HomePage() {
   const featuredGames = [
@@ -96,6 +99,13 @@ export default function HomePage() {
                 <ArrowRight className="h-4 w-4" />
               </Button>
             </Link>
+          </div>
+
+          <div className="mx-auto mt-10 w-full max-w-md">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
+              Got a code from a friend?
+            </p>
+            <JoinByCode />
           </div>
         </div>
       </section>
@@ -193,16 +203,19 @@ export default function HomePage() {
                   <CardDescription className="line-clamp-2">{game.description}</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Link href={game.id === "chess" ? "/play" : `/rooms?game=${game.id}`}>
-                    <Button className="w-full gap-2" variant={game.id === "chess" ? "default" : "outline"}>
-                      {game.id === "chess" ? (
+                  {isGameImplemented(game.id as GameId) ? (
+                    <Link href="/play">
+                      <Button className="w-full gap-2">
                         <Play className="h-4 w-4 fill-current" />
-                      ) : (
-                        <Trophy className="h-4 w-4 text-indigo-400" />
-                      )}
-                      <span>{game.id === "chess" ? "Play" : "Find Rooms"}</span>
+                        <span>Play</span>
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Button className="w-full gap-2" variant="outline" disabled>
+                      <Trophy className="h-4 w-4" />
+                      <span>Coming soon</span>
                     </Button>
-                  </Link>
+                  )}
                 </CardContent>
               </Card>
             ))}

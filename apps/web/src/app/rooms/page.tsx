@@ -25,7 +25,7 @@ import {
   Gamepad2,
   CheckCircle2,
 } from "lucide-react";
-import type { RoomSummary } from "@playden/game-types";
+import { useRooms } from "../../hooks/use-rooms";
 
 const GAME_NAMES: Record<string, string> = {
   chess: "Chess (2 Players) - Live",
@@ -47,8 +47,8 @@ function RoomsContent() {
   const [roomName, setRoomName] = React.useState("");
   const [isPrivate, setIsPrivate] = React.useState(false);
 
-  // Live rooms list (empty by default when no live rooms are hosted)
-  const [rooms] = React.useState<RoomSummary[]>([]);
+  const { rooms, isLoading, isCreating, error, setError, refresh, createRoom, resolveCode } =
+    useRooms(gameParam);
 
   const filteredRooms = rooms.filter((room) => {
     if (gameParam && room.gameId !== gameParam) return false;
@@ -62,22 +62,26 @@ function RoomsContent() {
     );
   });
 
-  const handleCreateRoom = () => {
-    const gameToUse = gameParam || "chess";
-    const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const gamePrefix = gameToUse.toUpperCase().slice(0, 4);
-    const generatedCode = `${gamePrefix}-${randomSuffix}`;
-
+  const handleCreateRoom = async () => {
+    // The server owns the code and persists the room, so it exists before
+    // anyone connects and capacity/privacy are enforced server-side.
+    const code = await createRoom({
+      gameSlug: gameParam || "chess",
+      ...(roomName.trim() ? { name: roomName.trim() } : {}),
+      isPrivate,
+    });
+    if (!code) return;
     setIsCreateOpen(false);
-    // Pass privacy mode as query or room param
-    router.push(`/rooms/${generatedCode}?private=${isPrivate}`);
+    router.push(`/rooms/${code}`);
   };
 
-  const handleJoinByCode = (e: React.FormEvent) => {
+  const handleJoinByCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleaned = joinCodeInput.trim().toUpperCase();
-    if (cleaned) {
-      router.push(`/rooms/${cleaned}`);
+    // Resolve first so a bad or full code gives a clear message instead of a
+    // socket that connects and is immediately closed.
+    const code = await resolveCode(joinCodeInput);
+    if (code) {
+      router.push(`/rooms/${code}`);
     }
   };
 
@@ -154,8 +158,36 @@ function RoomsContent() {
         </div>
       </div>
 
+      {error && (
+        <div
+          role="alert"
+          className="mb-6 flex items-center justify-between gap-4 rounded-lg border border-red-900/60 bg-red-950/40 p-4 text-sm text-red-200"
+        >
+          <span>{error}</span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setError(null);
+              void refresh();
+            }}
+          >
+            Retry
+          </Button>
+        </div>
+      )}
+
       {/* Rooms Grid or Distinct Empty State */}
-      {filteredRooms.length === 0 ? (
+      {isLoading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="h-40 animate-pulse rounded-xl border border-slate-800 bg-slate-900/40"
+            />
+          ))}
+        </div>
+      ) : filteredRooms.length === 0 ? (
         activeFilterTab === "private" ? (
           <Card className="bg-slate-900/40 border-slate-800/80 p-12 text-center flex flex-col items-center justify-center space-y-4">
             <div className="h-16 w-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center">
@@ -332,7 +364,11 @@ function RoomsContent() {
             <Button variant="ghost" onClick={() => setIsCreateOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateRoom} className="shadow-indigo-600/30">
+            <Button
+              onClick={handleCreateRoom}
+              disabled={isCreating}
+              className="shadow-indigo-600/30"
+            >
               Create {isPrivate ? "Private" : "Public"} Room
             </Button>
           </div>

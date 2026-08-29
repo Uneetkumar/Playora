@@ -16,6 +16,7 @@ import type { GameId } from "@playden/game-types";
 import type { Env } from "../types.js";
 import { RateLimiter, type RateLimitKind } from "../lib/rate-limit.js";
 import { log, errorFields } from "../lib/logger.js";
+import { createResultStore, recordMatchSafely, type ResultStore } from "../lib/result-store.js";
 import { authenticateConnection } from "../handlers/auth-handler.js";
 import { applyGameAction, finishGame, startGame } from "../handlers/game-handler.js";
 import { addBot, removeBot, runBotTurns } from "../handlers/bot-handler.js";
@@ -63,6 +64,7 @@ export class RoomDurableObject {
   private room: PersistedRoom | null = null;
   private rateLimiter = new RateLimiter();
   private verifier: SupabaseTokenVerifier | null = null;
+  private resultStore: ResultStore | null | undefined;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -459,6 +461,11 @@ export class RoomDurableObject {
       broadcast: (msg) => this.broadcast(msg),
       closeSocket: (ws, code, reason) => this.closeSocket(ws, code, reason),
       persist: () => this.persist(),
+      recordResult: (record) => {
+        // Built lazily: an unconfigured Worker simply does not record.
+        this.resultStore ??= createResultStore(this.env);
+        return recordMatchSafely(this.resultStore, { roomCode: room.roomCode, ...record });
+      },
     };
   }
 

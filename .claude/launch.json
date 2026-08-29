@@ -4,13 +4,22 @@
     {
       "name": "web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@playden/web", "dev"],
-      "port": 8000
+      "runtimeArgs": [
+        "--filter",
+        "@playden/web",
+        "dev"
+      ],
+      "port": 8000,
+      "autoPort": false
     },
     {
       "name": "realtime",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@playden/realtime", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@playden/realtime",
+        "dev"
+      ],
       "port": 8787
     }
   ]

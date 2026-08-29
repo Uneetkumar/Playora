@@ -252,6 +252,15 @@ export async function finishGame(ctx: RoomContext, result: MatchResult): Promise
     reason: result.reason,
     durationSeconds: result.durationSeconds,
   });
+
+  // Broadcast first, persist second: players see the result immediately whether
+  // or not the write succeeds.
+  await ctx.recordResult({
+    sessionId: room.currentSessionId ?? "",
+    startedAt: room.startedAt ?? room.createdAt,
+    endedAt: room.endedAt ?? Date.now(),
+    result,
+  });
 }
 
 /** Sends one player their own entitled view of the current state. */

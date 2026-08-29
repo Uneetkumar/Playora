@@ -8,6 +8,8 @@ import {
   Button,
 } from "@playden/ui";
 import { Users, Clock, Eye, Play } from "lucide-react";
+import { isGameImplemented } from "../../lib/play/modes";
+import type { GameId } from "@playden/game-types";
 import Link from "next/link";
 
 export default function GamesPage() {
@@ -24,7 +26,6 @@ export default function GamesPage() {
       description:
         "Classic 2-player strategic board game with real-time timers, clock controls, and full move validation.",
       status: "Playable Now",
-      isPlayable: true,
     },
     {
       id: "uno",
@@ -38,7 +39,6 @@ export default function GamesPage() {
       description:
         "The classic fast-paced color and number matching card game for up to 4 players.",
       status: "Coming in Phase 5",
-      isPlayable: false,
     },
     {
       id: "uno-no-mercy",
@@ -51,7 +51,6 @@ export default function GamesPage() {
       spectators: true,
       description: "Brutal UNO edition with stacking penalties, wild roulette, and knockout rules.",
       status: "Coming in Phase 6",
-      isPlayable: false,
     },
     {
       id: "car-race",
@@ -64,7 +63,6 @@ export default function GamesPage() {
       spectators: true,
       description: "Top-down 2D arcade physics racing with high-speed drifting and nitro boosts.",
       status: "Coming in Phase 7",
-      isPlayable: false,
     },
     {
       id: "bike-race",
@@ -78,7 +76,6 @@ export default function GamesPage() {
       description:
         "Precision balance and stunt motorcycle physics racing across challenging obstacle tracks.",
       status: "Coming in Phase 8",
-      isPlayable: false,
     },
   ];
 
@@ -111,7 +108,7 @@ export default function GamesPage() {
                 <div className="flex items-center justify-between">
                   <Badge variant="secondary">{game.category}</Badge>
                   <Badge
-                    variant={game.isPlayable ? "success" : "secondary"}
+                    variant={isGameImplemented(game.id as GameId) ? "success" : "secondary"}
                     className="text-xs"
                   >
                     {game.status}
@@ -142,14 +139,14 @@ export default function GamesPage() {
             </div>
 
             <div className="p-6 pt-0">
-              <Link href={game.isPlayable ? "/play" : "/games"}>
+              <Link href={isGameImplemented(game.id as GameId) ? "/play" : "/games"}>
                 <Button
                   className="w-full gap-2"
-                  variant={game.isPlayable ? "default" : "outline"}
-                  disabled={!game.isPlayable}
+                  variant={isGameImplemented(game.id as GameId) ? "default" : "outline"}
+                  disabled={!isGameImplemented(game.id as GameId)}
                 >
                   <Play className="h-4 w-4 fill-current" />
-                  <span>{game.isPlayable ? "Play" : "Coming soon"}</span>
+                  <span>{isGameImplemented(game.id as GameId) ? "Play" : "Coming soon"}</span>
                 </Button>
               </Link>
             </div>

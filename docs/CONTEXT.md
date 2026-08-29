@@ -6,7 +6,7 @@ zero loss of context. Read this file first, then `docs/ARCHITECTURE.md`.
 **Maintenance rule:** update the *Status Ledger*, *Decision Log*, and *Next Action*
 sections at the end of every milestone. Everything else changes rarely.
 
-**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** 4 of 6 play modes live and verified
+**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** rooms persisted; only Chess is implemented
 
 ---
 
@@ -102,7 +102,7 @@ docs/
 | Check | Result |
 |---|---|
 | `pnpm typecheck` | ✅ 14/14 |
-| `pnpm test` | ✅ **97 tests**, 12 files (realtime 24, auth 20, bot 19, game-types 18, engine 11, protocol 3, db 2) |
+| `pnpm test` | ✅ **105 tests**, 13 files (realtime 32, auth 20, bot 19, game-types 18, engine 11, protocol 3, db 2) |
 | `pnpm build` | ✅ 9 routes |
 | `pnpm version:check` | ✅ in sync at 0.1.0 |
 | `pnpm lint` | ✅ clean |
@@ -171,6 +171,26 @@ guest path is proven. Rooms/results persistence remains Slice 3.
 ### 🟠 Secondary
 
 ### ✅ Resolved this session
+- **"All games open Chess" — root cause found.** Two separate problems:
+  1. Only Chess has an engine. UNO, UNO No Mercy, Car Race and Bike Race are
+     catalog rows with no rules (Phases 9-13). Every surface now derives
+     playability from `gameEngineRegistry` via `isGameImplemented()`, so the
+     catalog shows "Coming in Phase N" and offers no route in. The hand-kept
+     `isPlayable` flags on the games page are deleted — they could drift.
+  2. **A real bug**: the room page passed `currentRoom?.gameId || "chess"` to
+     the socket, but `currentRoom` only exists *after* ROOM_STATE arrives — so
+     the first connection always said chess, and the room was created as a chess
+     room whatever game it was for. Now resolved via `useRoomInfo(code)` before
+     connecting.
+- **Join by code on the home page.** Primary placement under the hero; the code
+  is validated and resolved server-side before navigating, so a bad or full code
+  says so instead of opening a room that closes immediately.
+- **Rooms are persisted.** `rooms/page.tsx` uses the room API: server-generated
+  codes, real listing, loading skeletons and an error banner with retry.
+- **Match results persist.** `lib/result-store.ts` writes `game_sessions` and
+  `game_results` over PostgREST with the service-role key, after the broadcast
+  so a database problem can never break a match (§67). Bot winners are kept out
+  of `winner_id` (no profile row -> FK violation) but stay in `scores`.
 - **§92 first vertical slice PROVEN.** `pnpm sim` runs a full two-client match
   against the live Worker and live Supabase: two real guest identities, host
   authority, ready, start, 6 relayed moves, both clients converging on the same
@@ -284,6 +304,12 @@ Then §93 Quick Play → §94 AI → §8 social → UNO → racing → voice.
 
 ## 9. Decision log
 
+- **2026-08-29** — Playability derives from the engine registry, never from a
+  per-screen flag. A catalog entry and a working game are different things, and
+  the UI must not be able to claim otherwise.
+- **2026-08-29** — Result persistence is fire-and-forget after the broadcast.
+  Players are told the outcome by the realtime layer; Postgres is the record,
+  not the source of truth for the match that just ended.
 - **2026-08-29** — Bots are seated as normal players carrying `isBot`, never as
   a parallel entity type. One seat model keeps room, turn and result logic
   game-agnostic, and makes "never pretend a bot is human" (§8) a data property
@@ -419,13 +445,14 @@ secrets production. **The Worker does not read `.env.local`.**
 - [ ] Then verify the Google sign-in round trip the same way guest was verified
 
 ### Next
-1. **Google sign-in round trip** — provider is now ON but the OAuth flow has not
-   been walked end to end in a browser.
-2. **Quick Match matchmaking** — the one remaining online mode (§93).
-3. **Slice 3 remainder** — wire `rooms/page.tsx` to the room API (it still
-   invents codes client-side), and persist `game_sessions` / `game_results` on
-   finish. Hook point: `finishGame()` in `handlers/game-handler.ts`.
-4. **Same-wifi via QR** — deferred by decision D4, build last.
+1. **Google sign-in round trip** — provider is ON, but the flow needs a human to
+   enter Google credentials. Only Uneet can verify this.
+2. **Quick Match matchmaking** (§93) — last unbuilt online mode.
+3. **End-to-end result persistence check** — create a room through the API, play
+   it to a finish, confirm `game_sessions` / `game_results` rows appear.
+4. **Rating / XP / history** on top of persisted results (§11-13, §16).
+5. **UNO** (§55) — the next actual game. Everything above is platform work.
+6. **Same-wifi via QR** — deferred by D4, build last.
 
 ### In progress — Slice 3: rooms + persistence
 

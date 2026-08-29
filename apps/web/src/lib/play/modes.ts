@@ -96,3 +96,13 @@ export function readyModes(gameId: GameId): PlayMode[] {
 export function isInstantlyPlayable(gameId: GameId): boolean {
   return readyModes(gameId).some((m) => !m.needsAuth);
 }
+
+/**
+ * Whether a game has an engine behind it.
+ *
+ * Every surface derives "playable" from here, so the catalog can list a game as
+ * upcoming without any screen offering a route into a game that does not exist.
+ */
+export function isGameImplemented(gameId: GameId): boolean {
+  return gameEngineRegistry.has(gameId);
+}
