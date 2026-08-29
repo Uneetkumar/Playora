@@ -1,0 +1,41 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Production builds
+dist
+build
+.next
+out
+.wrangler
+
+# Testing & Coverage
+coverage
+playwright-report
+test-results
+
+# Environment files
+.env
+.dev.vars
+.dev.vars.*
+.env.local
+.env.production
+.env.development
+!.env.example
+
+# IDE & OS
+.DS_Store
+Thumbs.db
+.idea
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Turbo
+.turbo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*

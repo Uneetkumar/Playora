@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
+      pr_branch: ${{ steps.release.outputs.pr && fromJSON(steps.release.outputs.pr).headBranchName }}
+    steps:
+      # Accumulates Conventional Commits into a "chore(main): release X.Y.Z" PR.
+      # Merging that PR bumps the version, writes CHANGELOG.md and tags vX.Y.Z.
+      - id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: .github/release-please-config.json
+          manifest-file: .github/.release-please-manifest.json
+
+  # release-please only bumps the ROOT package.json. This pushes the propagated
+  # workspace versions into the same PR so `pnpm version:check` stays green.
+  sync-versions:
+    needs: release
+    if: needs.release.outputs.pr_branch != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.pr_branch }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: node scripts/sync-version.mjs
+
+      - name: Commit propagated versions
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Nothing to sync."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: propagate version to workspace packages"
+          git push

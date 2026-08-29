@@ -1,0 +1,28 @@
+{
+  "name": "@playden/realtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "deploy": "wrangler deploy",
+    "clean": "rimraf dist .wrangler"
+  },
+  "dependencies": {
+    "@playden/auth": "workspace:*",
+    "@playden/game-engine": "workspace:*",
+    "@playden/game-types": "workspace:*",
+    "@playden/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250214.0",
+    "@playden/config": "workspace:*",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.3",
+    "wrangler": "^3.109.2"
+  }
+}
