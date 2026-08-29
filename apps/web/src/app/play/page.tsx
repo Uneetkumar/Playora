@@ -22,6 +22,10 @@ import type { AiLevel } from "@playora/bot-engine";
 import { getPlayModes, type PlayMode, type PlayModeId } from "../../lib/play/modes";
 import { ChessGameView } from "../../games/chess/ChessGameView";
 import { useLocalGame, type LocalMode } from "../../lib/local/use-local-game";
+import { useLocalUno } from "../../lib/local/use-local-uno";
+import { UnoGameView } from "../../games/uno/UnoGameView";
+import { gameEngineRegistry } from "@playora/game-engine";
+import type { GameId } from "@playora/game-types";
 import { QuickMatch } from "../../components/play/quick-match";
 
 const MODE_ICONS: Record<PlayModeId, React.ComponentType<{ className?: string }>> = {
@@ -33,26 +37,39 @@ const MODE_ICONS: Record<PlayModeId, React.ComponentType<{ className?: string }>
   lan: Radio,
 };
 
-type Started = { mode: LocalMode; aiLevel: AiLevel } | null;
+type Started = { mode: LocalMode; aiLevel: AiLevel; gameId: GameId } | null;
+
+/** Only games with an engine are offered; the catalog may list more. */
+const PLAYABLE_GAMES: Array<{ id: GameId; name: string }> = (
+  [
+    { id: "chess" as GameId, name: "Chess" },
+    { id: "uno" as GameId, name: "UNO" },
+  ]
+).filter((g) => gameEngineRegistry.has(g.id));
 
 export default function PlayPage() {
   const [started, setStarted] = React.useState<Started>(null);
   const [queueing, setQueueing] = React.useState(false);
+  const [gameId, setGameId] = React.useState<GameId>("chess");
 
   if (started) {
-    return <LocalMatch started={started} onExit={() => setStarted(null)} />;
+    return started.gameId === "uno" ? (
+      <LocalUnoMatch onExit={() => setStarted(null)} />
+    ) : (
+      <LocalMatch started={started} onExit={() => setStarted(null)} />
+    );
   }
 
   if (queueing) {
     return (
       <div className="container mx-auto max-w-md px-4 py-16 sm:px-6">
         <QuickMatch
-          gameId="chess"
-          gameName="Chess"
+          gameId={gameId}
+          gameName={PLAYABLE_GAMES.find((g) => g.id === gameId)?.name ?? "Chess"}
           onClose={() => setQueueing(false)}
           onPlayAi={() => {
             setQueueing(false);
-            setStarted({ mode: "vs-ai", aiLevel: RECOMMENDED_AI_LEVEL });
+            setStarted({ mode: "vs-ai", aiLevel: RECOMMENDED_AI_LEVEL, gameId });
           }}
         />
       </div>
@@ -61,22 +78,29 @@ export default function PlayPage() {
 
   return (
     <PlayHub
-      onStartLocal={(mode, aiLevel) => setStarted({ mode, aiLevel })}
+      gameId={gameId}
+      onSelectGame={setGameId}
+      onStartLocal={(mode, aiLevel) => setStarted({ mode, aiLevel, gameId })}
       onQuickMatch={() => setQueueing(true)}
     />
   );
 }
 
 function PlayHub({
+  gameId,
+  onSelectGame,
   onStartLocal,
   onQuickMatch,
 }: {
+  gameId: GameId;
+  onSelectGame: (id: GameId) => void;
   onStartLocal: (mode: LocalMode, aiLevel: AiLevel) => void;
   onQuickMatch: () => void;
 }) {
   const router = useRouter();
   const [aiLevel, setAiLevel] = React.useState<AiLevel>(RECOMMENDED_AI_LEVEL);
-  const modes = React.useMemo(() => getPlayModes("chess"), []);
+  const modes = React.useMemo(() => getPlayModes(gameId), [gameId]);
+  const gameName = PLAYABLE_GAMES.find((g) => g.id === gameId)?.name ?? "Chess";
 
   const ready = modes.filter((m) => m.status === "ready");
   const later = modes.filter((m) => m.status !== "ready");
@@ -90,7 +114,7 @@ function PlayHub({
         onStartLocal("pass-and-play", aiLevel);
         return;
       case "online-friends":
-        router.push("/rooms?game=chess");
+        router.push(`/rooms?game=${gameId}`);
         return;
       case "online-random":
         onQuickMatch();
@@ -103,13 +127,35 @@ function PlayHub({
   return (
     <div className="container mx-auto max-w-5xl px-4 py-10 sm:px-6">
       <header className="pb-8">
-        <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-          Play Chess
+        <h1 className="font-display text-3xl font-extrabold text-foreground sm:text-4xl">
+          Play {gameName}
         </h1>
         <p className="mt-2 text-muted-foreground">
-          Pick how you want to play. The first two need no account and no internet.
+          Pick how you want to play. The offline modes need no account and no internet.
         </p>
       </header>
+
+      {/* Game picker: only games with an engine behind them appear here. */}
+      {PLAYABLE_GAMES.length > 1 && (
+        <div className="mb-8 flex flex-wrap gap-2" role="tablist" aria-label="Choose a game">
+          {PLAYABLE_GAMES.map((game) => (
+            <button
+              key={game.id}
+              type="button"
+              role="tab"
+              aria-selected={game.id === gameId}
+              onClick={() => onSelectGame(game.id)}
+              className={`rounded-lg border px-4 py-2 font-display text-sm font-bold transition ${
+                game.id === gameId
+                  ? "border-primary bg-primary text-white"
+                  : "border-border bg-card text-muted-foreground hover:border-primary/50 hover:text-foreground"
+              }`}
+            >
+              {game.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2">
         {ready.map((mode) => {
@@ -285,6 +331,57 @@ function LocalMatch({ started, onExit }: { started: NonNullable<Started>; onExit
           Play online with a friend
         </Link>
       </p>
+    </div>
+  );
+}
+
+
+function LocalUnoMatch({ onExit }: { onExit: () => void }) {
+  const game = useLocalUno(2);
+
+  return (
+    <div className="container mx-auto max-w-4xl px-4 py-6 sm:px-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <Button variant="outline" size="sm" className="gap-2" onClick={onExit}>
+          <ArrowLeft className="h-4 w-4" aria-hidden />
+          All modes
+        </Button>
+        <div className="flex items-center gap-2">
+          <Badge variant="success" className="gap-1.5">
+            <WifiOff className="h-3 w-3" aria-hidden />
+            Offline
+          </Badge>
+          <Badge variant="secondary">Pass &amp; Play</Badge>
+          <Button variant="outline" size="sm" className="gap-2" onClick={game.restart}>
+            <RotateCcw className="h-4 w-4" aria-hidden />
+            Restart
+          </Button>
+        </div>
+      </div>
+
+      <p className="mb-4 text-xs text-muted-foreground">
+        Offline games are unrated and are not saved to your history. Pass the device on each turn.
+      </p>
+
+      {game.error && (
+        <div
+          role="alert"
+          className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-foreground"
+        >
+          {game.error}
+        </div>
+      )}
+
+      <UnoGameView
+        gameState={game.view}
+        players={game.players}
+        currentUserId={game.currentUserId}
+        lastResult={game.result}
+        onPlayCard={game.playCard}
+        onDrawCard={game.drawCard}
+        onPass={game.pass}
+        onRematch={game.restart}
+      />
     </div>
   );
 }

@@ -20,7 +20,8 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,css}\"",
     "clean": "turbo clean && rimraf node_modules",
     "verify:persistence": "node scripts/verify-persistence.mjs",
-    "verify:matchmaking": "node scripts/verify-matchmaking.mjs"
+    "verify:matchmaking": "node scripts/verify-matchmaking.mjs",
+    "verify:progression": "node scripts/verify-progression.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

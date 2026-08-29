@@ -105,6 +105,9 @@ importers:
       '@playora/game-types':
         specifier: workspace:*
         version: link:../../packages/game-types
+      '@playora/progression':
+        specifier: workspace:*
+        version: link:../../packages/progression
       '@playora/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol

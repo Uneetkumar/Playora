@@ -8,7 +8,7 @@ export function Footer() {
         <div className="flex items-center space-x-2 text-muted-foreground">
           <Gamepad2 className="h-5 w-5 text-primary" />
           <span className="text-sm">
-            &copy; {new Date().getFullYear()} Game Platform. Production Multiplayer Engine.
+            &copy; {new Date().getFullYear()} Playora. Play. Connect. Compete.
           </span>
         </div>
         <nav aria-label="Footer" className="flex items-center space-x-6 text-sm text-muted-foreground">

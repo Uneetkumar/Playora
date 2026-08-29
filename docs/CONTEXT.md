@@ -6,7 +6,7 @@ zero loss of context. Read this file first, then `docs/ARCHITECTURE.md`.
 **Maintenance rule:** update the *Status Ledger*, *Decision Log*, and *Next Action*
 sections at the end of every milestone. Everything else changes rarely.
 
-**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** progression built (migration 00004 not yet applied)
+**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** UNO playable (2 games)
 
 ---
 
@@ -172,6 +172,32 @@ guest path is proven. Rooms/results persistence remains Slice 3.
 ### 🟠 Secondary
 
 ### ✅ Resolved this session
+- **UNO built and playable.** `UnoEngine` with the full rule set — 108-card
+  deck, seeded deterministic shuffle, skip/reverse/draw2/wild/wild-draw-four,
+  stacking penalties, UNO call with a two-card penalty for forgetting,
+  discard reshuffling when the draw pile empties. **35 tests** covering §87's
+  edge-case list.
+  `getPlayerView` reduces opponents to a card count, and a test asserts an
+  opponent's card ids never appear anywhere in the serialised view (§5, §64).
+- **UNO UI**: card faces with symbols as well as colour (§32), playable-card
+  highlighting, wild colour picker, per-card accessible names
+  ("green Reverse, playable").
+- **Play hub is game-aware.** A game picker lists only games with a registered
+  engine, and mode availability is derived per game — UNO correctly shows
+  "Play vs AI: No AI opponent for this game yet", because no UnoBot exists.
+- Verified in the browser: dealt 7/7 with a 93-card draw pile (108 − 15), played
+  a green Reverse, and the turn returned to the same player — the two-player
+  reverse-as-skip rule, confirmed through the real UI.
+- **Progression verified end to end** (`pnpm verify:progression`, 12/12) against
+  the live Worker and Supabase: winner 1200→1219, loser 1200→1180, zero-sum,
+  rating history rows written, XP awarded to **both** players, streak set for the
+  winner and reset for the loser.
+- **Profile page rebuilt on real data.** Level + XP bar, games/wins/win-rate/
+  streak tiles, and per-game rating cards with rank and "N rating to <next>".
+  Verified in the browser with a real guest who played a real rated match:
+  Level 1 · 60 XP · Chess 1220 · Silver. The three systems are visibly distinct,
+  which is the point of §11/§104.6.
+- Footer still said "Game Platform"; rebranded.
 - **Progression built.** `packages/progression` holds Elo, XP, levels and rank
   tiers as pure functions with 25 tests — the spec asks for tested rating maths
   (§25), which rules out putting it in SQL.
@@ -494,12 +520,14 @@ secrets production. **The Worker does not read `.env.local`.**
 - [ ] Then verify the Google sign-in round trip the same way guest was verified
 
 ### Next
-1. **Apply migration `00004`** to Supabase, then verify progression end to end
-   (play a match, confirm `game_ratings` and `rating_history` rows).
-2. **Progression UI** — profile with level/XP bar and per-game rating cards,
-   match history, leaderboard. The data model is ready.
-3. **UNO** — second game, the real test of the plugin architecture.
-4. **Same-wifi via QR** — deferred by D4, build last.
+1. **UnoBot** so UNO gets offline/online AI like chess has.
+2. **Verify online UNO** through a room end to end (engine is registered, but
+   only local play has been exercised).
+3. **Home dashboard** (pack screen 04) — the home page is still a marketing
+   landing page, not the Quick Play / Continue Playing / Friends Online /
+   Your Progress dashboard the pack specifies.
+4. **Match history + leaderboard** — data is populated and indexed.
+5. **UNO No Mercy** — reuses UnoEngine per §17; then racing (Phaser).
 
 ### Blocked on Uneet
 - Google sign-in round trip (needs a human to enter Google credentials).

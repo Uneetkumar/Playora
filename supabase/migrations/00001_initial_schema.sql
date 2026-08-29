@@ -185,8 +185,13 @@ ALTER TABLE public.game_invites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
 
 -- Read policies (Public read for active platform games, public rooms, profiles)
+DROP POLICY IF EXISTS "Public profiles are viewable by everyone" ON public.profiles;
 CREATE POLICY "Public profiles are viewable by everyone" ON public.profiles FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Available games are viewable by everyone" ON public.games;
 CREATE POLICY "Available games are viewable by everyone" ON public.games FOR SELECT USING (is_available = true);
+DROP POLICY IF EXISTS "Public rooms are viewable by everyone" ON public.rooms;
 CREATE POLICY "Public rooms are viewable by everyone" ON public.rooms FOR SELECT USING (is_private = false OR auth.uid() = host_id);
+DROP POLICY IF EXISTS "Room players viewable by participants" ON public.room_players;
 CREATE POLICY "Room players viewable by participants" ON public.room_players FOR SELECT USING (true);
+DROP POLICY IF EXISTS "Game results viewable by everyone" ON public.game_results;
 CREATE POLICY "Game results viewable by everyone" ON public.game_results FOR SELECT USING (true);
