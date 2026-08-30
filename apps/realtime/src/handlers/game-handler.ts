@@ -71,10 +71,30 @@ export async function startGame(
     return;
   }
 
+  await beginSession(ctx, customRules);
+}
+
+/**
+ * Deals a new session into the room.
+ *
+ * Split out from startGame because a rematch is the same act performed by a
+ * different authority: nobody is the host of a rematch, both players agreed to
+ * it. The permission and validation checks stay in the callers, so this is
+ * never reachable without one of them having run.
+ */
+export async function beginSession(
+  ctx: RoomContext,
+  customRules: Record<string, unknown> | undefined,
+): Promise<void> {
+  const { room } = ctx;
+  const engine = gameEngineRegistry.get(room.gameId);
+  const players = Object.values(room.players);
+
   room.status = "in_game";
   room.sequenceNumber = 1;
   room.currentSessionId = crypto.randomUUID();
   room.startedAt = Date.now();
+  room.endedAt = null;
   room.currentGameState = engine.init(players, {
     roomId: room.roomId,
     sessionId: room.currentSessionId,
@@ -236,6 +256,8 @@ export async function finishGame(ctx: RoomContext, result: MatchResult): Promise
 
   room.status = "finished";
   room.endedAt = Date.now();
+  // A vote cast after the previous match must not carry into this one.
+  room.rematchVotes = [];
   await ctx.persist();
 
   ctx.broadcast({

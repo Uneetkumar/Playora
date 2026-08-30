@@ -25,6 +25,7 @@ import { GAME_CATALOG, isPlayable } from "../../lib/games/catalog";
 import { ChessGameView } from "../../games/chess/ChessGameView";
 import { useLocalGame, type LocalMode } from "../../lib/local/use-local-game";
 import { useLocalUno } from "../../lib/local/use-local-uno";
+import { MatchResult } from "../../components/games/match-result";
 import { UnoGameView } from "../../games/uno/UnoGameView";
 import type { GameId } from "@playora/game-types";
 import { QuickMatch } from "../../components/play/quick-match";
@@ -74,7 +75,12 @@ function PlayPageContent() {
 
   if (started) {
     return started.gameId === "uno" || started.gameId === "uno-no-mercy" ? (
-      <LocalUnoMatch gameId={started.gameId} onExit={() => setStarted(null)} />
+      <LocalUnoMatch
+        gameId={started.gameId}
+        mode={started.mode}
+        aiLevel={started.aiLevel}
+        onExit={() => setStarted(null)}
+      />
     ) : (
       <LocalMatch started={started} onExit={() => setStarted(null)} />
     );
@@ -328,11 +334,24 @@ function LocalMatch({ started, onExit }: { started: NonNullable<Started>; onExit
         </div>
       )}
 
+      {game.result && (
+        <div className="mb-6">
+          <MatchResult
+            result={game.result}
+            players={game.players}
+            currentUserId={game.currentUserId}
+            onRematch={game.restart}
+            rematchLabel="Play again"
+            onExit={onExit}
+          />
+        </div>
+      )}
+
       <ChessGameView
         gameState={game.view}
         players={game.players}
         currentUserId={game.currentUserId}
-        lastResult={game.result}
+        lastResult={null}
         onMakeMove={game.makeMove}
         onResign={game.resign}
         onOfferDraw={game.offerDraw}
@@ -352,8 +371,19 @@ function LocalMatch({ started, onExit }: { started: NonNullable<Started>; onExit
 }
 
 
-function LocalUnoMatch({ gameId, onExit }: { gameId: GameId; onExit: () => void }) {
-  const game = useLocalUno(2, gameId);
+function LocalUnoMatch({
+  gameId,
+  mode,
+  aiLevel,
+  onExit,
+}: {
+  gameId: GameId;
+  mode: LocalMode;
+  aiLevel: AiLevel;
+  onExit: () => void;
+}) {
+  const game = useLocalUno({ playerCount: 2, gameId, mode, aiLevel });
+  const vsAi = mode === "vs-ai";
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-6 sm:px-6">
@@ -367,8 +397,9 @@ function LocalUnoMatch({ gameId, onExit }: { gameId: GameId; onExit: () => void 
             <WifiOff className="h-3 w-3" aria-hidden />
             Offline
           </Badge>
+          {gameId === "uno-no-mercy" && <Badge variant="secondary">No Mercy</Badge>}
           <Badge variant="secondary">
-            {gameId === "uno-no-mercy" ? "No Mercy" : "Pass & Play"}
+            {vsAi ? `AI level ${aiLevel}` : "Pass & Play"}
           </Badge>
           <Button variant="outline" size="sm" className="gap-2" onClick={game.restart}>
             <RotateCcw className="h-4 w-4" aria-hidden />
@@ -378,7 +409,8 @@ function LocalUnoMatch({ gameId, onExit }: { gameId: GameId; onExit: () => void 
       </div>
 
       <p className="mb-4 text-xs text-muted-foreground">
-        Offline games are unrated and are not saved to your history. Pass the device on each turn.
+        Offline games are unrated and are not saved to your history.
+        {vsAi ? " You are Player 1." : " Pass the device on each turn."}
       </p>
 
       {game.error && (
@@ -390,11 +422,25 @@ function LocalUnoMatch({ gameId, onExit }: { gameId: GameId; onExit: () => void 
         </div>
       )}
 
+      {game.result && (
+        <div className="mb-6">
+          <MatchResult
+            result={game.result}
+            players={game.players}
+            currentUserId={game.currentUserId}
+            onRematch={game.restart}
+            rematchLabel="Play again"
+            onExit={onExit}
+          />
+        </div>
+      )}
+
       <UnoGameView
         gameState={game.view}
         players={game.players}
         currentUserId={game.currentUserId}
-        lastResult={game.result}
+        isOpponentThinking={game.isThinking}
+        lastResult={null}
         onPlayCard={game.playCard}
         onDrawCard={game.drawCard}
         onPass={game.pass}

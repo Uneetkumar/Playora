@@ -14,6 +14,7 @@ export const ClientMessageTypeSchema = z.enum([
   "REACTION_SEND",
   "PING",
   "RESYNC",
+  "REMATCH",
 ]);
 
 export type ClientMessageType = z.infer<typeof ClientMessageTypeSchema>;
@@ -30,6 +31,13 @@ export const JoinRoomMessageSchema = z.object({
   roomId: z.string().uuid().or(z.string().min(4)),
   passcode: z.string().optional(),
   asSpectator: z.boolean().default(false),
+});
+
+export const RematchMessageSchema = z.object({
+  type: z.literal("REMATCH"),
+  roomId: z.string(),
+  /** False withdraws a vote already cast. */
+  accept: z.boolean().default(true),
 });
 
 export const LeaveRoomMessageSchema = z.object({
@@ -112,12 +120,14 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   ReactionSendMessageSchema,
   PingMessageSchema,
   ResyncMessageSchema,
+  RematchMessageSchema,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
 export type AuthMessage = z.infer<typeof AuthMessageSchema>;
 export type JoinRoomMessage = z.infer<typeof JoinRoomMessageSchema>;
 export type LeaveRoomMessage = z.infer<typeof LeaveRoomMessageSchema>;
+export type RematchMessage = z.infer<typeof RematchMessageSchema>;
 export type ReadyMessage = z.infer<typeof ReadyMessageSchema>;
 export type UnreadyMessage = z.infer<typeof UnreadyMessageSchema>;
 export type StartGameMessage = z.infer<typeof StartGameMessageSchema>;

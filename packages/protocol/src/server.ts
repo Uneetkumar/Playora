@@ -14,6 +14,8 @@ export const ServerMessageTypeSchema = z.enum([
   "PLAYER_DISCONNECTED",
   "PLAYER_RECONNECTED",
   "GAME_FINISHED",
+  "MATCH_PROGRESSION",
+  "REMATCH_STATE",
   "ERROR",
   "RESYNC_STATE",
 ]);
@@ -198,6 +200,46 @@ export const GameFinishedMessageSchema = z.object({
   }),
 });
 
+/**
+ * What each human player gained from the match.
+ *
+ * Sent separately from GAME_FINISHED, and after it, because progression is
+ * written to Supabase asynchronously: the result must never wait on it. A
+ * client that never receives this still shows the outcome, just without the
+ * numbers.
+ */
+export const MatchProgressionMessageSchema = z.object({
+  type: z.literal("MATCH_PROGRESSION"),
+  roomId: z.string(),
+  sessionId: z.string(),
+  players: z.array(
+    z.object({
+      userId: z.string(),
+      outcome: z.enum(["win", "loss", "draw"]),
+      rated: z.boolean(),
+      ratingBefore: z.number(),
+      ratingAfter: z.number(),
+      ratingDelta: z.number(),
+      xpBefore: z.number(),
+      xpAfter: z.number(),
+      xpGained: z.number(),
+      levelBefore: z.number(),
+      levelAfter: z.number(),
+      streak: z.number(),
+      bestStreak: z.number(),
+      unlockedAchievements: z.array(z.string()).default([]),
+    }),
+  ),
+});
+
+/** Who has agreed to play again, and who still has to. */
+export const RematchStateMessageSchema = z.object({
+  type: z.literal("REMATCH_STATE"),
+  roomId: z.string(),
+  votes: z.array(z.string()),
+  needed: z.array(z.string()),
+});
+
 export const ErrorMessageSchema = z.object({
   type: z.literal("ERROR"),
   code: z.string(),
@@ -227,6 +269,8 @@ export const ServerMessageSchema = z.discriminatedUnion("type", [
   PlayerDisconnectedMessageSchema,
   PlayerReconnectedMessageSchema,
   GameFinishedMessageSchema,
+  MatchProgressionMessageSchema,
+  RematchStateMessageSchema,
   ErrorMessageSchema,
   ResyncStateMessageSchema,
 ]);
@@ -245,5 +289,8 @@ export type ReactionNotification = z.infer<typeof ReactionMessageSchema>;
 export type PlayerDisconnectedMessage = z.infer<typeof PlayerDisconnectedMessageSchema>;
 export type PlayerReconnectedMessage = z.infer<typeof PlayerReconnectedMessageSchema>;
 export type GameFinishedMessage = z.infer<typeof GameFinishedMessageSchema>;
+export type MatchProgressionMessage = z.infer<typeof MatchProgressionMessageSchema>;
+export type RematchStateMessage = z.infer<typeof RematchStateMessageSchema>;
+export type PlayerProgressionPayload = MatchProgressionMessage["players"][number];
 export type ErrorMessage = z.infer<typeof ErrorMessageSchema>;
 export type ResyncStateMessage = z.infer<typeof ResyncStateMessageSchema>;

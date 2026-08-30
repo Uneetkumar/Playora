@@ -48,14 +48,14 @@ export function useRoomSocket({
   >("connecting");
 
   const {
-    session,
     isLoading: authLoading,
     initialize: initAuth,
     signInAsGuest,
   } = useAuthStore();
-  // A new session object each render would restart the socket; the token
-  // string only changes on an actual refresh.
-  const sessionToken = session?.tokens.accessToken ?? null;
+  // The session itself is deliberately not read here. It is a new object on
+  // every render, so anything derived from it in this scope becomes a reason
+  // to tear down and rebuild the socket. connect() reads the live value from
+  // the store instead, and only `authLoading` gates when it may run.
   const {
     setRoom,
     setConnected,
@@ -68,7 +68,7 @@ export function useRoomSocket({
     currentRoom,
   } = useRoomStore();
 
-  const { setGameState, setLastResult, setSession } = useGameStore();
+  const { setGameState, setLastResult, setProgression, setRematch, setSession } = useGameStore();
 
   // Ensure an authenticated user or guest identity exists
   useEffect(() => {
@@ -94,7 +94,13 @@ export function useRoomSocket({
 
     // Anyone can play immediately; a guest gets a real Supabase
     // anonymous session rather than a locally-minted token.
-    let activeSession = session;
+    //
+    // Read from the store rather than from the closure. `session` is a fresh
+    // object every render, so depending on it here would reconnect the socket
+    // on every render — the exact loop this hook has already shipped twice.
+    // The token is still a dependency below, so a genuinely new session does
+    // reconnect; a re-render with the same token does not.
+    let activeSession = useAuthStore.getState().session;
     if (!activeSession) {
       activeSession = await signInAsGuest();
     }
@@ -284,6 +290,16 @@ export function useRoomSocket({
             break;
           }
 
+          case "REMATCH_STATE": {
+            setRematch({ votes: msg.votes, needed: msg.needed });
+            break;
+          }
+
+          case "MATCH_PROGRESSION": {
+            setProgression(msg.players);
+            break;
+          }
+
           case "GAME_FINISHED": {
             setLastResult({
               sessionId: msg.sessionId,
@@ -362,8 +378,12 @@ export function useRoomSocket({
     gameId,
     ready,
     asSpectator,
+    // The gate that matters: once the stored session has finished loading,
+    // connect() reads whatever session the store holds. The access token is
+    // deliberately NOT a dependency — connect no longer closes over it, and
+    // making a rotating string restart the socket is how this hook shipped a
+    // reconnect loop before.
     authLoading,
-    sessionToken,
     signInAsGuest,
     setConnecting,
     setConnected,
@@ -376,6 +396,8 @@ export function useRoomSocket({
     addMessage,
     addReaction,
     setLastResult,
+    setProgression,
+    setRematch,
   ]);
 
   useEffect(() => {
@@ -453,6 +475,17 @@ export function useRoomSocket({
     [sendMessage, roomId],
   );
 
+  /**
+   * Ask to play again. A rematch needs every remaining human to agree, so this
+   * casts a vote rather than restarting anything on its own.
+   */
+  const requestRematch = useCallback(
+    (accept = true) => {
+      sendMessage({ type: "REMATCH", roomId, accept });
+    },
+    [sendMessage, roomId],
+  );
+
   const requestResync = useCallback(() => {
     sendMessage({ type: "RESYNC", roomId });
   }, [sendMessage, roomId]);
@@ -471,6 +504,7 @@ export function useRoomSocket({
     sendReaction,
     addBot,
     removeBot,
+    requestRematch,
     requestResync,
     leaveRoom,
   };

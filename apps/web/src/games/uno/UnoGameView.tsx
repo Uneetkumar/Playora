@@ -7,13 +7,33 @@ import { Trophy, RotateCcw, ArrowRight } from "lucide-react";
 import type { UnoCard, UnoColor, UnoPlayerView } from "@playora/game-engine";
 import type { GameResult, Player } from "@playora/game-types";
 import { UnoCardFace, describeCard } from "./UnoCardFace";
-import { DiscardPile, DrawPile, OpponentHand, RuleAlert } from "./UnoTable";
+import { useAudio } from "../../lib/audio/use-audio";
+import { useGameplayStore } from "../../lib/store/gameplay-store";
+import {
+  CardFlight,
+  DiscardPile,
+  DrawPile,
+  OpponentHand,
+  RuleAlert,
+  ColorDiamond,
+  DirectionMark,
+  stackOffset,
+  stackWidth,
+  flightOrigin,
+} from "./UnoTable";
 
 const COLOR_SWATCH: Record<UnoColor, string> = {
   red: "bg-[#E4483B]",
   yellow: "bg-[#E8B02E]",
   green: "bg-[#3FA55A]",
   blue: "bg-[#2C7BE5]",
+};
+
+const COLOR_HEX: Record<UnoColor, string> = {
+  red: "#E4483B",
+  yellow: "#E8B02E",
+  green: "#3FA55A",
+  blue: "#2C7BE5",
 };
 const COLORS: UnoColor[] = ["red", "yellow", "green", "blue"];
 
@@ -26,6 +46,8 @@ interface UnoGameViewProps {
   onDrawCard: () => void;
   onPass: () => void;
   onRematch?: () => void;
+  /** An AI opponent is deciding. Purely a pacing cue; the move is already made. */
+  isOpponentThinking?: boolean;
 }
 
 export function UnoGameView({
@@ -36,21 +58,77 @@ export function UnoGameView({
   onDrawCard,
   onPass,
   onRematch,
+  isOpponentThinking = false,
 }: UnoGameViewProps) {
   const reduced = useReducedMotion();
   const [pendingWild, setPendingWild] = React.useState<UnoCard | null>(null);
-  const [dealt, setDealt] = React.useState(false);
 
-  // Deal on mount: cards arrive rather than appearing, which reads as a game
-  // starting instead of a page rendering.
+  // Sound follows the authoritative state rather than the click, so a card the
+  // server rejected makes no noise and an opponent's card makes the same noise
+  // as your own.
+  const play = useAudio();
+  const sortHand = useGameplayStore((s) => s.prefs.sortUnoHand);
+  const hydrateGameplay = useGameplayStore((s) => s.hydrate);
   React.useEffect(() => {
-    const t = setTimeout(() => setDealt(true), reduced ? 0 : 120);
-    return () => clearTimeout(t);
-  }, [reduced]);
+    hydrateGameplay();
+  }, [hydrateGameplay]);
+
+  const prevDiscardCount = React.useRef(gameState.discardPileCount);
+  const prevHandCount = React.useRef(gameState.myHand.length);
+  const prevTurn = React.useRef(gameState.isMyTurn);
+
+  React.useEffect(() => {
+    const discarded = gameState.discardPileCount;
+    const held = gameState.myHand.length;
+
+    if (discarded > prevDiscardCount.current) play("card.play");
+    else if (held > prevHandCount.current) play("card.draw");
+
+    // One card left, announced: the moment the table is supposed to notice.
+    if (held === 1 && prevHandCount.current > 1) play("card.uno");
+
+    if (gameState.isMyTurn && !prevTurn.current) play("match.turn");
+
+    prevDiscardCount.current = discarded;
+    prevHandCount.current = held;
+    prevTurn.current = gameState.isMyTurn;
+  }, [gameState.discardPileCount, gameState.myHand.length, gameState.isMyTurn, play]);
+
+  // Track who was on turn *before* the discard changed: that is who threw the
+  // card, and it decides where the flight starts from.
+  const prevTopId = React.useRef<string | null>(null);
+  const prevActive = React.useRef<string | null>(null);
+  const [flight, setFlight] = React.useState<{
+    card: UnoCard;
+    from: { x: number; y: number };
+  } | null>(null);
+
+  const top = gameState.topCard;
+  const opponents = gameState.opponents;
+
+  React.useEffect(() => {
+    const thrower = prevActive.current;
+    prevActive.current = gameState.activePlayerId;
+
+    if (!top) return;
+    if (prevTopId.current === null) {
+      // First render: the opening card is already on the pile, nothing flew.
+      prevTopId.current = top.id;
+      return;
+    }
+    if (prevTopId.current === top.id) return;
+    prevTopId.current = top.id;
+
+    if (reduced || !thrower) return;
+    const seat = opponents.findIndex((o) => o.playerId === thrower);
+    setFlight({
+      card: top,
+      from: flightOrigin(seat >= 0 ? seat : null, opponents.length),
+    });
+  }, [top, gameState.activePlayerId, opponents, reduced]);
 
   const playable = new Set(gameState.playableCardIds);
   const willBeUno = gameState.myHand.length === 2;
-  const top = gameState.topCard;
 
   const commit = (cardId: string, color?: UnoColor) => {
     onPlayCard(cardId, color, willBeUno);
@@ -66,9 +144,22 @@ export function UnoGameView({
     commit(card.id);
   };
 
-  const hand = gameState.myHand;
-  // Fan tightens as the hand grows so twelve cards still fit on a phone.
-  const spread = Math.max(26, Math.min(52, 420 / Math.max(hand.length, 1)));
+  // Sorting is presentation only — the server never sees this order, and the
+  // card ids it validates against are unchanged.
+  const hand = React.useMemo(() => {
+    if (!sortHand) return gameState.myHand;
+    const order: Record<string, number> = { red: 0, yellow: 1, green: 2, blue: 3 };
+    return [...gameState.myHand].sort((a, b) => {
+      // Wilds have no colour, so they collect at the end where they are easy
+      // to find when nothing else is playable.
+      const colorA = a.color === null ? 4 : (order[a.color] ?? 4);
+      const colorB = b.color === null ? 4 : (order[b.color] ?? 4);
+      if (colorA !== colorB) return colorA - colorB;
+      return a.value.localeCompare(b.value);
+    });
+  }, [gameState.myHand, sortHand]);
+  const cardWidth = 66;
+  const handWidth = stackWidth(hand.length, cardWidth);
 
   return (
     <div className="space-y-5">
@@ -88,7 +179,8 @@ export function UnoGameView({
                 <span className="text-sm font-semibold text-foreground">
                   {players[opponent.playerId]?.displayName ?? "Player"}
                 </span>
-                <span className="numeric text-xs text-muted-foreground">
+                {/* Count is public; the faces never leave the server. */}
+                <span className="numeric rounded-full bg-muted px-1.5 text-xs text-foreground">
                   {opponent.cardCount}
                 </span>
                 {opponent.hasCalledUno && (
@@ -109,23 +201,34 @@ export function UnoGameView({
       </div>
 
       {/* Table */}
-      <div className="relative flex items-center justify-center gap-10 rounded-2xl border border-border bg-[radial-gradient(ellipse_at_center,hsl(var(--primary)/0.10),transparent_65%)] py-8">
-        <RuleAlert card={top} />
-
-        <DrawPile
-          count={gameState.drawPileCount}
-          pendingDraw={gameState.pendingDraw}
-          onDraw={onDrawCard}
-          disabled={!gameState.isMyTurn}
+      <div className="relative flex items-center justify-center gap-8 rounded-2xl border border-border py-10"
+        style={{
+          background:
+            "radial-gradient(ellipse at 50% 45%, #12305C 0%, #0B1F3D 45%, #070F1F 100%)",
+        }}>
+        <RuleAlert card={flight ? null : top} />
+        <CardFlight
+          card={flight?.card ?? null}
+          from={flight?.from ?? null}
+          onDone={() => setFlight(null)}
         />
 
-        <div className="flex flex-col items-center gap-2">
-          <DiscardPile cards={top ? [top] : []} />
-          <div className="flex items-center gap-2 text-xs">
-            <span className={cn("h-3 w-3 rounded-full", COLOR_SWATCH[gameState.activeColor])} aria-hidden />
-            <span className="capitalize text-muted-foreground">{gameState.activeColor}</span>
-          </div>
+        <ColorDiamond
+          color={COLOR_HEX[gameState.activeColor]}
+          label={gameState.activeColor}
+        />
+
+        <div className="flex items-center gap-5 rounded-2xl border border-border/70 bg-background/40 p-4">
+          <DrawPile
+            count={gameState.drawPileCount}
+            pendingDraw={gameState.pendingDraw}
+            onDraw={onDrawCard}
+            disabled={!gameState.isMyTurn}
+          />
+          <DiscardPile cards={top && !flight ? [top] : []} />
         </div>
+
+        <DirectionMark direction={gameState.direction} />
       </div>
 
       {/* Turn banner */}
@@ -149,7 +252,21 @@ export function UnoGameView({
             )}
           </p>
         ) : (
-          <p className="text-sm text-muted-foreground">Waiting for opponent…</p>
+          <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+            {isOpponentThinking && (
+              <span className="flex gap-1" aria-hidden>
+                {[0, 1, 2].map((i) => (
+                  <motion.span
+                    key={i}
+                    className="h-1.5 w-1.5 rounded-full bg-muted-foreground"
+                    animate={reduced ? undefined : { opacity: [0.25, 1, 0.25] }}
+                    transition={{ duration: 1.1, repeat: Infinity, delay: i * 0.18 }}
+                  />
+                ))}
+              </span>
+            )}
+            {isOpponentThinking ? "Opponent is thinking…" : "Waiting for opponent…"}
+          </p>
         )}
       </div>
 
@@ -168,42 +285,42 @@ export function UnoGameView({
 
         <div className="overflow-x-auto pb-6 pt-8">
           <div
-            className="relative mx-auto flex h-[130px] items-end justify-center"
-            style={{ minWidth: hand.length * spread + 90 }}
+            className="relative mx-auto h-[130px]"
+            style={{ width: Math.max(handWidth, 220) }}
           >
             <AnimatePresence mode="popLayout">
               {hand.map((card, i) => {
                 const canPlay = gameState.isMyTurn && playable.has(card.id);
-                const offset = i - (hand.length - 1) / 2;
+                const { x, zIndex } = stackOffset(i, hand.length, cardWidth);
                 return (
                   <motion.button
                     key={card.id}
-                    layoutId={`card-${card.id}`}
                     type="button"
                     onClick={() => handleCardClick(card)}
                     disabled={!canPlay}
                     aria-label={`${describeCard(card)}${canPlay ? ", playable" : ", not playable"}`}
-                    initial={reduced ? { opacity: 0 } : { opacity: 0, y: -140, rotate: 0 }}
-                    animate={{
-                      opacity: dealt ? 1 : 0,
-                      y: 0,
-                      x: offset * spread,
-                      rotate: offset * 3.2,
-                    }}
-                    exit={reduced ? { opacity: 0 } : { opacity: 0, y: -60, scale: 0.85 }}
+                    // Dealt from the draw pile: cards arrive one after another
+                    // from above, which is what makes a hand feel dealt rather
+                    // than rendered.
+                    // Dealt from the draw pile above: each card flies down into
+                    // its slot in turn, which is what makes a hand feel dealt.
+                    initial={reduced ? { opacity: 0 } : { opacity: 0, x: 0, y: -240, scale: 0.8 }}
+                    animate={{ opacity: 1, x, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, transition: { duration: 0.12 } }}
                     transition={{
                       type: "spring",
-                      stiffness: 300,
-                      damping: 26,
-                      delay: dealt ? 0 : i * 0.055,
+                      stiffness: 260,
+                      damping: 24,
+                      delay: reduced ? 0 : Math.min(i, 12) * 0.07,
                     }}
-                    whileHover={canPlay && !reduced ? { y: -22, scale: 1.06, zIndex: 50 } : undefined}
+                    // Lift the card clear of the fan so it can be read before playing.
+                    whileHover={canPlay && !reduced ? { y: -30, scale: 1.1, zIndex: 60 } : undefined}
                     whileTap={canPlay && !reduced ? { scale: 0.97 } : undefined}
                     className={cn(
-                      "absolute origin-bottom rounded-[12%] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                      "absolute left-1/2 top-0 rounded-[12%] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                       canPlay ? "cursor-pointer" : "cursor-not-allowed",
                     )}
-                    style={{ zIndex: i }}
+                    style={{ zIndex, marginLeft: -cardWidth / 2 }}
                   >
                     <UnoCardFace card={card} playable={canPlay} dimmed={!canPlay} />
                   </motion.button>

@@ -2,7 +2,11 @@
 
 import * as React from "react";
 import { ChessBoard } from "./ChessBoard";
+import { BoardSettings } from "./BoardSettings";
+import { useBoardPrefs } from "./use-board-prefs";
 import type { ChessPlayerView } from "@playora/game-engine";
+import { useAudio } from "../../lib/audio/use-audio";
+import { useGameplayStore } from "../../lib/store/gameplay-store";
 import type { GameResult, Player } from "@playora/game-types";
 import { Button, Card, CardHeader, CardTitle, CardContent, Badge, Dialog } from "@playora/ui";
 import {
@@ -45,6 +49,7 @@ export function ChessGameView({
   onDeclineDraw,
   onRematch,
 }: ChessGameViewProps) {
+  const boardPrefs = useBoardPrefs();
   const [showResignConfirm, setShowResignConfirm] = React.useState(false);
 
   // Local clock ticking
@@ -102,6 +107,35 @@ export function ChessGameView({
           to: gameState.history[gameState.history.length - 1]!.to,
         }
       : null;
+
+  // Driven by move count, not by the click: a move made by the opponent, by a
+  // bot, or replayed after a reconnect all sound the same, and a move the
+  // server refused makes no sound at all.
+  const play = useAudio();
+  const gameplay = useGameplayStore((s) => s.prefs);
+  const hydrateGameplay = useGameplayStore((s) => s.hydrate);
+  React.useEffect(() => {
+    hydrateGameplay();
+  }, [hydrateGameplay]);
+
+  const moveCount = gameState.history.length;
+  const prevMoveCount = React.useRef(moveCount);
+  React.useEffect(() => {
+    if (moveCount <= prevMoveCount.current) {
+      prevMoveCount.current = moveCount;
+      return;
+    }
+    prevMoveCount.current = moveCount;
+
+    const move = gameState.history[moveCount - 1];
+    if (!move) return;
+
+    // Check is the more urgent fact, so it wins over the move it arrived on.
+    if (gameState.inCheck) play("chess.check");
+    else if (move.captured) play("chess.capture");
+    else if (move.san === "O-O" || move.san === "O-O-O") play("chess.castle");
+    else play("chess.move");
+  }, [moveCount, gameState.history, gameState.inCheck, play]);
 
   const hasDrawOfferFromOpponent =
     gameState.drawOfferFromPlayerId && gameState.drawOfferFromPlayerId !== currentUserId;
@@ -217,6 +251,18 @@ export function ChessGameView({
           </div>
         </div>
 
+        {/* Appearance controls sit beside the board, not buried in settings —
+            people change board and pieces while playing, not before. */}
+        <div className="flex w-full justify-end">
+          <BoardSettings
+            themeId={boardPrefs.themeId}
+            pieceSet={boardPrefs.pieceSet}
+            onChooseTheme={boardPrefs.chooseTheme}
+            onChoosePieceSet={boardPrefs.choosePieceSet}
+            onFlip={boardPrefs.toggleFlip}
+          />
+        </div>
+
         {/* The Chess Board */}
         <ChessBoard
           fen={gameState.fen}
@@ -226,6 +272,12 @@ export function ChessGameView({
           lastMove={lastMove}
           onMakeMove={onMakeMove}
           disabled={gameState.isFinished || myColor === "spectator"}
+          themeId={boardPrefs.themeId}
+          pieceSet={boardPrefs.pieceSet}
+          flipped={boardPrefs.flipped}
+          showLegalMoves={gameplay.showLegalMoves}
+          highlightLastMove={gameplay.highlightLastMove}
+          autoQueen={gameplay.autoQueen}
         />
 
         {/* Bottom Player Card */}

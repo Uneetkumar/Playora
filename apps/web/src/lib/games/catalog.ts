@@ -13,6 +13,14 @@ export interface CatalogGame {
   tags: string[];
   /** Phase this game is scheduled for, shown when it isn't playable yet. */
   phase: string;
+  /**
+   * How the game is actually played, in the order a new player needs it.
+   *
+   * Written against the rules the engine enforces, not against the boxed
+   * rulebook — where Playora differs from the printed game, this is what is
+   * true here.
+   */
+  rules: string[];
 }
 
 /**
@@ -37,6 +45,13 @@ export const GAME_CATALOG: readonly CatalogGame[] = [
       "Classic two-player strategy with real-time clocks and full move validation.",
     tags: ["board", "strategy", "classic", "checkmate", "two player"],
     phase: "Available now",
+    rules: [
+      "White moves first, then players alternate.",
+      "Each piece moves its own way: rooks in straight lines, bishops diagonally, the queen either, knights in an L over other pieces, the king one square at a time.",
+      "You may never leave your own king in check. Moves that would are rejected by the server, not just hidden by the board.",
+      "Checkmate wins. Stalemate, insufficient material, threefold repetition and the fifty-move rule are draws.",
+      "Castling, en passant and promotion all work; promotion asks which piece unless you have turned on auto-queen in settings.",
+    ],
   },
   {
     id: "uno",
@@ -48,6 +63,13 @@ export const GAME_CATALOG: readonly CatalogGame[] = [
     description: "Fast colour-and-number matching for two to four players.",
     tags: ["cards", "party", "casual", "family", "matching"],
     phase: "Available now",
+    rules: [
+      "Everyone is dealt seven cards. Play a card matching the colour or the number on the pile.",
+      "Wilds can be played at any time and let you name the next colour.",
+      "Skip misses the next player, Reverse turns the direction around, Draw Two makes the next player take two and lose their turn.",
+      "If you cannot play, draw one card. You may play that card immediately or pass.",
+      "Say UNO as you play your second-to-last card. First player out of cards wins the hand.",
+    ],
   },
   {
     id: "uno-no-mercy",
@@ -59,6 +81,14 @@ export const GAME_CATALOG: readonly CatalogGame[] = [
     description: "Brutal UNO with stacking penalties, wild roulette and knockouts.",
     tags: ["cards", "party", "hardcore", "stacking"],
     phase: "Available now",
+    rules: [
+      "The same core as UNO, played from a 168-card deck, and far more violent.",
+      "Draw penalties stack: a Draw Two onto a Draw Two, a Draw Four onto that. Whoever cannot add a draw card takes the whole pile.",
+      "Bigger draws exist — Draw Six and Draw Ten — alongside Wild Reverse Draw Four and Colour Roulette.",
+      "A 0 passes every hand around the table. A 7 is a swap. Discard All sheds every card you hold of the active colour.",
+      "Skip Everyone returns the turn straight back to you.",
+      "Reach 25 cards in hand and you are out of the game. Last player standing wins if nobody goes out first.",
+    ],
   },
   {
     id: "car-race",
@@ -70,6 +100,9 @@ export const GAME_CATALOG: readonly CatalogGame[] = [
     description: "Top-down arcade racing with drifting and nitro boosts.",
     tags: ["racing", "arcade", "cars", "speed", "action"],
     phase: "Coming in Phase 12",
+    rules: [
+      "Not playable yet — there is no engine behind this game.",
+    ],
   },
   {
     id: "bike-race",
@@ -81,6 +114,9 @@ export const GAME_CATALOG: readonly CatalogGame[] = [
     description: "Balance and stunt motorcycle racing across obstacle tracks.",
     tags: ["racing", "bikes", "stunts", "physics", "action"],
     phase: "Coming in Phase 13",
+    rules: [
+      "Not playable yet — there is no engine behind this game.",
+    ],
   },
 ] as const;
 

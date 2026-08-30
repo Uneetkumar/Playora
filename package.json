@@ -21,7 +21,8 @@
     "clean": "turbo clean && rimraf node_modules",
     "verify:persistence": "node scripts/verify-persistence.mjs",
     "verify:matchmaking": "node scripts/verify-matchmaking.mjs",
-    "verify:progression": "node scripts/verify-progression.mjs"
+    "verify:progression": "node scripts/verify-progression.mjs",
+    "play": "pnpm --filter @playora/web build:stable && pnpm --filter @playora/web start:stable"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -29,6 +30,7 @@
     "@types/node": "^22.13.4",
     "chess.js": "^1.4.0",
     "eslint": "^9.20.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "prettier": "^3.5.1",
     "rimraf": "^6.0.1",
     "turbo": "^2.4.2",

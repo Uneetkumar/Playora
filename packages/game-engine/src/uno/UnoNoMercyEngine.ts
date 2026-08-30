@@ -1,10 +1,12 @@
 import type { GameId } from "@playora/game-types";
+import type { ActionResult } from "../types.js";
 import { UnoEngine } from "./UnoEngine.js";
 import { buildNoMercyDeck } from "./deck.js";
 import {
   drawPenaltyOf,
   isDrawCard,
   isWild,
+  type UnoAction,
   type UnoCard,
   type UnoConfig,
   type UnoEvent,
@@ -152,6 +154,37 @@ export class UnoNoMercyEngine extends UnoEngine {
     return { ...state, hands: { ...hands, ...shifted } };
   }
 
+  /**
+   * Runs the base action, then enforces the 25-card rule.
+   *
+   * Elimination has to hang off applyAction rather than off drawing, because a
+   * hand can cross the threshold several ways: serving a stacked penalty, being
+   * handed someone else's hand by a 0, or a Discard All that misses. Checking
+   * once, after any action, covers all of them.
+   */
+  override applyAction(
+    state: UnoGameState,
+    action: UnoAction,
+  ): ActionResult<UnoGameState, UnoEvent> {
+    const result = super.applyAction(state, action);
+    if (result.state.isFinished) return result;
+
+    const after = this.applyElimination(result.state);
+    let next = after.state;
+
+    // The action already advanced the turn, but the player it advanced *to* may
+    // be the one this very action knocked out. Step past them.
+    if (
+      !next.isFinished &&
+      next.activePlayerId &&
+      this.isEliminated(next, next.activePlayerId)
+    ) {
+      next = { ...next, activePlayerId: this.nextPlayer(next, 1) };
+    }
+
+    return { state: next, events: [...(result.events ?? []), ...after.events] };
+  }
+
   private isEliminated(state: UnoGameState, playerId: string): boolean {
     return (state.eliminated ?? []).includes(playerId);
   }
@@ -176,9 +209,11 @@ export class UnoNoMercyEngine extends UnoEngine {
     const survivors = state.playerOrder.filter((id) => !eliminated.has(id));
     const next: UnoGameState = { ...state, eliminated: [...eliminated] };
 
-    if (survivors.length === 1) {
-      const winner = survivors[0]!;
-      events.push({ type: "GAME_WON", playerId: winner });
+    // Two players can cross the threshold on the same action -- a 0 passes
+    // whole hands around -- so this has to cope with nobody being left.
+    if (survivors.length <= 1) {
+      const winner = survivors[0] ?? null;
+      if (winner) events.push({ type: "GAME_WON", playerId: winner });
       return {
         state: { ...next, isFinished: true, phase: "finished", winnerId: winner, activePlayerId: null },
         events,

@@ -173,6 +173,101 @@ describe("No Mercy elimination", () => {
   });
 });
 
+describe("No Mercy elimination through real play", () => {
+  // Every test above calls applyElimination directly, which is exactly how the
+  // rule shipped unreachable: it was correct, tested, and never called by
+  // applyAction. These go through the action pipeline instead.
+  it("eliminates a player who serves a penalty past the threshold", () => {
+    const nearly = Array.from({ length: ELIMINATION_THRESHOLD - 3 }, (_, i) =>
+      card("red", "5", `x${i}`),
+    );
+    const state = position({
+      hands: { alice: [card("red", "1")], bob: nearly },
+      activePlayerId: "bob",
+      pendingDraw: 4,
+    });
+
+    const after = engine.applyAction(state, {
+      type: "DRAW_CARD",
+      playerId: "bob",
+      payload: {},
+      timestamp: Date.now(),
+    } as never).state;
+
+    expect(after.hands.bob!.length).toBeGreaterThanOrEqual(ELIMINATION_THRESHOLD);
+    expect(after.eliminated).toContain("bob");
+    expect(after.isFinished).toBe(true);
+    expect(after.winnerId).toBe("alice");
+  });
+
+  it("never leaves an eliminated player holding the turn", () => {
+    const nearly = Array.from({ length: ELIMINATION_THRESHOLD - 3 }, (_, i) =>
+      card("red", "5", `x${i}`),
+    );
+    const threePlayers = [
+      { userId: "alice", displayName: "Alice" } as Player,
+      { userId: "bob", displayName: "Bob" } as Player,
+      { userId: "carol", displayName: "Carol" } as Player,
+    ];
+    const base = engine.init(threePlayers, { randomSeed: "nm3" });
+    const state: UnoGameState = {
+      ...base,
+      hands: { alice: [card("red", "1")], bob: nearly, carol: [card("blue", "2")] },
+      discardPile: [card("red", "5")],
+      activeColor: "red",
+      activePlayerId: "bob",
+      pendingDraw: 4,
+      hasDrawn: false,
+      eliminated: [],
+    };
+
+    const after = engine.applyAction(state, {
+      type: "DRAW_CARD",
+      playerId: "bob",
+      payload: {},
+      timestamp: Date.now(),
+    } as never).state;
+
+    expect(after.eliminated).toContain("bob");
+    expect(after.isFinished).toBe(false);
+    expect(after.activePlayerId).not.toBe("bob");
+  });
+});
+
+describe("No Mercy stacking is actually reachable", () => {
+  it("accepts a draw card played onto a live penalty", () => {
+    const state = position({
+      hands: { alice: [card("blue", "draw2", "d2")], bob: [] },
+      activePlayerId: "alice",
+      discardPile: [card("red", "draw2")],
+      pendingDraw: 2,
+    });
+    expect(engine.validateAction(state, {
+      type: "PLAY_CARD",
+      playerId: "alice",
+      payload: { cardId: "d2" },
+      timestamp: Date.now(),
+    } as never)).toEqual({ valid: true });
+  });
+
+  it("still refuses a non-draw card while a penalty stands", () => {
+    const state = position({
+      hands: { alice: [card("red", "5", "n5")], bob: [] },
+      activePlayerId: "alice",
+      discardPile: [card("red", "draw2")],
+      pendingDraw: 2,
+    });
+    const result = engine.validateAction(state, {
+      type: "PLAY_CARD",
+      playerId: "alice",
+      payload: { cardId: "n5" },
+      timestamp: Date.now(),
+    } as never);
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain("draw 2");
+  });
+});
+
 describe("No Mercy inherits the base engine", () => {
   it("still hides opponent hands", () => {
     const state = engine.init(players, { randomSeed: "hide" });

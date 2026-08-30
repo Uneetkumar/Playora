@@ -1,9 +1,11 @@
 import {
   applyRating,
   classifyMatch,
+  evaluateAchievements,
   isRated,
   levelForXp,
   xpForMatch,
+  type AchievementContext,
   type Outcome,
 } from "@playora/progression";
 import type { MatchResult } from "../handlers/game-handler.js";
@@ -14,6 +16,32 @@ interface Participant {
   userId: string;
   outcome: Outcome;
   isBot: boolean;
+}
+
+/**
+ * What one player gained or lost from a match.
+ *
+ * All of this was already computed in order to write it; returning it as well
+ * means the result screen can show real numbers the moment the match ends,
+ * instead of the client re-reading rows it just caused to be written.
+ */
+export interface PlayerProgression {
+  userId: string;
+  outcome: Outcome;
+  /** Unrated matches (against bots, or offline) still award XP but not rating. */
+  rated: boolean;
+  ratingBefore: number;
+  ratingAfter: number;
+  ratingDelta: number;
+  xpBefore: number;
+  xpAfter: number;
+  xpGained: number;
+  levelBefore: number;
+  levelAfter: number;
+  streak: number;
+  bestStreak: number;
+  /** Achievement ids unlocked by this match, if any. */
+  unlockedAchievements: string[];
 }
 
 /**
@@ -58,11 +86,14 @@ export class SupabaseProgressionStore {
   }
 
   async apply(params: {
+    /** The games table UUID, for rating rows. */
     gameId: string;
+    /** The engine's slug ("chess", "uno"), which is what achievements key on. */
+    gameSlug: string;
     sessionId: string;
     result: MatchResult;
     botIds: string[];
-  }): Promise<{ ok: boolean; reason?: string }> {
+  }): Promise<{ ok: boolean; reason?: string; players: PlayerProgression[] }> {
     const botSet = new Set(params.botIds);
     const participants: Participant[] = params.result.scores.map((s) => ({
       userId: s.userId,
@@ -73,6 +104,7 @@ export class SupabaseProgressionStore {
     const matchType = classifyMatch(participants);
     const rated = isRated(matchType);
     const humans = participants.filter((p) => !p.isBot);
+    const progressions: PlayerProgression[] = [];
 
     for (const player of humans) {
       // Opponents' average rating stands in for a single opponent in games with
@@ -83,6 +115,7 @@ export class SupabaseProgressionStore {
         `/rest/v1/game_ratings?user_id=eq.${player.userId}&game_id=eq.${params.gameId}&select=rating,games_played`,
       );
       let rating = current?.[0]?.rating ?? 1200;
+      const ratingBefore = rating;
       const gamesPlayed = current?.[0]?.games_played ?? 0;
 
       if (rated && opponents.length > 0) {
@@ -122,7 +155,27 @@ export class SupabaseProgressionStore {
       }
 
       await this.upsertRating(player, params.gameId, rating, rated);
-      await this.awardXp(player, params.result.durationSeconds, rated);
+      const xp = await this.awardXp(player, params.result.durationSeconds, rated);
+      if (xp) {
+        const unlockedAchievements = await this.awardAchievements(player, {
+          gameSlug: params.gameSlug,
+          sessionId: params.sessionId,
+          durationSeconds: params.result.durationSeconds,
+          reason: params.result.reason,
+          rated,
+          totals: xp.totals,
+        });
+        progressions.push({
+          userId: player.userId,
+          outcome: player.outcome,
+          rated,
+          ratingBefore,
+          ratingAfter: rating,
+          ratingDelta: rating - ratingBefore,
+          ...xp.progression,
+          unlockedAchievements,
+        });
+      }
     }
 
     log.info("progression.applied", {
@@ -132,7 +185,7 @@ export class SupabaseProgressionStore {
       rated,
       humans: humans.length,
     });
-    return { ok: true };
+    return { ok: true, players: progressions };
   }
 
   private async upsertRating(
@@ -171,7 +224,19 @@ export class SupabaseProgressionStore {
     player: Participant,
     durationSeconds: number,
     rated: boolean,
-  ): Promise<void> {
+  ): Promise<{
+    progression: Omit<
+      PlayerProgression,
+      | "userId"
+      | "outcome"
+      | "rated"
+      | "ratingBefore"
+      | "ratingAfter"
+      | "ratingDelta"
+      | "unlockedAchievements"
+    >;
+    totals: AchievementContext["totals"];
+  } | null> {
     const profile = await this.json<
       Array<{
         xp: number;
@@ -187,7 +252,7 @@ export class SupabaseProgressionStore {
         `&select=xp,total_games_played,total_wins,total_losses,total_draws,current_streak,best_streak`,
     );
     const p = profile?.[0];
-    if (!p) return;
+    if (!p) return null;
 
     const gained = xpForMatch({ outcome: player.outcome, durationSeconds, rated });
     const xp = p.xp + gained;
@@ -209,6 +274,126 @@ export class SupabaseProgressionStore {
         last_played_at: new Date().toISOString(),
       }),
     });
+
+    const totalsAfter = {
+      gamesPlayed: p.total_games_played + 1,
+      wins: p.total_wins + (player.outcome === "win" ? 1 : 0),
+      losses: p.total_losses + (player.outcome === "loss" ? 1 : 0),
+      draws: p.total_draws + (player.outcome === "draw" ? 1 : 0),
+      currentStreak: streak,
+      bestStreak: Math.max(p.best_streak, streak),
+      level: levelForXp(xp),
+      xp,
+    };
+
+    return {
+      progression: {
+        xpBefore: p.xp,
+        xpAfter: xp,
+        xpGained: gained,
+        levelBefore: levelForXp(p.xp),
+        levelAfter: levelForXp(xp),
+        streak,
+        bestStreak: totalsAfter.bestStreak,
+      },
+      totals: totalsAfter,
+    };
+  }
+
+  /**
+   * Evaluates the achievement catalogue and records anything newly unlocked.
+   *
+   * Runs after the rating and XP writes, so it sees the same numbers the player
+   * will. Everything here is best-effort: an achievement that fails to save is
+   * re-evaluated after the player's next match, because the conditions are
+   * expressed over lifetime totals rather than over "what happened just now".
+   */
+  private async awardAchievements(
+    player: Participant,
+    match: {
+      gameSlug: string;
+      sessionId: string;
+      durationSeconds: number;
+      reason: string;
+      rated: boolean;
+      totals: AchievementContext["totals"];
+    },
+  ): Promise<string[]> {
+    try {
+      const [existing, ratings] = await Promise.all([
+        this.json<Array<{ achievement_id: string }>>(
+          `/rest/v1/user_achievements?user_id=eq.${player.userId}&select=achievement_id`,
+        ),
+        this.json<
+          Array<{
+            rating: number;
+            peak_rating: number;
+            games_played: number;
+            wins: number;
+            games: { slug: string } | null;
+          }>
+        >(
+          `/rest/v1/game_ratings?user_id=eq.${player.userId}` +
+            `&select=rating,peak_rating,games_played,wins,games(slug)`,
+        ),
+      ]);
+
+      const perGame: AchievementContext["perGame"] = {};
+      for (const row of ratings ?? []) {
+        const slug = row.games?.slug;
+        if (!slug) continue;
+        perGame[slug] = {
+          gamesPlayed: row.games_played,
+          wins: row.wins,
+          rating: row.rating,
+          peakRating: row.peak_rating,
+        };
+      }
+
+      const unlocked = evaluateAchievements(
+        {
+          totals: match.totals,
+          perGame,
+          match: {
+            gameSlug: match.gameSlug,
+            outcome: player.outcome,
+            durationSeconds: match.durationSeconds,
+            reason: match.reason,
+            rated: match.rated,
+          },
+        },
+        (existing ?? []).map((row) => row.achievement_id),
+      );
+
+      if (unlocked.length === 0) return [];
+
+      const res = await this.fetchImpl(`${this.base}/rest/v1/user_achievements`, {
+        method: "POST",
+        // A race between two matches finishing could try to insert the same
+        // unlock twice; the primary key makes that a no-op rather than an error.
+        headers: this.headers({ Prefer: "resolution=ignore-duplicates,return=minimal" }),
+        body: JSON.stringify(
+          unlocked.map((a) => ({
+            user_id: player.userId,
+            achievement_id: a.id,
+            session_id: match.sessionId,
+          })),
+        ),
+      });
+      if (!res.ok) {
+        log.warn("achievements.not_saved", { userId: player.userId, status: res.status });
+        return [];
+      }
+
+      log.info("achievements.unlocked", {
+        userId: player.userId,
+        ids: unlocked.map((a) => a.id),
+      });
+      return unlocked.map((a) => a.id);
+    } catch (err) {
+      log.error("achievements.failed", { userId: player.userId, ...errorFields(err) });
+      return [];
+    }
   }
 }
 
@@ -232,11 +417,13 @@ export function createProgressionStore(env: {
 export async function applyProgressionSafely(
   store: SupabaseProgressionStore | null,
   params: Parameters<SupabaseProgressionStore["apply"]>[0],
-): Promise<void> {
-  if (!store) return;
+): Promise<PlayerProgression[]> {
+  if (!store) return [];
   try {
-    await store.apply(params);
+    const outcome = await store.apply(params);
+    return outcome.players;
   } catch (err) {
     log.error("progression.failed", { sessionId: params.sessionId, ...errorFields(err) });
+    return [];
   }
 }

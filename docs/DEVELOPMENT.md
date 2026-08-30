@@ -17,6 +17,22 @@ Starts everything at once via Turborepo:
 Leave it running. Edits reload on their own — see below for why that needed
 fixing.
 
+## Playing while someone is editing the code
+
+`pnpm dev` hot-reloads on every file change, which reloads the page under you.
+That is correct behaviour for development and very annoying if you are trying to
+play a game while the code is being edited.
+
+```bash
+pnpm play      # builds and serves a stable copy on http://localhost:3000
+```
+
+It builds to `.next-stable` rather than `.next`, so neither `pnpm dev` nor
+`pnpm build` can disturb it. It only changes when you re-run `pnpm play`.
+
+Note: online modes still need the realtime Worker on :8787 (`pnpm dev`, or
+`pnpm --filter @playora/realtime dev`). Offline modes need nothing else.
+
 ## Why changes used to need a restart
 
 Three separate causes, all now addressed:

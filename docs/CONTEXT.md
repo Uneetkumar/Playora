@@ -6,7 +6,7 @@ zero loss of context. Read this file first, then `docs/ARCHITECTURE.md`.
 **Maintenance rule:** update the *Status Ledger*, *Decision Log*, and *Next Action*
 sections at the end of every milestone. Everything else changes rarely.
 
-**Last updated:** 2026-08-29 · **Version:** 0.1.0 · **Phase:** 3 games; home dashboard shipped
+**Last updated:** 2026-08-30 · **Version:** 0.1.0 · **Phase:** platform shell rebuilt to reference UI
 
 ---
 
@@ -98,18 +98,36 @@ docs/
 
 ---
 
-## 5. Verification baseline (measured 2026-08-29)
+## 5. Verification baseline (measured 2026-08-30)
 
 | Check | Result |
 |---|---|
-| `pnpm typecheck` | ✅ 14/14 |
-| `pnpm test` | ✅ **105 tests**, 13 files (realtime 32, auth 20, bot 19, game-types 18, engine 11, protocol 3, db 2) |
-| `pnpm build` | ✅ 9 routes |
+| `pnpm typecheck` | ✅ 20/20 |
+| `pnpm test` | ✅ **254 tests** (game-engine 72, realtime 51, progression 37, bot-engine 31, audio 20, auth 20, game-types 18, protocol 3, db 2) |
+| `pnpm build` | ✅ 18 routes |
 | `pnpm version:check` | ✅ in sync at 0.1.0 |
 | `pnpm lint` | ✅ clean |
 | `pnpm test:e2e` | ✅ 2/2 (Playwright, chromium) |
 
 Reproduce with: `pnpm install && pnpm version:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build`
+
+### Live verification scripts (need a Worker on :8787 and `apps/web/.env.local`)
+
+Start the Worker with `pnpm --filter @playora/realtime dev`, then:
+
+| Script | Proves |
+|---|---|
+| `node scripts/sim-match.mjs` | two clients play a full match (16 checks) |
+| `node scripts/verify-persistence.mjs` | rooms and results reach Postgres (9) |
+| `node scripts/verify-matchmaking.mjs` | Quick Match pairs players (9) |
+| `node scripts/verify-progression.mjs` | Elo and XP applied, zero-sum (12) |
+| `node scripts/verify-uno-online.mjs` | online UNO deals, hides hands, rejects illegal plays (10) |
+| `node scripts/verify-uno-ai.mjs` | UNO and No Mercy bots play online (10) |
+| `node scripts/verify-rematch.mjs` | rematch needs both votes, deals a fresh session (8) |
+| `node scripts/verify-history.mjs` | match history filter and rating history (11) |
+| `node scripts/verify-leaderboard.mjs` | leaderboard ordering and counted rank (7) |
+| `node scripts/verify-achievements.mjs` | achievements awarded server-side; clients cannot self-award (8) |
+| `node scripts/verify-friends.mjs` | friendship RLS, including every negative (10) |
 
 ---
 
@@ -172,6 +190,32 @@ guest path is proven. Rooms/results persistence remains Slice 3.
 ### 🟠 Secondary
 
 ### ✅ Resolved this session
+- **Shell rebuilt against the CrazyGames reference the user supplied.**
+  Fixed header (logo, centred game search, join-by-code, friends/notifications/
+  avatar), a collapsed icon rail that expands on hover with labels, and a home
+  page that is horizontal rows of game tiles rather than a marketing hero.
+  Progress and recent matches moved to a side column: they are context, not the
+  reason anyone opens the page.
+- **UNO hand geometry corrected from a screen recording.** The reference is a
+  flat, squared-up overlapping stack — each card showing about its left 40% —
+  not the arced fan I had built. An arc spreads cards out and reads as a row of
+  tiles; the stack reads as a hand. Same treatment for opponents, face-down.
+  Also added the colour diamond and direction mark from the reference, and a
+  deep felt-table ground behind the centre.
+- Game tiles get per-game artwork treatments rather than one shared gradient —
+  a wall of identical tiles is what makes a catalogue look unfinished.
+- **"The server keeps restarting while I play."** Root cause was me editing
+  files against the same dev server the user was playing on. Fixed structurally
+  rather than by asking them to wait: `pnpm play` builds to `.next-stable` and
+  serves on :3000, isolated from `.next`, so neither `pnpm dev` nor `pnpm build`
+  can disturb a session in progress.
+- **UNO animations were written but did not play.** Three defects, all mine:
+  the deal stagger ran entirely while cards were at `opacity: 0` and then snapped
+  in together; an `exit` animation on hand cards overrode the shared `layoutId`
+  so a played card faded instead of travelling; and opponent throws were never
+  implemented. Replaced `layoutId` with an explicit flight overlay, which works
+  across component boundaries and — unlike a shared layout id — can animate an
+  opponent's card, whose cards were never in the DOM.
 - **Home was a landing page, not the dashboard the design pack specifies.**
   Raised three times before it was fixed. `/` now branches: strangers get the
   landing page, signed-in players get `HomeDashboard` — Quick Play hero, Your
@@ -559,62 +603,89 @@ secrets production. **The Worker does not read `.env.local`.**
 
 ## 12. Next Action
 
+Work is tracked in **`docs/BACKLOG.md`** — one ordered list, worked top-down.
+This section records only where that list currently stands.
+
 ### Playable right now, no setup needed
-`pnpm dev` → `/play` → Pass & Play or Play with AI. Works offline.
+`pnpm dev` → `/play?game=chess` (or `uno`, `uno-no-mercy`) → Pass & Play or
+Play vs AI. Works offline, no account.
 
-### Immediate — finish auth
-- [ ] Enable the **Google** provider (credentials already created; client id
-      `2787402...apps.googleusercontent.com`, redirect URI already correct)
-- [ ] Then verify the Google sign-in round trip the same way guest was verified
+### Landed in the overnight run (backlog 8–18, 22)
 
-### Next
-1. **Look at the new UNO board and the home dashboard.** Neither has been
-   visually confirmed — the browser pane returned 0x0 for the whole session, so
-   they are verified only by build and tests.
-2. **Match history and leaderboard pages** — data and indexes exist.
-3. **UnoBot**, so UNO and No Mercy get AI like chess has.
-4. **Racing (Car Race, Bike Race)** — Phaser plus server tick, snapshots,
-   prediction and reconciliation. Larger than the three existing games combined;
-   not started, and not worth faking.
-5. **Same-wifi via QR** — deferred by D4.
+**Games and AI**
+- **Online UNO verified** through a real room: 7-card deals, opponents reduced
+  to counts, illegal plays refused server-side.
+- **UnoBot** for UNO and No Mercy, online and offline. The difficulty ladder is
+  measured, not guessed — the note in `UnoBot.ts` records that blunder rate is
+  the only lever the win rate responds to, and that a one-ply lookahead was
+  tried and *lost* games, because UNO rewards tempo over a flexible hand.
+
+**Bugs found by building on top of existing code**
+1. `UnoEngine.validateAction` rejected *any* play while a draw penalty stood,
+   so No Mercy's headline stacking rule was unreachable by anyone.
+2. The 25-card elimination rule was implemented and unit-tested but never
+   called from `applyAction`. Four-player No Mercy games ran forever. Found by
+   a full-game fuzz; unit tests could not have caught it.
+3. **The online room page rendered chess for every game.** An online UNO room
+   dealt real cards on the server and drew a chessboard.
+4. **`use-recent-matches` could not scale**: it fetched the newest 40 results
+   platform-wide and filtered in the browser, so it returns nothing once other
+   people play between visits.
+5. **`friendships` had RLS enabled and no policies at all** — every read
+   returned zero rows and every write was denied. The friends page looked
+   "empty" rather than broken, which is how it survived.
+6. **`eslint-plugin-react-hooks` was never installed.** Once enabled it found
+   exactly one violation, in the hook responsible for all three reconnect bugs.
+
+**Built**
+- Match result screens (rating count-up, XP bar, level-up, streak, unlocked
+  achievements), fed by a new `MATCH_PROGRESSION` message — the progression
+  store already computed those numbers and threw them away.
+- A real rematch handshake (`REMATCH` / `REMATCH_STATE`): one player's click no
+  longer restarts anything, and bots do not get a vote.
+- `/history` and `/history/[sessionId]`, `/leaderboard` (per game, global and
+  friends), `/games/[slug]`, `/achievements`, a working `/friends`.
+- `packages/audio`: master/music/SFX/UI/voice buses, 21 procedurally
+  synthesised sounds, persistence, settings UI, wired into both games.
+- Settings gained working audio and gameplay sections. Every control does
+  something — the gameplay toggles are read by the chess board and UNO hand.
+
+**Migrations applied to the live project**
+`00005` match-history indexes (GIN on `game_results.scores`), `00006`
+`user_achievements`, `00007` friendship RLS policies.
+
+### Next in the backlog
+**19–20 Car Race and Bike Race are the next items and both are XL** — Phaser,
+a server tick, snapshots, prediction and reconciliation. They were deliberately
+not started overnight: half a netcode implementation is worse than none, and
+the scope deserves a decision from Uneet first.
+
+Everything else remaining is smaller: 21 light theme · 23 chess clock
+enforcement · 24 game artwork · 25 e2e auth handshake · 26 deploy ·
+27 Sentry/PostHog · 29 same-wifi QR · 35 music · 36 presence/notifications.
+
+### Not visually confirmed
+The browser pane has returned 0×0 for several sessions, so all UI work —
+result screens, history, leaderboard, the UNO table, the chess board — is
+verified by build, tests and live protocol scripts, **not by looking at it**.
+Backlog item 1 is still: look at it and report what is wrong.
 
 ### Known limitation
 The `game-ui-design` skill at `~/claude-skills/game-ui-design/` is written and
-structurally valid but **untested** — all six evaluation agents died on a session
-limit before producing anything.
+structurally valid but **untested** — all six evaluation agents died on a
+session limit before producing anything.
 
-### Blocked on Uneet
-- Google sign-in round trip (needs a human to enter Google credentials).
-- Rename the GitHub repo `Playden` → `Playora` (GitHub redirects the old URL).
-
-### In progress — Slice 3: rooms + persistence
-
-Done:
-- `packages/game-types/src/room-code.ts` — codes drawn from an alphabet with no
-  O/0/I/1/L, normalisation for lowercase and separators, 18 tests.
-- `apps/web/src/app/api/rooms/route.ts` — `GET` lists public waiting rooms,
-  `POST` creates one. Host comes from the session; a `hostId` in the body is
-  ignored. Code generated server-side with retry on unique violation.
-- `apps/web/src/app/api/rooms/[code]/route.ts` — resolves a code with capacity
-  and lifecycle checks *before* a socket opens, so players get a clear message
-  instead of a connect-then-close.
-- `supabase/migrations/00003_room_access_policies.sql` — the missing INSERT/
-  UPDATE/DELETE policies. `game_sessions`/`game_results` stay client-unwritable;
-  the Worker writes them with the service-role key.
-
-Remaining:
-- Wire `apps/web/src/app/rooms/page.tsx` to the API — it still invents a code
-  client-side and renders a hardcoded empty room list.
-- Durable Object → Supabase write on `GAME_FINISHED` (hook point is
-  `finishGame()` in `handlers/game-handler.ts`). Needs rooms to exist in
-  Postgres first, which is why the registry came first.
-- Reconcile the DO's room id with the Postgres room UUID.
-
-### Carried-forward limitations
-- No integration test covers the browser→Worker auth handshake end to end;
-  add one once credentials exist.
+### Blocked on Uneet (backlog 1–4)
+- Look at the UI and report what is wrong.
+- Rotate the two secrets pasted into chat.
+- Rename the GitHub repo `Playden` → `Playora`.
+- Verify the Google sign-in round trip (needs a human at the keyboard).
 
 ### Working agreement
 Uneet commits and pushes; do not commit on his behalf. Conventional Commits on
 `feature/*` off `develop`. Gate must stay green:
 `pnpm version:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build`
+
+Do not run `pnpm build` while `pnpm dev` is running — both write
+`apps/web/.next`. The stable server (`pnpm play`) serves `.next-stable` on
+:3000 and is unaffected.

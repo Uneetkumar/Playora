@@ -9,9 +9,8 @@ import { useAuthStore } from "../../../lib/store/auth-store";
 import { useRoomInfo } from "../../../hooks/use-rooms";
 import { RoomChat } from "../../../components/chat/room-chat";
 import { ReactionOverlay, type FloatingReaction } from "../../../components/reactions/reaction-overlay";
-import { ChessGameView } from "../../../games/chess/ChessGameView";
-import type { ChessPlayerView } from "@playora/game-engine";
-import type { PlayerReaction } from "@playora/game-types";
+import { RoomGameSurface } from "../../../components/games/room-game-surface";
+import type { GameId, PlayerReaction } from "@playora/game-types";
 import {
   Button,
   Badge,
@@ -52,7 +51,7 @@ function RoomDetailsContent() {
 
   const { user } = useAuthStore();
   const { currentRoom, messages, error } = useRoomStore();
-  const { gameState, lastResult, resetGame } = useGameStore();
+  const { gameState, lastResult, progression, rematch, resetGame } = useGameStore();
 
   const handleIncomingReaction = React.useCallback(
     (reactionItem: PlayerReaction) => {
@@ -86,6 +85,7 @@ function RoomDetailsContent() {
     sendReaction,
     leaveRoom,
     addBot,
+    requestRematch,
   } = useRoomSocket({
     roomId: roomCode,
     // Resolved from the server before connecting. Deliberately does NOT fall
@@ -217,32 +217,21 @@ function RoomDetailsContent() {
           </div>
         )}
 
-        {/* 1. In-Game Mode: Chess Gameplay */}
+        {/* 1. In-Game Mode: whichever game this room is running */}
         {currentRoom?.status === "in_game" || currentRoom?.status === "finished" ? (
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <div className="lg:col-span-3">
-              {gameState ? (
-                <ChessGameView
-                  gameState={gameState as ChessPlayerView}
+              {gameState || lastResult ? (
+                <RoomGameSurface
+                  gameId={(currentRoom.gameId ?? "chess") as GameId}
+                  gameState={gameState}
                   players={currentRoom.players}
                   currentUserId={currentUserId}
                   lastResult={lastResult}
-                  onMakeMove={(from, to, promotion) =>
-                    sendGameAction("MOVE", { from, to, promotion })
-                  }
-                  onResign={() => sendGameAction("RESIGN", {})}
-                  onOfferDraw={() => sendGameAction("OFFER_DRAW", {})}
-                  onAcceptDraw={() => sendGameAction("ACCEPT_DRAW", {})}
-                  onDeclineDraw={() => sendGameAction("DECLINE_DRAW", {})}
-                  onRematch={() => {
-                    resetGame();
-                    if (currentRoom) {
-                      useRoomStore.getState().setRoom({
-                        ...currentRoom,
-                        status: "waiting",
-                      });
-                    }
-                  }}
+                  progression={progression}
+                  sendGameAction={(type, payload) => sendGameAction(type, payload)}
+                  onRematch={() => requestRematch(true)}
+                  rematchPending={rematch !== null && rematch.votes.includes(currentUserId)}
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center h-80 space-y-3">

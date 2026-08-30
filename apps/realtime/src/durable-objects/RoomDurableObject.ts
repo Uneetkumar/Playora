@@ -25,6 +25,7 @@ import {
 import { authenticateConnection } from "../handlers/auth-handler.js";
 import { applyGameAction, finishGame, startGame } from "../handlers/game-handler.js";
 import { addBot, removeBot, runBotTurns } from "../handlers/bot-handler.js";
+import { voteRematch } from "../handlers/rematch-handler.js";
 import type { RoomContext } from "./room-context.js";
 import {
   AUTH_DEADLINE_MS,
@@ -244,6 +245,13 @@ export class RoomDurableObject {
         await startGame(ctx, ws, userId, msg.customRules);
         await runBotTurns(ctx);
         return;
+
+      case "REMATCH": {
+        const outcome = await voteRematch(ctx, ws, userId, msg.accept);
+        // A rematch can hand the first move to a bot, exactly as a fresh start can.
+        if (outcome.started) await runBotTurns(ctx);
+        return;
+      }
 
       case "ADD_BOT":
         await addBot(ctx, ws, userId, msg.level as Parameters<typeof addBot>[3]);
@@ -478,14 +486,26 @@ export class RoomDurableObject {
         // Rating and XP only apply once the match itself is on record.
         if (!outcome.ok || !outcome.gameId) return;
         this.progressionStore ??= createProgressionStore(this.env);
-        await applyProgressionSafely(this.progressionStore, {
+        const progression = await applyProgressionSafely(this.progressionStore, {
           gameId: outcome.gameId,
+          gameSlug: room.gameId,
           sessionId: record.sessionId,
           result: record.result,
           botIds: Object.values(room.players)
             .filter((p) => p.isBot)
             .map((p) => p.userId),
         });
+
+        // The result screen is already on-screen by now; this fills in the
+        // numbers. Nothing downstream depends on it arriving.
+        if (progression.length > 0) {
+          this.broadcast({
+            type: "MATCH_PROGRESSION",
+            roomId: room.roomId,
+            sessionId: record.sessionId,
+            players: progression,
+          });
+        }
       },
     };
   }

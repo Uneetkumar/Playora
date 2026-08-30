@@ -44,20 +44,21 @@ export function useRecentMatches(userId: string | null | undefined, limit = 5) {
     (async () => {
       try {
         const supabase = getSupabaseBrowserClient();
+        // Scoped server-side against the GIN index on `scores` (migration
+        // 00005). This used to fetch the newest 40 results platform-wide and
+        // filter them here, which returns nothing at all once other people are
+        // playing between one visit and the next.
         const { data } = await supabase
           .from("game_results")
           .select("session_id,winner_id,duration_seconds,finish_reason,created_at,scores,games(slug,name)")
+          .filter("scores", "cs", JSON.stringify([{ userId }]))
           .order("created_at", { ascending: false })
-          .limit(40);
+          .limit(limit);
 
         if (cancelled) return;
         const rows = (data ?? []) as unknown as ResultRow[];
 
-        // Filter to matches this player actually took part in. RLS allows
-        // reading results generally, so the scope has to be applied here.
         const mine = rows
-          .filter((r) => Array.isArray(r.scores) && r.scores.some((s) => s.userId === userId))
-          .slice(0, limit)
           .map((r) => ({
             sessionId: r.session_id,
             gameSlug: r.games?.slug ?? "chess",

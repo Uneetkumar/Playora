@@ -1,15 +1,14 @@
 "use client";
 
 import * as React from "react";
+import { motion } from "framer-motion";
 import { Chess, type Square } from "chess.js";
+import { cn } from "@playora/ui";
+import { ChessPiece, describePiece, type PieceSetId, type PieceType } from "./pieces";
+import { themeById, type BoardTheme } from "./board-themes";
 
 export type ChessPieceColor = "w" | "b";
-export type ChessPieceType = "p" | "r" | "n" | "b" | "q" | "k";
-
-export interface ChessPiece {
-  type: ChessPieceType;
-  color: ChessPieceColor;
-}
+export type ChessPieceType = PieceType;
 
 interface ChessBoardProps {
   fen: string;
@@ -19,91 +18,26 @@ interface ChessBoardProps {
   lastMove?: { from: string; to: string } | null;
   onMakeMove: (from: string, to: string, promotion?: "q" | "r" | "b" | "n") => void;
   disabled?: boolean;
+  themeId?: string;
+  /** Gameplay preferences that change what the board shows or asks. */
+  showLegalMoves?: boolean;
+  highlightLastMove?: boolean;
+  autoQueen?: boolean;
+  pieceSet?: PieceSetId;
+  /** Force orientation regardless of colour, for pass-and-play or spectating. */
+  flipped?: boolean;
 }
 
-const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"];
-const RANKS = ["8", "7", "6", "5", "4", "3", "2", "1"];
+const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
+const RANKS = ["8", "7", "6", "5", "4", "3", "2", "1"] as const;
 
-// Clean SVG chess pieces for supreme visual quality across all devices
-function renderPieceIcon(piece: ChessPiece) {
-  const isWhite = piece.color === "w";
-  const fill = isWhite ? "#ffffff" : "#1e293b";
-  const stroke = isWhite ? "#334155" : "#94a3b8";
-
-  switch (piece.type) {
-    case "p":
-      return (
-        <svg viewBox="0 0 45 45" className="w-4/5 h-4/5 drop-shadow-md">
-          <path
-            d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z"
-            fill={fill}
-            stroke={stroke}
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-        </svg>
-      );
-    case "r":
-      return (
-        <svg viewBox="0 0 45 45" className="w-4/5 h-4/5 drop-shadow-md">
-          <g fill={fill} stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 39h27v-3H9v3zm3-3v-4h21v4H12zm2-4V14h17v18H14z" />
-            <path d="M14 14l3.5-4.5h10L31 14H14z" />
-            <path d="M12 9.5h21v4.5H12V9.5z" />
-            <path d="M11 9h3v3h-3V9zm7 0h3v3h-3V9zm7 0h3v3h-3V9zm7 0h3v3h-3V9z" />
-          </g>
-        </svg>
-      );
-    case "n":
-      return (
-        <svg viewBox="0 0 45 45" className="w-4/5 h-4/5 drop-shadow-md">
-          <g fill={fill} stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M22 10c10.5 1 16.5 8 16 29H15c0-9 10-6.5 8-21" />
-            <path d="M24 18c.38 2.91-5.55 7.37-8 9-3 2-2.82 4.34-5 4-1.042-.94 1.41-4.04 2-5 2.1-3.4 8-4.5 11-8z" />
-            <path d="M9.5 25.5a.5.5 0 1 1-1 0 .5.5 0 1 1 1 0z" />
-            <path d="M15 15.5a.5.5 0 1 1-1 0 .5.5 0 1 1 1 0z" />
-          </g>
-        </svg>
-      );
-    case "b":
-      return (
-        <svg viewBox="0 0 45 45" className="w-4/5 h-4/5 drop-shadow-md">
-          <g fill={fill} stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.354.49-2.323.47-3-.5 1.354-1.94 3-2 3-2z" />
-            <path d="M15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2z" />
-            <path d="M25 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 1 1 5 0z" />
-          </g>
-        </svg>
-      );
-    case "q":
-      return (
-        <svg viewBox="0 0 45 45" className="w-4/5 h-4/5 drop-shadow-md">
-          <g fill={fill} stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 26c8.5-1.5 21-1.5 27 0l2-12-7 11-6-15-6 15-7-11 2 12z" />
-            <path d="M9 26c0 2 1.5 2 2.5 4 2.5 5 1 5.5 11 5.5s8.5-.5 11-5.5c1-2 2.5-2 2.5-4H9z" />
-            <path d="M11 38.5h23v-3H11v3z" />
-            <circle cx="6" cy="12" r="2" />
-            <circle cx="14" cy="9" r="2" />
-            <circle cx="22.5" cy="8" r="2" />
-            <circle cx="31" cy="9" r="2" />
-            <circle cx="39" cy="12" r="2" />
-          </g>
-        </svg>
-      );
-    case "k":
-      return (
-        <svg viewBox="0 0 45 45" className="w-4/5 h-4/5 drop-shadow-md">
-          <g fill={fill} stroke={stroke} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M22.5 11.63V6M20 8h5" />
-            <path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5" />
-            <path d="M11.5 37c5.5 3.5 16.5 3.5 22 0V32H11.5v5z" />
-            <path d="M11.5 30c5.5-3 16.5-3 22 0l2-8.5c-5.5-3-18.5-3-26 0l2 8.5z" />
-          </g>
-        </svg>
-      );
-  }
-}
-
+/**
+ * The board.
+ *
+ * Three things make a chess board readable, and all three are easy to omit:
+ * you must be able to see the move that was just played, the moves you can
+ * make, and whether your king is in trouble. Everything below serves those.
+ */
 export function ChessBoard({
   fen,
   myColor,
@@ -111,199 +45,235 @@ export function ChessBoard({
   inCheck,
   lastMove,
   onMakeMove,
-  disabled = false,
+  disabled,
+  themeId,
+  pieceSet = "classic",
+  flipped,
+  showLegalMoves = true,
+  highlightLastMove = true,
+  autoQueen = false,
 }: ChessBoardProps) {
-  const [selectedSquare, setSelectedSquare] = React.useState<string | null>(null);
-  const [pendingPromotion, setPendingPromotion] = React.useState<{ from: string; to: string } | null>(
-    null
-  );
+  const theme: BoardTheme = themeById(themeId ?? "midnight");
+  const [selected, setSelected] = React.useState<Square | null>(null);
+  const [promotion, setPromotion] = React.useState<{ from: Square; to: Square } | null>(null);
 
-  // Parse FEN into 8x8 Board representation
-  const boardMatrix = React.useMemo(() => {
-    const matrix: (ChessPiece | null)[][] = Array.from({ length: 8 }, () =>
-      Array.from({ length: 8 }, () => null)
-    );
-    try {
-      const parts = fen.split(" ");
-      const rows = parts[0]?.split("/");
-      if (rows && rows.length === 8) {
-        for (let r = 0; r < 8; r++) {
-          const rowStr = rows[r]!;
-          let col = 0;
-          for (let c = 0; c < rowStr.length; c++) {
-            const char = rowStr[c]!;
-            if (char >= "1" && char <= "8") {
-              col += parseInt(char, 10);
-            } else {
-              const color: ChessPieceColor = char === char.toUpperCase() ? "w" : "b";
-              const type: ChessPieceType = char.toLowerCase() as ChessPieceType;
-              if (col < 8) {
-                matrix[r]![col] = { type, color };
-              }
-              col++;
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.warn("Error parsing FEN:", err);
+  const chess = React.useMemo(() => new Chess(fen), [fen]);
+  const board = chess.board();
+
+  // Black sees the board from their own side, as at a real table.
+  const orientBlack = flipped ?? myColor === "b";
+  const files = orientBlack ? [...FILES].reverse() : FILES;
+  const ranks = orientBlack ? [...RANKS].reverse() : RANKS;
+
+  const canInteract = !disabled && isMyTurn && myColor !== "spectator";
+
+  // Destinations for the selected piece, split so captures can be marked
+  // differently — a dot and a ring mean different things to a player.
+  const targets = React.useMemo(() => {
+    if (!selected) return { moves: new Set<string>(), captures: new Set<string>() };
+    const moves = new Set<string>();
+    const captures = new Set<string>();
+    for (const m of chess.moves({ square: selected, verbose: true })) {
+      if (m.captured) captures.add(m.to);
+      else moves.add(m.to);
     }
-    return matrix;
-  }, [fen]);
+    return { moves, captures };
+  }, [chess, selected]);
 
-  // Compute legal moves from current selected square using chess.js client preview
-  const legalDestinations = React.useMemo(() => {
-    if (!selectedSquare || !isMyTurn || disabled) return new Set<string>();
-    try {
-      const chess = new Chess(fen);
-      const moves = chess.moves({ square: selectedSquare as Square, verbose: true });
-      return new Set(moves.map((m) => m.to));
-    } catch {
-      return new Set<string>();
-    }
-  }, [selectedSquare, fen, isMyTurn, disabled]);
-
-  const displayedRanks = myColor === "b" ? [...RANKS].reverse() : RANKS;
-  const displayedFiles = myColor === "b" ? [...FILES].reverse() : FILES;
-
-  const handleSquareClick = (square: string, piece: ChessPiece | null) => {
-    if (disabled) return;
-
-    // 1. If we clicked a legal target destination for an already selected piece:
-    if (selectedSquare && legalDestinations.has(square)) {
-      const fromPiece = getPieceAtSquare(selectedSquare);
-      // Check if pawn promotion
-      const isPawn = fromPiece?.type === "p";
-      const isPromotionRank = square.endsWith("8") || square.endsWith("1");
-
-      if (isPawn && isPromotionRank) {
-        setPendingPromotion({ from: selectedSquare, to: square });
-      } else {
-        onMakeMove(selectedSquare, square);
-        setSelectedSquare(null);
+  const kingSquare = React.useMemo(() => {
+    if (!inCheck) return null;
+    const turn = chess.turn();
+    for (const row of board) {
+      for (const sq of row) {
+        if (sq && sq.type === "k" && sq.color === turn) return sq.square;
       }
+    }
+    return null;
+  }, [board, chess, inCheck]);
+
+  const attempt = (from: Square, to: Square) => {
+    const move = chess
+      .moves({ square: from, verbose: true })
+      .find((m) => m.to === to);
+    if (!move) return;
+
+    // Promotion is a decision, not a default — ask rather than assuming a queen.
+    if (move.promotion) {
+      // With auto-queen on, the picker is skipped entirely: it is the choice
+      // in well over ninety per cent of promotions and the dialog is friction.
+      if (autoQueen) {
+        onMakeMove(from, to, "q");
+        setSelected(null);
+        return;
+      }
+      setPromotion({ from, to });
       return;
     }
+    onMakeMove(from, to);
+    setSelected(null);
+  };
 
-    // 2. If clicking a piece of our color on our turn:
-    if (isMyTurn && piece && piece.color === myColor) {
-      if (selectedSquare === square) {
-        setSelectedSquare(null); // toggle off
-      } else {
-        setSelectedSquare(square);
+  const onSquare = (square: Square) => {
+    if (!canInteract) return;
+    const piece = chess.get(square);
+
+    if (selected) {
+      if (square === selected) {
+        setSelected(null);
+        return;
       }
-      return;
+      if (targets.moves.has(square) || targets.captures.has(square)) {
+        attempt(selected, square);
+        return;
+      }
     }
-
-    // 3. Otherwise deselect
-    setSelectedSquare(null);
-  };
-
-  const getPieceAtSquare = (sq: string): ChessPiece | null => {
-    const fileIndex = FILES.indexOf(sq[0]!);
-    const rankIndex = 8 - parseInt(sq[1]!, 10);
-    return boardMatrix[rankIndex]?.[fileIndex] ?? null;
-  };
-
-  const executePromotion = (pieceType: "q" | "r" | "b" | "n") => {
-    if (pendingPromotion) {
-      onMakeMove(pendingPromotion.from, pendingPromotion.to, pieceType);
-      setPendingPromotion(null);
-      setSelectedSquare(null);
-    }
+    // Selecting is only meaningful for your own pieces.
+    if (piece && piece.color === myColor) setSelected(square);
+    else setSelected(null);
   };
 
   return (
-    <div className="relative flex flex-col items-center select-none">
-      {/* Promotion Picker Modal */}
-      {pendingPromotion && (
-        <div className="absolute inset-0 z-30 bg-background/80 backdrop-blur-sm rounded-xl flex flex-col items-center justify-center p-4">
-          <div className="bg-card border border-border p-4 rounded-xl shadow-2xl text-center space-y-4 max-w-xs">
-            <h4 className="text-sm font-bold text-foreground">Promote Pawn</h4>
-            <p className="text-xs text-muted-foreground">Choose a piece to promote your pawn into:</p>
-            <div className="grid grid-cols-4 gap-2">
-              {(["q", "r", "b", "n"] as const).map((pType) => (
-                <button
-                  key={pType}
-                  type="button"
-                  onClick={() => executePromotion(pType)}
-                  className="h-14 rounded-lg bg-border hover:bg-primary/40 border border-border hover:border-primary flex items-center justify-center p-2 transition-all transform hover:scale-105"
-                >
-                  {renderPieceIcon({ type: pType, color: myColor === "b" ? "b" : "w" })}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+    <div className="w-full">
+      <div
+        className="relative mx-auto aspect-square w-full max-w-[min(88vw,620px)] overflow-hidden rounded-xl shadow-raised ring-1 ring-black/30"
+        role="grid"
+        aria-label="Chess board"
+      >
+        <div className="grid h-full w-full grid-cols-8 grid-rows-8">
+          {ranks.map((rank, r) =>
+            files.map((file, f) => {
+              const square = `${file}${rank}` as Square;
+              const isLight = (r + f) % 2 === 0;
+              const piece = chess.get(square);
 
-      {/* Main 8x8 Board Grid */}
-      <div className="relative w-full max-w-[500px] aspect-square rounded-xl overflow-hidden shadow-2xl border-4 border-border bg-[#0f172a]">
-        <div className="grid grid-cols-8 grid-rows-8 w-full h-full">
-          {displayedRanks.map((rank, rankIdx) =>
-            displayedFiles.map((file, fileIdx) => {
-              const square = `${file}${rank}`;
-              const origFileIdx = FILES.indexOf(file);
-              const origRankIdx = 8 - parseInt(rank, 10);
-              const piece = boardMatrix[origRankIdx]?.[origFileIdx] ?? null;
+              const isSelected = selected === square;
+              const isLast =
+                highlightLastMove && (lastMove?.from === square || lastMove?.to === square);
+              const isTarget = showLegalMoves && targets.moves.has(square);
+              const isCapture = showLegalMoves && targets.captures.has(square);
+              const isCheck = kingSquare === square;
 
-              const isLight = (origFileIdx + origRankIdx) % 2 === 0;
-              const isSelected = selectedSquare === square;
-              const isLegalTarget = legalDestinations.has(square);
-              const isLastMoveSquare =
-                lastMove && (lastMove.from === square || lastMove.to === square);
-              const isKingInCheck =
-                inCheck && piece?.type === "k" && piece.color === (myColor === "spectator" ? "w" : myColor);
+              // Coordinates only on the outer edge, as on a real board.
+              const showFile = r === 7;
+              const showRank = f === 0;
 
               return (
-                <div
+                <button
                   key={square}
-                  onClick={() => handleSquareClick(square, piece)}
-                  className={`relative flex items-center justify-center cursor-pointer transition-all duration-150 ${
-                    isLight ? "bg-[#2a374a]" : "bg-[#182333]"
-                  } ${
-                    isSelected
-                      ? "ring-4 ring-primary ring-inset z-10 bg-primary/30/40"
-                      : isLastMoveSquare
-                      ? "bg-amber-500/20"
-                      : ""
-                  } ${isKingInCheck ? "ring-4 ring-red-500 ring-inset bg-red-900/40" : ""}`}
-                >
-                  {/* File & Rank Coordinates for corner squares */}
-                  {fileIdx === 0 && (
-                    <span className="absolute top-0.5 left-1 text-[9px] font-bold opacity-40 text-foreground">
-                      {rank}
-                    </span>
+                  type="button"
+                  role="gridcell"
+                  onClick={() => onSquare(square)}
+                  disabled={!canInteract}
+                  aria-label={
+                    piece
+                      ? `${square}, ${describePiece(piece.type, piece.color)}`
+                      : `${square}, empty`
+                  }
+                  className={cn(
+                    "relative flex items-center justify-center focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white",
+                    canInteract ? "cursor-pointer" : "cursor-default",
                   )}
-                  {rankIdx === 7 && (
-                    <span className="absolute bottom-0.5 right-1 text-[9px] font-bold opacity-40 text-foreground">
+                  style={{ background: isLight ? theme.light : theme.dark }}
+                >
+                  {/* Last move, so you can always see what just happened. */}
+                  {isLast && (
+                    <span className="absolute inset-0" style={{ background: theme.lastMove }} aria-hidden />
+                  )}
+                  {isSelected && (
+                    <span className="absolute inset-0" style={{ background: theme.selected }} aria-hidden />
+                  )}
+                  {isCheck && (
+                    <span
+                      className="absolute inset-0"
+                      style={{ background: `radial-gradient(circle, ${theme.check} 10%, transparent 72%)` }}
+                      aria-hidden
+                    />
+                  )}
+
+                  {showFile && (
+                    <span
+                      className="pointer-events-none absolute bottom-0.5 right-1 text-[9px] font-bold sm:text-[10px]"
+                      style={{ color: isLight ? theme.coordLight : theme.coordDark }}
+                      aria-hidden
+                    >
                       {file}
                     </span>
                   )}
+                  {showRank && (
+                    <span
+                      className="pointer-events-none absolute left-1 top-0.5 text-[9px] font-bold sm:text-[10px]"
+                      style={{ color: isLight ? theme.coordLight : theme.coordDark }}
+                      aria-hidden
+                    >
+                      {rank}
+                    </span>
+                  )}
 
-                  {/* Piece Graphic */}
                   {piece && (
-                    <div className="w-full h-full flex items-center justify-center transform transition-transform hover:scale-105 pointer-events-none">
-                      {renderPieceIcon(piece)}
-                    </div>
+                    <motion.span
+                      // Keyed by square so a moving piece slides rather than
+                      // vanishing and reappearing.
+                      layoutId={`piece-${piece.color}${piece.type}-${square}`}
+                      initial={false}
+                      animate={{ scale: 1 }}
+                      whileTap={canInteract && piece.color === myColor ? { scale: 0.92 } : undefined}
+                      transition={{ type: "spring", stiffness: 500, damping: 34 }}
+                      className="relative z-[1] flex h-[86%] w-[86%] items-center justify-center"
+                    >
+                      <ChessPiece type={piece.type} color={piece.color} set={pieceSet} />
+                    </motion.span>
                   )}
 
-                  {/* Legal Move Indicators */}
-                  {isLegalTarget && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-                      {piece ? (
-                        <div className="w-4/5 h-4/5 rounded-full border-4 border-primary/80 animate-pulse" />
-                      ) : (
-                        <div className="w-3.5 h-3.5 rounded-full bg-primary/80 shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
-                      )}
-                    </div>
+                  {/* A dot for a quiet move, a ring for a capture. */}
+                  {isTarget && !piece && (
+                    <span
+                      className="pointer-events-none absolute h-[28%] w-[28%] rounded-full"
+                      style={{ background: theme.legal }}
+                      aria-hidden
+                    />
                   )}
-                </div>
+                  {isCapture && (
+                    <span
+                      className="pointer-events-none absolute inset-[6%] rounded-full border-[3px]"
+                      style={{ borderColor: theme.capture }}
+                      aria-hidden
+                    />
+                  )}
+                </button>
               );
-            })
+            }),
           )}
         </div>
       </div>
+
+      {/* Promotion picker */}
+      {promotion && (
+        <div
+          role="dialog"
+          aria-label="Choose a promotion piece"
+          className="mx-auto mt-3 max-w-xs rounded-xl border border-border bg-card p-4 text-center"
+        >
+          <p className="font-display text-sm font-bold text-foreground">Promote to</p>
+          <div className="mt-3 flex justify-center gap-2">
+            {(["q", "r", "b", "n"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => {
+                  onMakeMove(promotion.from, promotion.to, t);
+                  setPromotion(null);
+                  setSelected(null);
+                }}
+                aria-label={describePiece(t, myColor === "b" ? "b" : "w")}
+                className="flex h-14 w-14 items-center justify-center rounded-lg border border-border bg-muted/40 transition-colors hover:border-primary"
+                style={{ background: theme.dark }}
+              >
+                <ChessPiece type={t} color={myColor === "b" ? "b" : "w"} set={pieceSet} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

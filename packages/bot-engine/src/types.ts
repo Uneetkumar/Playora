@@ -21,6 +21,14 @@ export const AI_LEVEL_LABELS: Record<AiLevel, string> = {
 export const RECOMMENDED_AI_LEVEL: AiLevel = 3;
 
 /**
+ * Injectable randomness, so a bot's choices are reproducible under test.
+ *
+ * Lives here rather than next to any one bot: every bot needs it, and two
+ * separate exports of the same alias collide when the package re-exports both.
+ */
+export type RandomSource = () => number;
+
+/**
  * Produces an action for a bot-controlled seat.
  *
  * A bot returns an *action*, exactly like a human client does. It is then run

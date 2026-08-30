@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { Header } from "../components/header";
+import { AppHeader } from "../components/shell/app-header";
+import { AppSidebar } from "../components/shell/app-sidebar";
 import { Footer } from "../components/footer";
 
 import { Poppins, Inter } from "next/font/google";
@@ -30,9 +31,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`dark ${display.variable} ${body.variable}`}>
       {/* Colours come from tokens, never hardcoded hex (design brief). */}
-      <body className="flex min-h-screen flex-col bg-background text-foreground antialiased pb-20 md:pb-0">
-        <Header />
-        <main className="flex-1 flex flex-col">{children}</main>
+      <body className="min-h-screen bg-background text-foreground antialiased">
+        <AppHeader />
+        <AppSidebar />
+        <main className="min-h-screen pt-16 pb-20 lg:pb-0 lg:pl-16">{children}</main>
         <Footer />
         <MobileNav />
       </body>

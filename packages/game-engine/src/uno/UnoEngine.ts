@@ -155,13 +155,17 @@ export class UnoEngine extends AbstractGameEngine<
         const card = hand.find((c) => c.id === payload.cardId);
         if (!card) return { valid: false, reason: "That card isn't in your hand." };
 
-        if (state.pendingDraw > 0) {
-          return {
-            valid: false,
-            reason: `You must draw ${state.pendingDraw} card${state.pendingDraw === 1 ? "" : "s"} first.`,
-          };
-        }
         if (!this.isPlayable(state, card)) {
+          // A live penalty is the more useful explanation when there is one.
+          // Whether anything *can* be played into it is a variant decision, so
+          // this defers to isPlayable rather than rejecting outright: classic
+          // UNO refuses every card here, No Mercy allows a draw card on top.
+          if (state.pendingDraw > 0) {
+            return {
+              valid: false,
+              reason: `You must draw ${state.pendingDraw} card${state.pendingDraw === 1 ? "" : "s"} first.`,
+            };
+          }
           return { valid: false, reason: "That card doesn't match the colour or value." };
         }
         if (isWild(card) && !payload.chosenColor) {

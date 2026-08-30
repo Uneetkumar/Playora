@@ -24,6 +24,13 @@ export interface PersistedRoom {
   currentGameState: BaseGameState | null;
   /** userId -> epoch ms at which an unclaimed seat is forfeited. */
   disconnectDeadlines: Record<string, number>;
+  /**
+   * Who has agreed to a rematch since the last match ended.
+   *
+   * Optional because rooms persisted before rematch existed have no such field;
+   * every read must tolerate it being absent.
+   */
+  rematchVotes?: string[];
   createdAt: number;
   startedAt: number | null;
   endedAt: number | null;

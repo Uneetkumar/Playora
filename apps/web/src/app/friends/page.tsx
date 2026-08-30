@@ -1,136 +1,322 @@
 "use client";
 
 import * as React from "react";
-import {
-  Card,
-  Button,
-  Tabs,
-  Input,
-  Dialog,
-} from "@playora/ui";
-import { UserPlus, Search, Users, UserCheck } from "lucide-react";
+import Link from "next/link";
+import { Badge, Button, Card, Input, LoadingState, buttonVariants, cn } from "@playora/ui";
+import { UserPlus, Users, UserCheck, Clock, X, Check, Search, Swords } from "lucide-react";
+import { useAuthStore } from "../../lib/store/auth-store";
+import { useAudioStore } from "../../lib/store/audio-store";
+import { useFriends, type FriendProfile, type FriendRequest } from "../../hooks/use-friends";
 
-interface FriendItem {
-  id: string;
-  username: string;
-  displayName: string;
-  avatarUrl: string | null;
-  status: "online" | "in_game" | "offline";
-  activity?: string;
-}
+type TabId = "friends" | "incoming" | "outgoing";
 
 export default function FriendsPage() {
-  const [activeTab, setActiveTab] = React.useState("all");
-  const [search, setSearch] = React.useState("");
-  const [isAddOpen, setIsAddOpen] = React.useState(false);
-  const [friendUsername, setFriendUsername] = React.useState("");
+  const { user, isLoading: authLoading } = useAuthStore();
+  const {
+    friends, incoming, outgoing, isLoading, error, sendRequest, respond, remove,
+  } = useFriends(user?.id);
+  const play = useAudioStore((s) => s.play);
 
-  // Real friends list (empty initially until players add friends)
-  const [friends] = React.useState<FriendItem[]>([]);
+  const [tab, setTab] = React.useState<TabId>("friends");
+  const [filter, setFilter] = React.useState("");
+  const [handle, setHandle] = React.useState("");
+  const [formError, setFormError] = React.useState<string | null>(null);
+  const [sent, setSent] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
 
-  const filteredFriends = friends.filter((f) =>
-    f.username.toLowerCase().includes(search.toLowerCase())
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setSent(false);
+    const message = await sendRequest(handle);
+    setBusy(false);
+    setFormError(message);
+    if (!message) {
+      setHandle("");
+      setSent(true);
+      play("ui.notify");
+    } else {
+      play("ui.error");
+    }
+  };
+
+  const shown = friends.filter(
+    (f) =>
+      f.displayName.toLowerCase().includes(filter.toLowerCase()) ||
+      f.username.toLowerCase().includes(filter.toLowerCase()),
   );
 
+  const TABS: Array<{ id: TabId; label: string; icon: typeof Users; count: number }> = [
+    { id: "friends", label: "Friends", icon: Users, count: friends.length },
+    { id: "incoming", label: "Requests", icon: UserCheck, count: incoming.length },
+    { id: "outgoing", label: "Sent", icon: Clock, count: outgoing.length },
+  ];
+
   return (
-    <div className="container mx-auto max-w-7xl px-4 py-10 sm:px-6">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between pb-8 border-b border-border gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
-            Friends & Social
-          </h1>
-          <p className="mt-2 text-muted-foreground">
-            Connect with friends, check online presence, and send game invites.
-          </p>
-        </div>
-        <Button onClick={() => setIsAddOpen(true)} className="gap-2 shadow-primary/20">
-          <UserPlus className="h-4 w-4" />
-          <span>Add Friend</span>
-        </Button>
-      </div>
+    <div className="container mx-auto max-w-3xl px-4 py-8 sm:px-6">
+      <header className="mb-6">
+        <h1 className="font-display text-3xl font-extrabold text-foreground sm:text-4xl">
+          Friends
+        </h1>
+        <p className="mt-1 text-muted-foreground">
+          Add people by username, then play them directly from here.
+        </p>
+      </header>
 
-      <div className="my-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <Tabs
-          tabs={[
-            { id: "all", label: "All Friends", count: friends.length },
-            { id: "online", label: "Online", count: 0 },
-            { id: "requests", label: "Pending Invites", count: 0 },
-          ]}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-        />
-
-        <div className="relative w-full md:w-64">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      <Card className="border-border bg-card p-5">
+        <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
+          <label htmlFor="add-friend" className="sr-only">
+            Username to add
+          </label>
           <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Filter friends..."
-            className="pl-9 h-9 bg-card/60 border-border"
+            id="add-friend"
+            value={handle}
+            onChange={(e) => {
+              setHandle(e.target.value);
+              setFormError(null);
+              setSent(false);
+            }}
+            placeholder="Their username"
+            autoComplete="off"
+            className="flex-1"
           />
+          <Button type="submit" className="gap-2" disabled={busy || !handle.trim() || !user}>
+            <UserPlus className="h-4 w-4" aria-hidden />
+            {busy ? "Sending…" : "Send request"}
+          </Button>
+        </form>
+
+        <div aria-live="polite" className="mt-2 min-h-[1.25rem] text-xs">
+          {formError && <span className="text-destructive">{formError}</span>}
+          {sent && <span className="text-success">Request sent.</span>}
+          {!formError && !sent && !user && (
+            <span className="text-muted-foreground">Sign in to add friends.</span>
+          )}
         </div>
+      </Card>
+
+      <div role="tablist" aria-label="Friends" className="mt-6 inline-flex rounded-lg border border-border p-1">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            onClick={() => setTab(t.id)}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+              tab === t.id
+                ? "bg-primary/15 text-primary"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <t.icon className="h-3.5 w-3.5" aria-hidden />
+            {t.label}
+            {t.count > 0 && <span className="numeric text-xs">({t.count})</span>}
+          </button>
+        ))}
       </div>
 
-      {filteredFriends.length === 0 ? (
-        <Card className="bg-card/40 border-border/80 p-12 text-center flex flex-col items-center justify-center space-y-4">
-          <div className="h-16 w-16 rounded-2xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center">
-            <Users className="h-8 w-8" />
-          </div>
-          <div className="space-y-1 max-w-md">
-            <h3 className="text-xl font-bold text-foreground">No Friends Added Yet</h3>
-            <p className="text-sm text-muted-foreground">
-              Add friends using their username or player tag to invite them to live multiplayer matches.
-            </p>
-          </div>
-          <Button onClick={() => setIsAddOpen(true)} className="gap-2 shadow-primary/30">
-            <UserPlus className="h-4 w-4" />
-            <span>Add First Friend</span>
-          </Button>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredFriends.map((friend) => (
-            <Card key={friend.id} className="hover:border-border transition-all">
-              {/* Render friend item */}
-            </Card>
-          ))}
+      {authLoading || isLoading ? (
+        <div className="mt-6">
+          <LoadingState title="Loading your friends" />
         </div>
+      ) : error ? (
+        <Empty title="Could not load your friends" body={error} />
+      ) : tab === "friends" ? (
+        <>
+          {friends.length > 3 && (
+            <div className="relative mt-4">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+              <Input
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder="Filter friends"
+                className="pl-9"
+                aria-label="Filter friends"
+              />
+            </div>
+          )}
+
+          {shown.length === 0 ? (
+            <Empty
+              title={friends.length === 0 ? "No friends yet" : "Nobody matches that"}
+              body={
+                friends.length === 0
+                  ? "Send a request above. You will need their exact username — Playora has no people search yet, on purpose."
+                  : "Try a different name."
+              }
+            />
+          ) : (
+            <ul className="mt-4 space-y-2">
+              {shown.map((friend) => (
+                <li key={friend.userId}>
+                  <FriendRow friend={friend} onRemove={() => remove(friend.userId)} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : tab === "incoming" ? (
+        incoming.length === 0 ? (
+          <Empty title="No requests" body="Nobody is waiting on you." />
+        ) : (
+          <ul className="mt-4 space-y-2">
+            {incoming.map((request) => (
+              <li key={request.friendshipId}>
+                <RequestRow
+                  request={request}
+                  onAccept={async () => {
+                    await respond(request.friendshipId, true);
+                    play("ui.notify");
+                  }}
+                  onDecline={async () => {
+                    await respond(request.friendshipId, false);
+                    play("ui.back");
+                  }}
+                />
+              </li>
+            ))}
+          </ul>
+        )
+      ) : outgoing.length === 0 ? (
+        <Empty title="Nothing sent" body="Requests you send will wait here until they answer." />
+      ) : (
+        <ul className="mt-4 space-y-2">
+          {outgoing.map((request) => (
+            <li key={request.friendshipId}>
+              <RequestRow
+                request={request}
+                pending
+                onDecline={async () => {
+                  await respond(request.friendshipId, false);
+                  play("ui.back");
+                }}
+              />
+            </li>
+          ))}
+        </ul>
       )}
 
-      {/* Add Friend Dialog */}
-      <Dialog
-        isOpen={isAddOpen}
-        onClose={() => setIsAddOpen(false)}
-        title="Send Friend Invite"
-        description="Enter the exact username or player ID."
+      <p className="mt-8 text-xs text-muted-foreground">
+        Online presence and invite notifications are not built yet — a friend&rsquo;s status is not
+        shown because nothing tracks it, rather than because they are offline.
+      </p>
+    </div>
+  );
+}
+
+function Avatar({ profile }: { profile: FriendProfile }) {
+  return (
+    <span
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sm font-bold text-primary"
+      aria-hidden
+    >
+      {profile.displayName.slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
+
+function FriendRow({ friend, onRemove }: { friend: FriendProfile; onRemove: () => void }) {
+  const [confirming, setConfirming] = React.useState(false);
+
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
+      <Avatar profile={friend} />
+      <div className="min-w-0 flex-1">
+        <Link
+          href={`/profile?user=${friend.username}`}
+          className="block truncate text-sm font-semibold text-foreground hover:underline"
+        >
+          {friend.displayName}
+        </Link>
+        <p className="truncate text-xs text-muted-foreground">
+          @{friend.username} · Level <span className="numeric">{friend.level}</span>
+        </p>
+      </div>
+
+      <Link
+        href="/rooms"
+        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "gap-1.5")}
       >
-        <div className="space-y-4">
-          <div>
-            <label className="text-xs font-semibold text-foreground">Username or ID</label>
-            <Input
-              value={friendUsername}
-              onChange={(e) => setFriendUsername(e.target.value)}
-              placeholder="e.g. Alex_Pro"
-              className="mt-1 bg-card border-border"
-            />
-          </div>
-          <div className="flex justify-end space-x-3 pt-4 border-t border-border">
-            <Button variant="ghost" onClick={() => setIsAddOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                setIsAddOpen(false);
-                setFriendUsername("");
-              }}
-              className="gap-1.5 shadow-primary/30"
-            >
-              <UserCheck className="h-4 w-4" />
-              <span>Send Request</span>
-            </Button>
-          </div>
+        <Swords className="h-3.5 w-3.5" aria-hidden />
+        Play
+      </Link>
+
+      {confirming ? (
+        <div className="flex items-center gap-1">
+          <Button size="sm" variant="destructive" onClick={onRemove}>
+            Remove
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+            Cancel
+          </Button>
         </div>
-      </Dialog>
+      ) : (
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => setConfirming(true)}
+          aria-label={`Remove ${friend.displayName}`}
+        >
+          <X className="h-4 w-4" aria-hidden />
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function RequestRow({
+  request,
+  onAccept,
+  onDecline,
+  pending = false,
+}: {
+  request: FriendRequest;
+  onAccept?: () => void;
+  onDecline: () => void;
+  pending?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
+      <Avatar profile={request} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-foreground">{request.displayName}</p>
+        <p className="truncate text-xs text-muted-foreground">@{request.username}</p>
+      </div>
+
+      {pending ? (
+        <>
+          <Badge variant="outline" className="text-[10px]">
+            Waiting
+          </Badge>
+          <Button size="sm" variant="ghost" onClick={onDecline}>
+            Withdraw
+          </Button>
+        </>
+      ) : (
+        <div className="flex items-center gap-1">
+          <Button size="sm" className="gap-1.5" onClick={onAccept}>
+            <Check className="h-3.5 w-3.5" aria-hidden />
+            Accept
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onDecline} aria-label="Decline">
+            <X className="h-4 w-4" aria-hidden />
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Empty({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="mt-6 flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
+      <Users className="h-8 w-8 text-muted-foreground" aria-hidden />
+      <p className="font-display text-lg font-bold text-foreground">{title}</p>
+      <p className="max-w-sm text-sm text-muted-foreground">{body}</p>
     </div>
   );
 }

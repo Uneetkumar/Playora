@@ -10,9 +10,12 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "test:e2e": "playwright test",
-    "clean": "rimraf .next dist"
+    "clean": "rimraf .next dist",
+    "build:stable": "PLAYORA_STABLE=1 next build",
+    "start:stable": "PLAYORA_STABLE=1 next start --port 3000"
   },
   "dependencies": {
+    "@playora/audio": "workspace:*",
     "@playora/auth": "workspace:*",
     "@playora/bot-engine": "workspace:*",
     "@playora/database": "workspace:*",

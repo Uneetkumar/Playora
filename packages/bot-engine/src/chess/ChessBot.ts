@@ -1,7 +1,7 @@
 import { Chess, type Move } from "chess.js";
 import type { ChessAction, ChessGameState } from "@playora/game-engine";
 import type { GameId } from "@playora/game-types";
-import { AI_LEVELS, type AiLevel, type BotEngine } from "../types.js";
+import { AI_LEVELS, type AiLevel, type BotEngine, type RandomSource } from "../types.js";
 import { MATE_SCORE, evaluate, pieceValue } from "./evaluation.js";
 
 interface LevelProfile {
@@ -33,8 +33,6 @@ const PROFILES: Record<AiLevel, LevelProfile> = {
   6: { depth: 4, budgetMs: 800, blunderChance: 0, thinkMs: 1000 },
   7: { depth: 5, budgetMs: 1500, blunderChance: 0, thinkMs: 1200 },
 };
-
-export type RandomSource = () => number;
 
 /**
  * Deterministic chess AI: alpha-beta search over a material and piece-square

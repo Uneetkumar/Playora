@@ -86,45 +86,120 @@ export function RuleAlert({ card }: { card: UnoCard | null }) {
   );
 }
 
-/** Opponent hand: fanned card backs, so their count is legible at a glance. */
+/**
+ * Geometry for a held hand.
+ *
+ * Cards sit upright and overlap heavily, each showing roughly its left third —
+ * the way a hand of cards actually looks when you hold it squared up. An arced
+ * fan was the wrong reference: it spreads the cards out and reads as a row of
+ * tiles rather than a hand.
+ */
+export function stackOffset(
+  index: number,
+  total: number,
+  cardWidth: number,
+  maxWidth = 620,
+): { x: number; zIndex: number } {
+  // Show ~40% of each card, tightening as the hand grows so it still fits.
+  const ideal = cardWidth * 0.42;
+  const step = total > 1 ? Math.min(ideal, (maxWidth - cardWidth) / (total - 1)) : 0;
+  const totalWidth = (total - 1) * step + cardWidth;
+  return { x: index * step - totalWidth / 2 + cardWidth / 2, zIndex: index };
+}
+
+export function stackWidth(total: number, cardWidth: number, maxWidth = 620): number {
+  const ideal = cardWidth * 0.42;
+  const step = total > 1 ? Math.min(ideal, (maxWidth - cardWidth) / (total - 1)) : 0;
+  return (total - 1) * step + cardWidth;
+}
+
+/**
+ * An opponent's hand: face-down cards in the same squared-up stack.
+ *
+ * The count is public information and the faces are not — the engine only sends
+ * a number for other players (spec sections 5, 64), so nothing here could leak
+ * even if the markup were inspected.
+ */
 export function OpponentHand({
   count,
-  size = "xs",
-  max = 9,
+  size = "sm",
+  max = 12,
 }: {
   count: number;
   size?: CardSize;
   max?: number;
 }) {
   const shown = Math.min(count, max);
-  const spread = 14;
+  const width = { xs: 34, sm: 46, md: 66, lg: 84 }[size];
+  const height = { xs: 50, sm: 68, md: 98, lg: 124 }[size];
 
   return (
-    <div className="relative flex h-[52px] items-center justify-center" aria-hidden>
+    <div
+      className="relative"
+      style={{ width: stackWidth(shown, width, 300), height }}
+      aria-hidden
+    >
       {Array.from({ length: shown }, (_, i) => {
-        const offset = i - (shown - 1) / 2;
+        const { x, zIndex } = stackOffset(i, shown, width, 300);
         return (
           <motion.div
             key={i}
-            layout
-            initial={{ opacity: 0, y: -12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.03, duration: 0.25 }}
-            className="absolute"
-            style={{
-              transform: `translateX(${offset * spread}px) rotate(${offset * 4}deg)`,
-              zIndex: i,
+            className="absolute left-1/2 top-0"
+            style={{ zIndex }}
+            initial={{ opacity: 0, x: 0, y: -70, scale: 0.8 }}
+            animate={{ opacity: 1, x, y: 0, scale: 1 }}
+            transition={{
+              delay: Math.min(i, 12) * 0.06,
+              type: "spring",
+              stiffness: 280,
+              damping: 24,
             }}
           >
-            <UnoCardFace faceDown size={size} />
+            <div style={{ marginLeft: -width / 2 }}>
+              <UnoCardFace faceDown size={size} />
+            </div>
           </motion.div>
         );
       })}
-      {count > max && (
-        <span className="absolute -bottom-1 right-0 numeric rounded-full bg-card px-1.5 text-[10px] text-muted-foreground">
-          +{count - max}
+    </div>
+  );
+}
+
+/** Current colour, shown as a diamond the way the physical game marks it. */
+export function ColorDiamond({ color, label }: { color: string; label: string }) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <span
+        className="block h-9 w-9 rotate-45 rounded-[6px] shadow-raised"
+        style={{ background: color }}
+        aria-hidden
+      />
+      {/* Named as well as coloured (spec section 32). */}
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+/** Play direction, so a Reverse is legible after the banner clears. */
+export function DirectionMark({ direction }: { direction: 1 | -1 }) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <motion.span
+        key={direction}
+        initial={{ rotate: direction === 1 ? -90 : 90, opacity: 0 }}
+        animate={{ rotate: 0, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 260, damping: 20 }}
+        className="flex h-9 w-9 rotate-45 items-center justify-center rounded-[6px] bg-primary shadow-raised"
+      >
+        <span className="-rotate-45 text-lg font-black leading-none text-white">
+          {direction === 1 ? "›" : "‹"}
         </span>
-      )}
+      </motion.span>
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {direction === 1 ? "Forward" : "Reversed"}
+      </span>
     </div>
   );
 }
@@ -143,7 +218,6 @@ export function DiscardPile({ cards, size = "lg" }: { cards: UnoCard[]; size?: C
         return (
           <motion.div
             key={card.id}
-            layoutId={`card-${card.id}`}
             initial={isTop ? { scale: 1.15, y: -30, opacity: 0.85 } : false}
             animate={{ scale: 1, y: 0, opacity: 1, rotate: tilt }}
             transition={{ type: "spring", stiffness: 320, damping: 26 }}
@@ -210,4 +284,68 @@ export function DrawPile({
       </span>
     </button>
   );
+}
+
+/**
+ * A card in flight from a player to the discard pile.
+ *
+ * Rendered as an overlay rather than relying on a shared `layoutId`: the card
+ * leaves one component (a hand) and arrives in another (the pile), and across
+ * that boundary an explicit flight is far more reliable — and it is the only
+ * way to show an *opponent* throwing, since their cards were never in the DOM.
+ */
+export function CardFlight({
+  card,
+  from,
+  onDone,
+}: {
+  card: UnoCard | null;
+  /** Start offset from the pile, in pixels. */
+  from: { x: number; y: number } | null;
+  onDone: () => void;
+}) {
+  const reduced = useReducedMotion();
+
+  return (
+    <AnimatePresence onExitComplete={onDone}>
+      {card && from && (
+        <motion.div
+          key={card.id}
+          className="pointer-events-none absolute left-1/2 top-1/2 z-30"
+          initial={
+            reduced
+              ? { opacity: 0 }
+              : { x: from.x - 42, y: from.y - 62, scale: 0.85, rotate: from.x > 0 ? 18 : -18, opacity: 0 }
+          }
+          animate={
+            reduced
+              ? { opacity: 0 }
+              : { x: -42, y: -62, scale: 1, rotate: 0, opacity: 1 }
+          }
+          exit={{ opacity: 0 }}
+          transition={{ type: "spring", stiffness: 210, damping: 24, mass: 0.7 }}
+          onAnimationComplete={() => {
+            // Hand off to the settled pile card once it lands.
+            if (!reduced) setTimeout(onDone, 60);
+          }}
+        >
+          <UnoCardFace card={card} size="lg" />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/**
+ * Where a player's cards fly from, relative to the centre of the table.
+ * Opponents are spread along the top; the local player throws from below.
+ */
+export function flightOrigin(
+  seatIndex: number | null,
+  opponentCount: number,
+): { x: number; y: number } {
+  if (seatIndex === null) return { x: 0, y: 300 }; // the local player
+  const spread = 170;
+  const offset = seatIndex - (opponentCount - 1) / 2;
+  return { x: offset * spread, y: -230 };
 }
