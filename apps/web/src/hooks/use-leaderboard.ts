@@ -5,7 +5,14 @@ import { getSupabaseBrowserClient } from "../lib/supabase/client";
 import { isSupabaseConfigured } from "../lib/env";
 import { queryKeys } from "../lib/query/keys";
 
-export type LeaderboardScope = "global" | "friends";
+/**
+ * Which population a board ranks.
+ *
+ * "season" is a different table rather than a filter: season standing lives in
+ * `season_ratings` and starts from a soft reset, so it is genuinely a separate
+ * ladder from the all-time one and not a date-bounded view of it.
+ */
+export type LeaderboardScope = "global" | "friends" | "season";
 
 export interface LeaderboardEntry {
   rank: number;
@@ -35,6 +42,9 @@ interface RatingRow {
 
 const SELECT =
   "user_id,rating,peak_rating,games_played,wins,losses,draws,profiles!inner(username,display_name,avatar_url)";
+
+/** Games needed before a player appears on a season board. */
+const SEASON_MINIMUM = 10;
 
 export interface LeaderboardOptions {
   gameSlug: string;
@@ -69,6 +79,38 @@ export function useLeaderboard(
         .limit(1);
       const gameId = (gameRow as Array<{ id: string }> | null)?.[0]?.id;
       if (!gameId) return { entries: [], me: null };
+
+      // The season board reads its own table, and shows nothing at all rather
+      // than falling back to all-time standings if there is no active season —
+      // silently showing the wrong ladder under a "Season" tab is worse than
+      // showing an empty one.
+      if (scope === "season") {
+        const now = new Date().toISOString();
+        const { data: seasonRow } = await supabase
+          .from("seasons")
+          .select("id")
+          .lte("starts_at", now)
+          .gt("ends_at", now)
+          .limit(1);
+        const seasonId = (seasonRow as Array<{ id: string }> | null)?.[0]?.id;
+        if (!seasonId) return { entries: [], me: null };
+
+        const { data: seasonRows, error: seasonError } = await supabase
+          .from("season_ratings")
+          .select(SELECT)
+          .eq("season_id", seasonId)
+          .eq("game_id", gameId)
+          .gte("games_played", SEASON_MINIMUM)
+          .order("rating", { ascending: false })
+          .limit(limit);
+
+        if (seasonError) throw new Error(seasonError.message);
+
+        const seasonEntries = ((seasonRows ?? []) as unknown as RatingRow[]).map((row, i) =>
+          toEntry(row, i + 1, userId),
+        );
+        return { entries: seasonEntries, me: null };
+      }
 
       let ids: string[] | null = null;
       if (scope === "friends") {

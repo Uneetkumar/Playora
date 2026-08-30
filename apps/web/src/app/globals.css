@@ -154,3 +154,30 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+@layer base {
+  /*
+   * Cinematic guard.
+   *
+   * GSAP is loaded on demand, so for the frame between mount and the timeline
+   * setting its opening state, a participating element would otherwise paint at
+   * its final position and then snap back. This hides them for exactly that
+   * frame. `runCinematic` clears the attribute on every path it can take —
+   * success, reduced motion, load failure, timeout and unmount — so nothing
+   * here can leave content permanently invisible.
+   */
+  [data-cinematic="pending"] [data-cine] {
+    opacity: 0;
+  }
+
+  /*
+   * Someone who asked for less motion never reaches the JavaScript that clears
+   * the guard on a slow device before first paint, so the preference disables
+   * the guard outright rather than relying on timing.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    [data-cinematic="pending"] [data-cine] {
+      opacity: 1;
+    }
+  }
+}

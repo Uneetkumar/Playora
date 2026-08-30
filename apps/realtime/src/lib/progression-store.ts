@@ -4,6 +4,7 @@ import {
   evaluateAchievements,
   isRated,
   levelForXp,
+  seasonStartRating,
   xpForMatch,
   type AchievementContext,
   type Outcome,
@@ -62,6 +63,15 @@ export class SupabaseProgressionStore {
     this.fetchImpl = fetchImpl ?? globalThis.fetch.bind(globalThis);
   }
 
+  /**
+   * The active season, looked up once per instance.
+   *
+   * `undefined` means "not asked yet"; `null` means "asked, and there is no
+   * active season". The two must stay distinct or every match would re-query
+   * on a platform that happens to be between seasons.
+   */
+  private activeSeason: { id: string } | null | undefined;
+
   private get base(): string {
     return this.supabaseUrl.replace(/\/+$/, "");
   }
@@ -83,6 +93,44 @@ export class SupabaseProgressionStore {
     if (!res.ok) return null;
     const text = await res.text();
     return text ? (JSON.parse(text) as T) : null;
+  }
+
+  /**
+   * An upsert that names its conflict target and does not fail quietly.
+   *
+   * Both halves of that matter, and both were learned the hard way. PostgREST
+   * resolves `merge-duplicates` against the primary key unless told otherwise,
+   * and these tables have a surrogate `id` that never collides — so without an
+   * explicit `on_conflict` every write after a player's first hit the composite
+   * unique constraint and returned 409. Because the response was never checked,
+   * the failure was invisible: rating_history filled up with deltas while the
+   * rating itself stayed frozen at whatever the first match set it to.
+   */
+  private async upsert(
+    table: string,
+    onConflict: string,
+    body: unknown,
+    context: Record<string, unknown>,
+  ): Promise<boolean> {
+    const res = await this.fetchImpl(
+      `${this.base}/rest/v1/${table}?on_conflict=${onConflict}`,
+      {
+        method: "POST",
+        headers: this.headers({ Prefer: "resolution=merge-duplicates,return=minimal" }),
+        body: JSON.stringify(body),
+      },
+    );
+
+    if (!res.ok) {
+      log.error("progression.upsert_failed", {
+        table,
+        status: res.status,
+        body: await res.text().catch(() => ""),
+        ...context,
+      });
+      return false;
+    }
+    return true;
   }
 
   async apply(params: {
@@ -139,7 +187,7 @@ export class SupabaseProgressionStore {
         });
         rating = change.after;
 
-        await this.fetchImpl(`${this.base}/rest/v1/rating_history`, {
+        const historyRes = await this.fetchImpl(`${this.base}/rest/v1/rating_history`, {
           method: "POST",
           headers: this.headers({ Prefer: "return=minimal" }),
           body: JSON.stringify({
@@ -152,9 +200,21 @@ export class SupabaseProgressionStore {
             outcome: player.outcome,
           }),
         });
+
+        if (!historyRes.ok) {
+          // Not fatal — the rating itself is written separately below — but it
+          // leaves a gap in the rating chart, and a silent gap is one nobody
+          // goes looking for.
+          log.error("progression.history_write_failed", {
+            userId: player.userId,
+            gameId: params.gameId,
+            status: historyRes.status,
+          });
+        }
       }
 
       await this.upsertRating(player, params.gameId, rating, rated);
+      if (rated) await this.upsertSeasonRating(player, params.gameId, opponents, ratingBefore);
       const xp = await this.awardXp(player, params.result.durationSeconds, rated);
       if (xp) {
         const unlockedAchievements = await this.awardAchievements(player, {
@@ -202,10 +262,10 @@ export class SupabaseProgressionStore {
     );
     const row = existing?.[0];
 
-    await this.fetchImpl(`${this.base}/rest/v1/game_ratings`, {
-      method: "POST",
-      headers: this.headers({ Prefer: "resolution=merge-duplicates,return=minimal" }),
-      body: JSON.stringify({
+    await this.upsert(
+      "game_ratings",
+      "user_id,game_id",
+      {
         user_id: player.userId,
         game_id: gameId,
         rating,
@@ -215,9 +275,111 @@ export class SupabaseProgressionStore {
         losses: (row?.losses ?? 0) + (player.outcome === "loss" ? 1 : 0),
         draws: (row?.draws ?? 0) + (player.outcome === "draw" ? 1 : 0),
         updated_at: new Date().toISOString(),
-      }),
-    });
+      },
+      { userId: player.userId, gameId },
+    );
     void rated;
+  }
+
+  /**
+   * The season a result counts towards, or null if there is not one.
+   *
+   * Asked of the database rather than computed from a config constant, because
+   * the season boundary has to be the same one the leaderboard reads. Two
+   * places deciding independently when Season One ended is how a match lands in
+   * a season nobody is looking at.
+   */
+  private async currentSeason(): Promise<{ id: string } | null> {
+    if (this.activeSeason !== undefined) return this.activeSeason;
+
+    const now = new Date().toISOString();
+    const rows = await this.json<Array<{ id: string }>>(
+      `/rest/v1/seasons?select=id&starts_at=lte.${now}&ends_at=gt.${now}&limit=1`,
+    );
+    this.activeSeason = rows?.[0] ?? null;
+    return this.activeSeason;
+  }
+
+  /**
+   * Applies the result to the season ladder, which is its own Elo pool.
+   *
+   * Deliberately a second Elo pass rather than copying the all-time delta
+   * across. A delta is a function of the gap between two ratings, and the gap
+   * on the season ladder is not the gap on the all-time one -- borrowing the
+   * number would make the season table a distorted shadow of the all-time table
+   * instead of a standing in its own right, which is the one thing seasons
+   * exist to provide.
+   *
+   * A player's first result in a season seeds their row from a soft reset of
+   * their all-time rating. That is a better starting guess than 1200 for anyone
+   * who has played before, and it needs no lookup into a previous season, so it
+   * works identically for season one and season nine.
+   */
+  private async upsertSeasonRating(
+    player: Participant,
+    gameId: string,
+    opponents: Participant[],
+    allTimeRating: number,
+  ): Promise<void> {
+    const season = await this.currentSeason();
+    if (!season) return;
+
+    const ids = [player.userId, ...opponents.map((o) => o.userId)];
+    const rows =
+      (await this.json<
+        Array<{
+          user_id: string;
+          rating: number;
+          peak_rating: number;
+          games_played: number;
+          wins: number;
+          losses: number;
+          draws: number;
+        }>
+      >(
+        `/rest/v1/season_ratings?season_id=eq.${season.id}&game_id=eq.${gameId}` +
+          `&user_id=in.(${ids.join(",")})` +
+          `&select=user_id,rating,peak_rating,games_played,wins,losses,draws`,
+      )) ?? [];
+
+    const byUser = new Map(rows.map((r) => [r.user_id, r]));
+    const mine = byUser.get(player.userId);
+    const seed = seasonStartRating(allTimeRating);
+    let rating = mine?.rating ?? seed;
+
+    const opponentRatings = opponents.map(
+      (o) => byUser.get(o.userId)?.rating ?? seasonStartRating(null),
+    );
+
+    if (opponentRatings.length > 0) {
+      const average = Math.round(
+        opponentRatings.reduce((a, b) => a + b, 0) / opponentRatings.length,
+      );
+      rating = applyRating({
+        rating,
+        gamesPlayed: mine?.games_played ?? 0,
+        opponentRating: average,
+        outcome: player.outcome,
+      }).after;
+    }
+
+    await this.upsert(
+      "season_ratings",
+      "season_id,user_id,game_id",
+      {
+        season_id: season.id,
+        user_id: player.userId,
+        game_id: gameId,
+        rating,
+        peak_rating: Math.max(rating, mine?.peak_rating ?? rating),
+        games_played: (mine?.games_played ?? 0) + 1,
+        wins: (mine?.wins ?? 0) + (player.outcome === "win" ? 1 : 0),
+        losses: (mine?.losses ?? 0) + (player.outcome === "loss" ? 1 : 0),
+        draws: (mine?.draws ?? 0) + (player.outcome === "draw" ? 1 : 0),
+        updated_at: new Date().toISOString(),
+      },
+      { userId: player.userId, gameId, seasonId: season.id },
+    );
   }
 
   private async awardXp(
@@ -259,7 +421,7 @@ export class SupabaseProgressionStore {
     // A streak counts consecutive wins; any other result ends it.
     const streak = player.outcome === "win" ? p.current_streak + 1 : 0;
 
-    await this.fetchImpl(`${this.base}/rest/v1/profiles?id=eq.${player.userId}`, {
+    const patchRes = await this.fetchImpl(`${this.base}/rest/v1/profiles?id=eq.${player.userId}`, {
       method: "PATCH",
       headers: this.headers({ Prefer: "return=minimal" }),
       body: JSON.stringify({
@@ -274,6 +436,20 @@ export class SupabaseProgressionStore {
         last_played_at: new Date().toISOString(),
       }),
     });
+
+    if (!patchRes.ok) {
+      // Returning null costs this player their result animation, and that is
+      // the right trade. The numbers below are what the client counts up on
+      // the result screen, and reporting an XP gain that was never written
+      // shows the player a level-up they do not have — worse than showing
+      // nothing, because they only find out it was false later.
+      log.error("progression.xp_write_failed", {
+        userId: player.userId,
+        status: patchRes.status,
+        body: await patchRes.text().catch(() => ""),
+      });
+      return null;
+    }
 
     const totalsAfter = {
       gamesPlayed: p.total_games_played + 1,

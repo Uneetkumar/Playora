@@ -28,4 +28,7 @@ export const queryKeys = {
   achievements: (userId: string | null | undefined) => ["achievements", userId] as const,
 
   friends: (userId: string | null | undefined) => ["friends", userId] as const,
+
+  season: (gameSlug: string | null, userId: string | null | undefined) =>
+    ["season", gameSlug, userId] as const,
 } as const;

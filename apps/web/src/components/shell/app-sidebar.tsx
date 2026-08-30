@@ -3,10 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
+import { useAuthStore } from "../../lib/store/auth-store";
+import { useStaffRole } from "../../hooks/use-staff";
 import { cn } from "@playora/ui";
 import {
   History,
   Award,
+  ShieldAlert,
   Home, Clock, Sparkles, Flame, Swords, Users, Trophy,
   Gamepad2, Zap, User, Settings,
 } from "lucide-react";
@@ -41,6 +44,10 @@ export function AppSidebar() {
   const pathname = usePathname();
   const search = useSearchParams();
   const [expanded, setExpanded] = React.useState(false);
+  // Shown only to staff. Not a security measure — every admin table enforces
+  // access in Postgres (migration 00008) — just a link nobody else needs.
+  const { user } = useAuthStore();
+  const { isStaff } = useStaffRole(user?.id);
 
   /**
    * Whether a row is the current page.
@@ -121,6 +128,7 @@ export function AppSidebar() {
         {ITEMS.map((item) => (
           <Row key={item.href} {...item} />
         ))}
+        {isStaff && <Row href="/admin" label="Staff" icon={ShieldAlert} />}
       </nav>
 
       <div className="my-3 mx-3 border-t border-border" />

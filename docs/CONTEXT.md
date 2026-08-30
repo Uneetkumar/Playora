@@ -126,6 +126,9 @@ Start the Worker with `pnpm --filter @playora/realtime dev`, then:
 | `node scripts/verify-rematch.mjs` | rematch needs both votes, deals a fresh session (8) |
 | `node scripts/verify-history.mjs` | match history filter and rating history (11) |
 | `node scripts/verify-leaderboard.mjs` | leaderboard ordering and counted rank (7) |
+| `node scripts/verify-admin.mjs` | staff roles, reports and the moderation audit trail (16) |
+| `node scripts/verify-seasons.mjs` | season standings, overlap, and closing (20) |
+| `node scripts/verify-progression-accrual.mjs` | three real matches, same accounts: rating, XP, streak and season all accrue (15) — needs the Worker on :8787 |
 | `node scripts/verify-achievements.mjs` | achievements awarded server-side; clients cannot self-award (8) |
 | `node scripts/verify-friends.mjs` | friendship RLS, including every negative (10) |
 | `node scripts/verify-racing-online.mjs` | the server owns the race clock; clients cannot tick or teleport (22) |
@@ -689,11 +692,11 @@ Nothing below exists yet. Ordered by what unblocks the most.
 | ~~**Sentry + PostHog**~~ | ✅ `packages/analytics` — the §80 event list as a closed union, 8 tests. Both SDKs load dynamically and only when a key is set, so a fresh clone ships neither. Autocapture and session recording are off: nothing records what people type or say. |
 | ~~**TanStack Query**~~ | ✅ Six hooks migrated — progression, match history, match detail, recent matches, leaderboard, achievements, friends. Keys live in `lib/query/keys.ts` so two files cannot cache the same data under different names. The client is created in a ref, not at module scope: a module-level client is shared across server requests and leaks one visitor's cache into another's page. |
 | ~~**Cloudflare Queues**~~ | ✅ `lib/match-queue.ts` + `handlers/match-consumer.ts`. The room enqueues and returns; without a queue binding the identical work runs inline, because Queues need a paid plan and a match must never go unrecorded because billing is not configured. Producer/consumer config is written but commented in `wrangler.toml`. 5 tests. |
-| **Admin panel** | Moderation is mandatory because chat and voice exist (§77). |
+| ~~**Admin panel**~~ | 🟨 Dashboard and the report queue with moderation actions are built, on migration `00008`. **Roles deliberately do not live on `profiles`**: migration 00002 lets a user update their own profile row, so a `role` column there would be writable by its own subject and any player could make themselves an administrator. `user_roles` has no client-writable policy at all. Verified by `scripts/verify-admin.mjs`, 16/16 — nearly all negatives. Remaining sections from §78: users, games, rooms, matches, matchmaking, system health, configuration. |
 | **LiveKit voice** | Needs a LiveKit project and credentials from Uneet. |
 | **Rive** | Needs authored `.riv` files, which are a design deliverable, not code. |
-| **GSAP** | Cinematics only; least load-bearing of the list. |
-| **Seasons** | Architecture exists (per-game ratings); wants a schema decision first. |
+| ~~**GSAP**~~ | ✅ `packages/animation/src/cinematic.ts` — GSAP for the one thing Motion handles badly: a sequence of eight or ten elements timed relative to each other. **Motion stays the default and nothing built with it was replaced.** Loaded on demand (three lazy chunks, nothing in the 106 kB shared bundle), so a player who never reaches a cinematic never downloads it. Applied to the race result. 10 tests, all about the same property: the content ends up visible on every path — reduced motion, load failure, a builder that throws, a timeout, unmount, and a backgrounded tab. |
+| ~~**Seasons**~~ | ✅ Migration `00009`. The decision that was blocking it: **a season does not reset `game_ratings`.** Season standings live in their own `season_ratings` rows seeded from a soft reset, so "how good is this player" and "how are they doing now" stay two answerable questions — overwriting the first to express the second destroys the only long-run skill record we hold, and it is not recoverable. `close_season()` is idempotent and revoked from `anon`/`authenticated`. Season One runs to 2026-11-28. Verified by `scripts/verify-seasons.mjs`, 20/20. |
 
 ## 12. Next Action
 
@@ -730,6 +733,31 @@ Play vs AI. Works offline, no account.
    "empty" rather than broken, which is how it survived.
 6. **`eslint-plugin-react-hooks` was never installed.** Once enabled it found
    exactly one violation, in the hook responsible for all three reconnect bugs.
+7. **`reports` had RLS enabled and no policies**, same shape as (5). Found
+   while building the admin panel.
+8. **No player's rating had ever advanced past their first match.** Both rating
+   upserts posted `Prefer: resolution=merge-duplicates` with no `on_conflict`
+   target. PostgREST defaults that to the primary key, and `game_ratings` has a
+   surrogate `id` that never collides, so every write after the first fell
+   through to the composite unique constraint and returned **409**. Nothing
+   checked the response, so it was silent: `rating_history` filled with deltas
+   the rating row never received. Live data confirmed it — 15 rating rows, max
+   `games_played` of 1. Fixed by naming the conflict target and routing both
+   upserts through a checked helper that logs failures. Five tests in
+   `apps/realtime/test/progression-store.test.ts` pin it.
+
+   The general lesson, worth remembering before the next upsert: **a PostgREST
+   upsert against a table whose uniqueness is composite must name
+   `on_conflict`,** and a write whose response is discarded is a write that can
+   fail for months without anyone noticing.
+
+   It also survived because **every existing check played exactly one match per
+   account.** `scripts/verify-progression-accrual.mjs` now plays the same two
+   accounts three times, which is the only shape of test that could have caught
+   it. The audit that followed found two more unchecked writes: `rating_history`
+   (a silent gap in the rating chart) and the XP `PATCH` — the second reported
+   XP and level-ups to the result screen whether or not the write landed, so it
+   now returns nothing rather than animate a level the player does not have.
 
 **Built**
 - Match result screens (rating count-up, XP bar, level-up, streak, unlocked

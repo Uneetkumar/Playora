@@ -42,14 +42,14 @@ Add items anywhere; renumbering is fine.
 | 27 | **Sentry + PostHog** wiring (spec §24, §77). | ⬜ | S |
 | 28 | **Finish the `game-ui-design` skill** — written and structurally valid, but all six evaluation agents died on a session limit, so it is untested. | ⬜ | M |
 | 29 | **Same-wifi play via QR** — WebRTC with QR signalling. Deferred by decision D4 to be built last. | ⬜ | L |
-| 30 | **Seasons / ranked** (spec §15). | ⬜ | L |
+| 30 | **Seasons / ranked** (spec §15). Migration `00009`, own ladder, soft reset, idempotent close. | ✅ | L |
 | 31 | **Voice via LiveKit** (spec §26). | ⬜ | L |
 | 32 | **Admin panel** — dashboard, users, rooms, matches, reports, moderation (pack 43–49). | ⬜ | XL |
 | 33 | **Remove deprecated `profiles.rating`** once nothing reads it. | ⬜ | XS |
 | 36 | **Presence and notifications** — a friend's online/in-game status, and an alert when a request or invite arrives. Needs a presence channel; nothing tracks it today, and the friends page says so rather than showing everyone as offline. | ⬜ | M |
 | 39 | **Career ladder for the other games** — racing has eight unlockable levels per game; chess and UNO have no equivalent single-player progression. | ⬜ | M |
 | 40 | **Race progress is per-device** — the career ladder lives in localStorage because offline races are deliberately unrated and never written to the server. Signing in on another machine restarts the ladder. Storing it on the account would need a decision about whether offline play counts. | ⬜ | S |
-| 43 | **Spec v2 gaps** — done: animation tokens (§6), Sentry + PostHog, TanStack Query, Cloudflare Queues. Remaining: admin panel, LiveKit voice (needs credentials), Rive (needs authored `.riv` files), GSAP cinematics, seasons. | 🟨 | L |
+| 43 | **Spec v2 gaps** — done: animation tokens (§6), Sentry + PostHog, TanStack Query, Cloudflare Queues, admin dashboard + moderation (§77–79), seasons (§15), GSAP cinematics. Remaining: the other §78 admin sections, LiveKit voice (needs credentials), Rive (needs authored `.riv` files). | 🟨 | L |
 | 41 | **Racing UI pack — remaining screens** — the design pack (`~/Downloads/PLAYORA_RACING_UI_PACK`) also specifies vehicle selection and customization (paint, wheels, spoilers, exhaust, tyres, performance stats), a track-select screen, an in-race settings overlay with Controls/Audio/Graphics/Gameplay tabs, in-race chat/voice/connection indicators, on-screen touch steering for mobile, and a bike trick system. None of these exist. | ⬜ | L |
 | 42 | **Race result screen to the design** — results currently reuse the generic MatchResult plus a level card. The pack specifies placement, race time, best lap, XP and rating change, with Play Again / Replay / Home. | ⬜ | M |
 | 37 | **Client-side prediction for racing** — the online race interpolates between server snapshots, which costs about 120 ms of input latency. Prediction plus reconciliation would remove it; the engine already carries `lastInputSeq` for exactly that, so no protocol change is needed. | ⬜ | M |

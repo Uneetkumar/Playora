@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { CINEMATIC } from "@playora/animation";
+import { useCinematic } from "../../hooks/use-cinematic";
 import { Button, cn } from "@playora/ui";
 import type { PlayerProgressionPayload } from "@playora/protocol";
 import { Trophy, RotateCcw, ChevronRight, Home, Flag, Timer, Coins } from "lucide-react";
@@ -60,7 +61,6 @@ export function RaceResult({
   onExit,
   exitLabel = "Back to lobby",
 }: RaceResultProps) {
-  const reduced = useReducedMotion();
   const won = place === 1;
   const podium = place <= 3;
 
@@ -78,15 +78,42 @@ export function RaceResult({
       ? "text-success"
       : "text-muted-foreground";
 
-  const spring = reduced
-    ? { duration: 0 }
-    : { type: "spring" as const, stiffness: 220, damping: 22 };
+  /*
+   * The finish, as one sequence.
+   *
+   * Every step below used to be a `delay` on an individual element, which meant
+   * the shape of the moment was only visible by reading eight components and
+   * adding numbers up. Written as a timeline, inserting a step re-times what
+   * follows automatically instead of by hand.
+   *
+   * Nothing here is load-bearing: `runCinematic` guarantees the content is
+   * revealed whether or not GSAP ever arrives.
+   */
+  const cinematic = useCinematic(
+    ({ gsap, root, select }) => {
+      const timeline = gsap.timeline({ defaults: { ease: CINEMATIC.ease.out } });
+      const d = CINEMATIC.duration;
+
+      timeline
+        .fromTo(root, { opacity: 0, y: 14, scale: 0.98 }, { opacity: 1, y: 0, scale: 1, duration: d.emphasis })
+        .fromTo(select("trophy"), { opacity: 0, scale: 0.4, rotate: -14 }, { opacity: 1, scale: 1, rotate: 0, duration: d.emphasis, ease: "back.out(2)" }, "-=0.18")
+        .fromTo(select("place"), { opacity: 0, scale: 1.35 }, { opacity: 1, scale: 1, duration: d.emphasis }, won ? "-=0.24" : "-=0.12")
+        .fromTo(select("headline"), { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: d.normal }, "-=0.20")
+        .fromTo(select("stars"), { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: d.normal, ease: "back.out(2)" }, "-=0.12")
+        // The stat rows arrive in order, capped so the last one is not still
+        // appearing after the player has read the first.
+        .fromTo(select("stat"), { opacity: 0, x: -8 }, { opacity: 1, x: 0, duration: d.fast, stagger: 0.045 }, "-=0.10")
+        .fromTo(select("note"), { opacity: 0 }, { opacity: 1, duration: d.fast }, "-=0.05")
+        .fromTo(select("actions"), { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: d.normal }, "-=0.10");
+
+      return timeline;
+    },
+    [place, won],
+  );
 
   return (
-    <motion.div
-      initial={reduced ? false : { opacity: 0, y: 14, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={spring}
+    <div
+      {...cinematic}
       className="relative mx-auto w-full max-w-md overflow-hidden rounded-3xl border border-border bg-card shadow-2xl"
       role="dialog"
       aria-label={`Finished ${ordinal(place)}`}
@@ -101,30 +128,26 @@ export function RaceResult({
 
       <div className="relative px-6 pb-5 pt-7 text-center">
         {won && (
-          <motion.div
-            initial={reduced ? false : { scale: 0.4, rotate: -14, opacity: 0 }}
-            animate={{ scale: 1, rotate: 0, opacity: 1 }}
-            transition={reduced ? { duration: 0 } : { ...spring, delay: 0.1 }}
-          >
+          <div data-cine="trophy">
             <Trophy className="mx-auto h-12 w-12 text-warning" aria-hidden />
-          </motion.div>
+          </div>
         )}
 
-        <div className={cn("mt-2 font-display text-6xl font-black leading-none", accent)}>
+        <div data-cine="place" className={cn("mt-2 font-display text-6xl font-black leading-none", accent)}>
           {place}
           <span className="text-3xl align-super">
             {ordinal(place).replace(String(place), "")}
           </span>
         </div>
-        <p className={cn("mt-1 font-display text-xl font-black tracking-wide", accent)}>
+        <p data-cine="headline" className={cn("mt-1 font-display text-xl font-black tracking-wide", accent)}>
           {headline}
         </p>
         {levelName && (
-          <p className="mt-1 text-xs text-muted-foreground">{levelName}</p>
+          <p data-cine="headline" className="mt-1 text-xs text-muted-foreground">{levelName}</p>
         )}
 
         {stars !== undefined && (
-          <div className="mt-3 flex justify-center">
+          <div data-cine="stars" className="mt-3 flex justify-center">
             <Stars earned={stars} size="lg" />
           </div>
         )}
@@ -169,19 +192,19 @@ export function RaceResult({
         </dl>
 
         {!progression && (
-          <p className="mt-3 text-center text-[11px] text-muted-foreground">
+          <p data-cine="note" className="mt-3 text-center text-[11px] text-muted-foreground">
             Offline races are unrated and are not saved to your history.
           </p>
         )}
 
         {passed === false && requirement && (
-          <p className="mt-3 rounded-lg bg-destructive/10 px-3 py-2 text-center text-xs text-foreground">
+          <p data-cine="note" className="mt-3 rounded-lg bg-destructive/10 px-3 py-2 text-center text-xs text-foreground">
             {requirement}
           </p>
         )}
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-border px-6 py-4 sm:flex-row">
+      <div data-cine="actions" className="flex flex-col gap-2 border-t border-border px-6 py-4 sm:flex-row">
         {onNext ? (
           <Button className="flex-1 gap-2" onClick={onNext}>
             <ChevronRight className="h-4 w-4" aria-hidden />
@@ -201,7 +224,7 @@ export function RaceResult({
           {exitLabel}
         </Button>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -215,7 +238,7 @@ function Row({
   icon?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div data-cine="stat" className="flex items-center justify-between gap-3">
       <dt className="flex items-center gap-1.5 text-xs uppercase tracking-wider text-muted-foreground">
         {icon}
         {label}

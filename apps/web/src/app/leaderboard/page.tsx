@@ -4,11 +4,12 @@ import * as React from "react";
 import Link from "next/link";
 import { Badge, LoadingState, cn } from "@playora/ui";
 import { rankForRating } from "@playora/progression";
-import { Trophy, Medal, Users, Globe2, Info } from "lucide-react";
+import { Trophy, Medal, Users, Globe2, Info, CalendarClock } from "lucide-react";
 import { useAuthStore } from "../../lib/store/auth-store";
 import { useLeaderboard, type LeaderboardEntry, type LeaderboardScope } from "../../hooks/use-leaderboard";
 import { GAME_CATALOG } from "../../lib/games/catalog";
 import { isGameImplemented } from "../../lib/play/modes";
+import { useSeason } from "../../hooks/use-season";
 
 const RATED_GAMES = GAME_CATALOG.filter((g) => isGameImplemented(g.id));
 
@@ -18,6 +19,7 @@ export default function LeaderboardPage() {
   const [scope, setScope] = React.useState<LeaderboardScope>("global");
 
   const { entries, me, isLoading, error } = useLeaderboard(user?.id, { gameSlug, scope });
+  const season = useSeason(user?.id, gameSlug);
   const activeGame = RATED_GAMES.find((g) => g.id === gameSlug);
 
   return (
@@ -50,6 +52,44 @@ export default function LeaderboardPage() {
         ))}
       </div>
 
+      {season.season && (
+        <div className="mb-4 rounded-xl border border-border bg-card/60 p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="font-display text-sm font-bold text-foreground">{season.season.name}</p>
+            <p className="text-xs font-medium text-muted-foreground">{season.remainingLabel}</p>
+          </div>
+          <div
+            className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-valuenow={Math.round(season.progress * 100)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`${season.season.name} progress`}
+          >
+            <div
+              className="h-full rounded-full bg-primary"
+              style={{ width: `${season.progress * 100}%` }}
+            />
+          </div>
+          {season.standing && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {season.standing.rank !== null ? (
+                <>
+                  You are <span className="font-semibold text-foreground">#{season.standing.rank}</span>{" "}
+                  this season at {season.standing.rating}.
+                </>
+              ) : (
+                <>
+                  {season.standing.gamesToPlacement} more rated{" "}
+                  {season.standing.gamesToPlacement === 1 ? "match" : "matches"} to be ranked this
+                  season.
+                </>
+              )}
+            </p>
+          )}
+        </div>
+      )}
+
       <div
         role="tablist"
         aria-label="Leaderboard scope"
@@ -58,6 +98,7 @@ export default function LeaderboardPage() {
         {(
           [
             { id: "global" as const, label: "Global", icon: Globe2 },
+            { id: "season" as const, label: "Season", icon: CalendarClock },
             { id: "friends" as const, label: "Friends", icon: Users },
           ]
         ).map((tab) => (
@@ -85,11 +126,19 @@ export default function LeaderboardPage() {
         <Empty title="Could not load the leaderboard" body={error} />
       ) : entries.length === 0 ? (
         <Empty
-          title={scope === "friends" ? "No ranked friends yet" : "Nobody is ranked yet"}
+          title={
+            scope === "friends"
+              ? "No ranked friends yet"
+              : scope === "season"
+                ? "Nobody has qualified this season"
+                : "Nobody is ranked yet"
+          }
           body={
             scope === "friends"
               ? "Add friends and play a rated match together — their standing will show up here."
-              : `Be the first: play a rated ${activeGame?.name ?? "game"} against another player. Matches against AI are unrated.`
+              : scope === "season"
+                ? `A season board only lists players with 10 or more rated ${activeGame?.name ?? "game"} matches, so one good run cannot outrank a whole season of play.`
+                : `Be the first: play a rated ${activeGame?.name ?? "game"} against another player. Matches against AI are unrated.`
           }
         />
       ) : (
