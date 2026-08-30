@@ -4,11 +4,26 @@ import * as React from "react";
 import Link from "next/link";
 import { buttonVariants, cn } from "@playora/ui";
 import { gameEngineRegistry } from "@playora/game-engine";
-import type { ChessPlayerView, UnoColor, UnoPlayerView } from "@playora/game-engine";
+import type { ChessPlayerView, RacingPlayerView, UnoColor, UnoPlayerView } from "@playora/game-engine";
 import type { GameId, GameResult, Player } from "@playora/game-types";
 import type { PlayerProgressionPayload } from "@playora/protocol";
 import { ChessGameView } from "../../games/chess/ChessGameView";
 import { UnoGameView } from "../../games/uno/UnoGameView";
+import dynamic from "next/dynamic";
+
+// Three.js is only needed by the two racing games, so it is kept out of the
+// bundle every other room loads.
+const OnlineRaceView = dynamic(
+  () => import("../../games/racing/OnlineRaceView").then((m) => m.OnlineRaceView),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex aspect-video w-full items-center justify-center rounded-2xl border border-border bg-[#140a2e] text-sm text-muted-foreground">
+        Building the track…
+      </div>
+    ),
+  },
+);
 import { MatchResult } from "./match-result";
 
 interface RoomGameSurfaceProps {
@@ -121,6 +136,17 @@ function GameBoard({
           onDrawCard={() => sendGameAction("DRAW_CARD", {})}
           onPass={() => sendGameAction("PASS", {})}
           onRematch={onRematch}
+        />
+      );
+
+    case "car-race":
+    case "bike-race":
+      return (
+        <OnlineRaceView
+          gameId={gameId}
+          gameState={gameState as RacingPlayerView | null}
+          currentUserId={currentUserId}
+          sendGameAction={sendGameAction}
         />
       );
 

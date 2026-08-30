@@ -30,8 +30,8 @@ Add items anywhere; renumbering is fine.
 | 16 | **Game detail page** at `/games/[slug]` — rules, your rating/rank/record, every way to play, recent matches. Hero is typographic; there is still no game artwork (#24). | ✅ | S |
 | 17 | **Achievements** — 25 achievements as pure rules in `@playora/progression`, awarded server-side after a match, `/achievements` page with locked/unlocked/points, and unlock moments on the result screen. | ✅ | M |
 | 18 | **Friends** — add by username, incoming/outgoing requests, accept/decline/remove, all enforced by RLS. **`friendships` had RLS enabled and no policies at all**, so every read returned nothing and every write was denied; fixed in migration 00007. Presence and notifications split out to #36. | ✅ | M |
-| 19 | **Car Race** — Phaser, server tick loop, snapshots, client prediction, reconciliation. Larger than the three existing games combined. | ⬜ | XL |
-| 20 | **Bike Race** — reuses Car Race's netcode and scene work; mostly physics and art. | ⬜ | M |
+| 19 | **Car Race** — 3D neon-city racer on Three.js. Server-authoritative engine at a fixed 60 Hz, deterministic seeded tracks, obstacles, coins, nitro, seven AI difficulty levels, offline vs AI and time trial, and online through a server-run race loop. | ✅ | XL |
+| 20 | **Bike Race** — the same circuits on the same engine with its own tuning: quicker off the line, thrown further by a corner, half the width, and punished much harder for a mistake. | ✅ | L |
 | 21 | **Light theme pass** — tokens exist but the light palette has never been looked at. | ⬜ | S |
 | 22 | **ESLint rule for React effect deps** — `eslint-plugin-react-hooks` was never installed; `rules-of-hooks` and `exhaustive-deps` are now errors for `apps/web` and `packages/ui`. It found exactly one violation, in the hook that caused all three reconnect bugs, and fixing it properly meant reading the session from the store instead of closing over it. | ✅ | S |
 | 23 | **Chess clock enforcement** — currently display-only; flag-fall must be decided server-side via alarms. | ⬜ | M |
@@ -46,6 +46,8 @@ Add items anywhere; renumbering is fine.
 | 32 | **Admin panel** — dashboard, users, rooms, matches, reports, moderation (pack 43–49). | ⬜ | XL |
 | 33 | **Remove deprecated `profiles.rating`** once nothing reads it. | ⬜ | XS |
 | 36 | **Presence and notifications** — a friend's online/in-game status, and an alert when a request or invite arrives. Needs a presence channel; nothing tracks it today, and the friends page says so rather than showing everyone as offline. | ⬜ | M |
+| 37 | **Client-side prediction for racing** — the online race interpolates between server snapshots, which costs about 120 ms of input latency. Prediction plus reconciliation would remove it; the engine already carries `lastInputSeq` for exactly that, so no protocol change is needed. | ⬜ | M |
+| 38 | **Racing polish** — no vehicle models beyond boxes, no particles, no skid marks, no engine audio, and the bike does not visibly lean into a corner as much as it should. | ⬜ | M |
 | 35 | **Background music** — the music bus is built and mixed but plays nothing. Needs licensed or commissioned loops per game; procedural synthesis is fine for a 40ms card flip and not fine for two minutes of menu music. | ⬜ | M |
 | 34 | **Regional leaderboard** — needs a region on `profiles`, which nothing collects today. Add the field (signup or settings, opt-in), backfill nothing, then add the scope. Split out of #13 rather than faked. | ⬜ | S |
 
@@ -59,4 +61,5 @@ Quick Match matchmaking · server-side AI for chess, UNO and No Mercy ·
 mobile bottom nav · design tokens + Playora rebrand · hover-expanding sidebar ·
 match result screens with rating/XP · rematch handshake · match history ·
 per-game leaderboards · game detail pages · achievements · friends ·
-procedural audio system · 254 tests, full gate green.
+procedural audio system · **all five games playable** — Car Race and Bike Race
+in 3D, offline and online · 309 tests, full gate green.

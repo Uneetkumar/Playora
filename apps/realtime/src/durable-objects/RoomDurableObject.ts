@@ -26,6 +26,7 @@ import { authenticateConnection } from "../handlers/auth-handler.js";
 import { applyGameAction, finishGame, startGame } from "../handlers/game-handler.js";
 import { addBot, removeBot, runBotTurns } from "../handlers/bot-handler.js";
 import { voteRematch } from "../handlers/rematch-handler.js";
+import { RaceLoop, applyRaceInput, isRealTimeGame } from "../handlers/race-handler.js";
 import type { RoomContext } from "./room-context.js";
 import {
   AUTH_DEADLINE_MS,
@@ -72,6 +73,11 @@ export class RoomDurableObject {
   private verifier: SupabaseTokenVerifier | null = null;
   private resultStore: ResultStore | null | undefined;
   private progressionStore: SupabaseProgressionStore | null | undefined;
+  /**
+   * The clock for a real-time game. Null for turn-based ones, which advance
+   * only when somebody moves.
+   */
+  private raceLoop: RaceLoop | null = null;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -244,12 +250,16 @@ export class RoomDurableObject {
       case "START_GAME":
         await startGame(ctx, ws, userId, msg.customRules);
         await runBotTurns(ctx);
+        this.syncRaceLoop();
         return;
 
       case "REMATCH": {
         const outcome = await voteRematch(ctx, ws, userId, msg.accept);
         // A rematch can hand the first move to a bot, exactly as a fresh start can.
-        if (outcome.started) await runBotTurns(ctx);
+        if (outcome.started) {
+          await runBotTurns(ctx);
+          this.syncRaceLoop();
+        }
         return;
       }
 
@@ -261,11 +271,28 @@ export class RoomDurableObject {
         await removeBot(ctx, ws, userId, msg.botId);
         return;
 
-      case "GAME_ACTION":
+      case "GAME_ACTION": {
         if (!this.allow(ws, attachment.connectionId, "gameAction")) return;
+
+        // Driving input takes a different path: it arrives many times a second
+        // and must not be broadcast, because the race loop's own snapshot is
+        // what tells everyone where the cars are.
+        if (isRealTimeGame(room.gameId) && msg.actionType === "SET_INPUT") {
+          const outcome = applyRaceInput(ctx, userId, msg.payload);
+          if (!outcome.ok) {
+            ctx.send(ws, {
+              type: "ERROR",
+              code: "ILLEGAL_MOVE",
+              message: outcome.reason ?? "That input was rejected.",
+            });
+          }
+          return;
+        }
+
         await applyGameAction(ctx, ws, userId, msg.actionType, msg.payload, msg.clientActionId);
         await runBotTurns(ctx);
         return;
+      }
 
       case "CHAT_SEND": {
         if (!this.allow(ws, attachment.connectionId, "chat")) return;
@@ -393,6 +420,10 @@ export class RoomDurableObject {
     log.info("player.left", { roomId: room.roomId, userId, reason });
 
     await this.checkAbandonment(userId);
+    // A race whose room has emptied or been abandoned must not keep a timer
+    // ticking: nothing is watching, and the Durable Object cannot hibernate
+    // while an interval is pending.
+    this.syncRaceLoop();
   }
 
   /** Awards the match when everyone but one player has forfeited their seat. */
@@ -508,6 +539,30 @@ export class RoomDurableObject {
         }
       },
     };
+  }
+
+  /**
+   * Starts or stops the race clock to match the room.
+   *
+   * Called after anything that can change whether a race is running. Keeping it
+   * in one place means there is no path that starts a race without a clock, or
+   * leaves a timer running on a room that has finished.
+   */
+  private syncRaceLoop(): void {
+    const room = this.room;
+    if (!room) return;
+
+    const shouldRun = room.status === "in_game" && isRealTimeGame(room.gameId);
+
+    if (!shouldRun) {
+      this.raceLoop?.stop();
+      return;
+    }
+
+    this.raceLoop ??= new RaceLoop(this.context(), async (result) => {
+      await finishGame(this.context(), result);
+    });
+    this.raceLoop.start();
   }
 
   private getVerifier(): SupabaseTokenVerifier {

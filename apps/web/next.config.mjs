@@ -1,9 +1,20 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  /**
+   * Where the build output goes.
+   *
+   * Two Next servers sharing one directory corrupt each other's chunks: the
+   * second to compile wins, and the first then fails to resolve vendor modules
+   * it wrote itself. So every server that runs alongside another gets its own.
+   *
+   * PLAYORA_STABLE is the "play" server, built once and served while the dev
+   * server keeps recompiling. PLAYORA_DIST_DIR is for anything else — a second
+   * dev server for visual checks, for instance.
+   */
+  distDir: process.env.PLAYORA_STABLE
+    ? ".next-stable"
+    : process.env.PLAYORA_DIST_DIR || ".next",
   reactStrictMode: true,
-  // A separate build output so a stable "play" server can be built and served
-  // without my dev server (or a `pnpm build`) clobbering it mid-session.
-  ...(process.env.PLAYORA_STABLE ? { distDir: '.next-stable' } : {}),
   // Every workspace package the app imports. Missing one means its changes are
   // silently not picked up in dev.
   transpilePackages: [

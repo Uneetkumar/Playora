@@ -3,6 +3,8 @@ import type { AnyGameEngine } from "./types.js";
 import { ChessEngine } from "./chess/ChessEngine.js";
 import { UnoEngine } from "./uno/UnoEngine.js";
 import { UnoNoMercyEngine } from "./uno/UnoNoMercyEngine.js";
+import { CarRaceEngine } from "./racing/CarRaceEngine.js";
+import { BikeRaceEngine } from "./racing/BikeRaceEngine.js";
 
 export type GameEngineFactory = () => AnyGameEngine;
 
@@ -17,6 +19,8 @@ class GameEngineRegistry {
     this.engines.set("chess", () => new ChessEngine());
     this.engines.set("uno", () => new UnoEngine());
     this.engines.set("uno-no-mercy", () => new UnoNoMercyEngine());
+    this.engines.set("car-race", () => new CarRaceEngine());
+    this.engines.set("bike-race", () => new BikeRaceEngine());
   }
 
   register(gameId: GameId, factory: GameEngineFactory): void {

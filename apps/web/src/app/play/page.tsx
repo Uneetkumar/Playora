@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Button, Card, CardContent, Badge } from "@playora/ui";
+import { Button, Card, CardContent, Badge, LoadingState } from "@playora/ui";
 import {
   Users,
   Bot,
@@ -26,6 +26,24 @@ import { ChessGameView } from "../../games/chess/ChessGameView";
 import { useLocalGame, type LocalMode } from "../../lib/local/use-local-game";
 import { useLocalUno } from "../../lib/local/use-local-uno";
 import { MatchResult } from "../../components/games/match-result";
+import dynamic from "next/dynamic";
+
+/**
+ * Three.js is around half a megabyte, and only two of the five games need it.
+ * Loading it lazily keeps it off every other page on the platform, and it can
+ * never render on the server because it needs a WebGL context.
+ */
+const RaceGameView = dynamic(
+  () => import("../../games/racing/RaceGameView").then((m) => m.RaceGameView),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex aspect-video w-full items-center justify-center rounded-2xl border border-border bg-[#140a2e]">
+        <LoadingState title="Building the track" />
+      </div>
+    ),
+  },
+);
 import { UnoGameView } from "../../games/uno/UnoGameView";
 import type { GameId } from "@playora/game-types";
 import { QuickMatch } from "../../components/play/quick-match";
@@ -74,6 +92,16 @@ function PlayPageContent() {
   );
 
   if (started) {
+    if (started.gameId === "car-race" || started.gameId === "bike-race") {
+      return (
+        <LocalRaceMatch
+          gameId={started.gameId}
+          mode={started.mode}
+          aiLevel={started.aiLevel}
+          onExit={() => setStarted(null)}
+        />
+      );
+    }
     return started.gameId === "uno" || started.gameId === "uno-no-mercy" ? (
       <LocalUnoMatch
         gameId={started.gameId}
@@ -494,6 +522,50 @@ function GameChooser({ onChoose }: { onChoose: (id: GameId) => void }) {
       >
         Browse the full catalog
       </Link>
+    </div>
+  );
+}
+
+function LocalRaceMatch({
+  gameId,
+  mode,
+  aiLevel,
+  onExit,
+}: {
+  gameId: GameId;
+  mode: LocalMode;
+  aiLevel: AiLevel;
+  onExit: () => void;
+}) {
+  const isBike = gameId === "bike-race";
+  // Pass-and-play makes no sense in a race — two people cannot share one
+  // steering input — so that mode becomes a time trial against the clock.
+  const raceMode = mode === "vs-ai" ? "vs-ai" : "time-trial";
+
+  return (
+    <div className="container mx-auto max-w-6xl px-4 py-6 sm:px-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <Button variant="outline" size="sm" className="gap-2" onClick={onExit}>
+          <ArrowLeft className="h-4 w-4" aria-hidden />
+          All modes
+        </Button>
+        <div className="flex items-center gap-2">
+          <Badge variant="success" className="gap-1.5">
+            <WifiOff className="h-3 w-3" aria-hidden />
+            Offline
+          </Badge>
+          <Badge variant="secondary">{isBike ? "Bike Race" : "Car Race"}</Badge>
+          <Badge variant="secondary">
+            {raceMode === "vs-ai" ? `AI level ${aiLevel}` : "Time trial"}
+          </Badge>
+        </div>
+      </div>
+
+      <RaceGameView gameId={gameId} mode={raceMode} aiLevel={aiLevel} onExit={onExit} />
+
+      <p className="mt-4 text-center text-xs text-muted-foreground">
+        Offline races are unrated and are not saved to your history.
+      </p>
     </div>
   );
 }

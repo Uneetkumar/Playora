@@ -32,6 +32,10 @@ export interface PlayMode {
 export function getPlayModes(gameId: GameId): PlayMode[] {
   const hasEngine = gameEngineRegistry.has(gameId);
   const hasBot = botRegistry.has(gameId);
+  // Two people cannot share one steering input, so a race has no pass-and-play.
+  // The same slot becomes a time trial rather than being removed, which keeps
+  // every game offering something offline and solo.
+  const isRace = gameId === "car-race" || gameId === "bike-race";
 
   return [
     {
@@ -45,8 +49,10 @@ export function getPlayModes(gameId: GameId): PlayMode[] {
     },
     {
       id: "offline-local",
-      label: "Pass & Play",
-      tagline: "Two players sharing one device",
+      label: isRace ? "Time trial" : "Pass & Play",
+      tagline: isRace
+        ? "An empty track and the clock"
+        : "Two players sharing one device",
       needsAuth: false,
       needsInternet: false,
       status: hasEngine ? "ready" : "coming-soon",

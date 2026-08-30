@@ -1,8 +1,9 @@
 import type { GameId } from "@playora/game-types";
 import type { BotEngine } from "./types.js";
-import { UnoEngine, UnoNoMercyEngine } from "@playora/game-engine";
+import { BikeRaceEngine, CarRaceEngine, UnoEngine, UnoNoMercyEngine } from "@playora/game-engine";
 import { ChessBot } from "./chess/ChessBot.js";
 import { UnoBot } from "./uno/UnoBot.js";
+import { RacingBot } from "./racing/RacingBot.js";
 
 /**
  * Which games can be played against AI.
@@ -19,6 +20,11 @@ class BotRegistry {
     // is playable, so the No Mercy stacking rules come along for free.
     this.bots.set("uno", () => new UnoBot(new UnoEngine()));
     this.bots.set("uno-no-mercy", () => new UnoBot(new UnoNoMercyEngine()));
+    // Racing bots drive; they do not follow a script. Both share one
+    // implementation because the difference between a car and a bike is
+    // entirely in the engine tuning it is handed.
+    this.bots.set("car-race", () => new RacingBot(new CarRaceEngine()));
+    this.bots.set("bike-race", () => new RacingBot(new BikeRaceEngine()));
   }
 
   has(gameId: GameId): boolean {

@@ -103,7 +103,7 @@ docs/
 | Check | Result |
 |---|---|
 | `pnpm typecheck` | ✅ 20/20 |
-| `pnpm test` | ✅ **254 tests** (game-engine 72, realtime 51, progression 37, bot-engine 31, audio 20, auth 20, game-types 18, protocol 3, db 2) |
+| `pnpm test` | ✅ **309 tests** (game-engine 114, realtime 51, bot-engine 44, progression 37, audio 20, auth 20, game-types 18, protocol 3, db 2) |
 | `pnpm build` | ✅ 18 routes |
 | `pnpm version:check` | ✅ in sync at 0.1.0 |
 | `pnpm lint` | ✅ clean |
@@ -128,6 +128,7 @@ Start the Worker with `pnpm --filter @playora/realtime dev`, then:
 | `node scripts/verify-leaderboard.mjs` | leaderboard ordering and counted rank (7) |
 | `node scripts/verify-achievements.mjs` | achievements awarded server-side; clients cannot self-award (8) |
 | `node scripts/verify-friends.mjs` | friendship RLS, including every negative (10) |
+| `node scripts/verify-racing-online.mjs` | the server owns the race clock; clients cannot tick or teleport (22) |
 
 ---
 
@@ -654,21 +655,51 @@ Play vs AI. Works offline, no account.
 `00005` match-history indexes (GIN on `game_results.scores`), `00006`
 `user_achievements`, `00007` friendship RLS policies.
 
-### Next in the backlog
-**19–20 Car Race and Bike Race are the next items and both are XL** — Phaser,
-a server tick, snapshots, prediction and reconciliation. They were deliberately
-not started overnight: half a netcode implementation is worse than none, and
-the scope deserves a decision from Uneet first.
+### Racing (backlog 19–20) — all five games are now playable
 
-Everything else remaining is smaller: 21 light theme · 23 chess clock
-enforcement · 24 game artwork · 25 e2e auth handshake · 26 deploy ·
-27 Sentry/PostHog · 29 same-wifi QR · 35 music · 36 presence/notifications.
+**Three.js, not Phaser.** Phaser is a 2D engine and the reference Uneet gave is
+a 3D chase-camera racer. Phaser is still in `apps/web/package.json` and is
+unused; it can go when nothing 2D is planned.
 
-### Not visually confirmed
-The browser pane has returned 0×0 for several sessions, so all UI work —
-result screens, history, leaderboard, the UNO table, the chess board — is
-verified by build, tests and live protocol scripts, **not by looking at it**.
-Backlog item 1 is still: look at it and report what is wrong.
+- `packages/game-engine/src/racing/` — a server-authoritative engine at a fixed
+  60 Hz. Clients may only send `SET_INPUT`; the engine rejects a `TICK` from any
+  player id but the server's, so a client can express intent and nothing else.
+- Tracks are generated from a seed and **sent as a seed**, not as geometry. That
+  took a snapshot from 17,865 bytes to 1,467 while doubling the broadcast rate:
+  87 KB/s per player down to 14.
+- `apps/realtime/src/handlers/race-handler.ts` — the server's race clock. Twenty
+  wakeups a second carrying three physics ticks each, broadcasting ten
+  snapshots a second, stopped whenever the room is not racing.
+- `apps/web/src/lib/racing/use-remote-race.ts` — entity interpolation, holding
+  the picture ~120 ms behind so ten snapshots a second render as continuous
+  motion. No prediction yet; see backlog #37.
+- `RacingBot` drives rather than following waypoints: it scores lanes for
+  blockage, racing line and coins, brakes for what it can see, and saves nitro
+  for a straight. Difficulty is how far ahead it looks, never a speed bonus.
+
+**Bugs found while building it**
+1. `offRoadDrag` was set equal to `acceleration`, so a car that stopped on the
+   runoff had exactly as much drag as thrust and could never move again.
+2. The tightest corner had more centrifugal force than the car had steering
+   authority — the bend was impossible, not difficult.
+3. Sustained curvature spiralled the track into its own path, so the road
+   rendered across itself and walls crossed a road nobody could reach.
+4. The lateral axis was mirrored relative to the chase camera: steering right
+   moved the car left on screen. Invisible in a screenshot, obvious in motion —
+   it is now a tested pure function, `trackToWorld`.
+5. Two Next dev servers sharing `apps/web/.next` corrupt each other's chunks.
+   `PLAYORA_DIST_DIR` now gives any extra server its own build directory.
+
+### What was and was not seen
+The browser pane worked this session for the first time, so **the racing games
+have been looked at** — grid, road, rails, skyline, HUD and countdown all
+render, on both car and bike. What could *not* be observed is motion: the pane
+stays hidden, and `requestAnimationFrame` does not fire in a hidden page, so the
+simulation never advances on screen. Movement, steering feel and the sense of
+speed are verified by 114 engine tests and the live protocol script, not by eye.
+
+Everything else — result screens, history, leaderboard, achievements, friends,
+the UNO table, the chess board — is still unseen. Backlog item 1 stands.
 
 ### Known limitation
 The `game-ui-design` skill at `~/claude-skills/game-ui-design/` is written and

@@ -4,22 +4,49 @@
     {
       "name": "dev",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["dev"],
+      "runtimeArgs": [
+        "dev"
+      ],
       "port": 8000,
       "autoPort": false
     },
     {
       "name": "web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@playora/web", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@playora/web",
+        "dev"
+      ],
       "port": 8000,
       "autoPort": false
     },
     {
       "name": "realtime",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@playora/realtime", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@playora/realtime",
+        "dev"
+      ],
       "port": 8787,
+      "autoPort": false
+    },
+    {
+      "name": "web-verify",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@playora/web",
+        "exec",
+        "env",
+        "PLAYORA_DIST_DIR=.next-verify",
+        "next",
+        "dev",
+        "--port",
+        "8010"
+      ],
+      "port": 8010,
       "autoPort": false
     }
   ]
