@@ -5,15 +5,14 @@ const nextConfig = {
    *
    * Two Next servers sharing one directory corrupt each other's chunks: the
    * second to compile wins, and the first then fails to resolve vendor modules
-   * it wrote itself. So every server that runs alongside another gets its own.
+   * it wrote itself. So anything running alongside the dev server sets
+   * PLAYORA_DIST_DIR and gets its own.
    *
-   * PLAYORA_STABLE is the "play" server, built once and served while the dev
-   * server keeps recompiling. PLAYORA_DIST_DIR is for anything else — a second
-   * dev server for visual checks, for instance.
+   * There is one app server, on :8000. The second one that used to run on
+   * :3000 has been removed — two copies of the same app is a way to look at
+   * stale code and think it is current.
    */
-  distDir: process.env.PLAYORA_STABLE
-    ? ".next-stable"
-    : process.env.PLAYORA_DIST_DIR || ".next",
+  distDir: process.env.PLAYORA_DIST_DIR || ".next",
   reactStrictMode: true,
   // Every workspace package the app imports. Missing one means its changes are
   // silently not picked up in dev.
@@ -27,6 +26,8 @@ const nextConfig = {
     '@playora/progression',
     '@playora/bot-engine',
     '@playora/audio',
+    '@playora/animation',
+    '@playora/analytics',
   ],
 };
 

@@ -2,6 +2,7 @@ import type { GameId, Player } from "@playora/game-types";
 import { AbstractGameEngine } from "../engine.js";
 import type { ActionResult, ActionValidationResult } from "../types.js";
 import { buildTrack, sampleTrack } from "./track.js";
+import { vehicleById } from "./garage.js";
 import {
   COUNTDOWN_TICKS,
   NEUTRAL_INPUT,
@@ -78,6 +79,36 @@ export abstract class RacingEngine extends AbstractGameEngine<
 
   protected abstract tuning(): VehicleTuning;
 
+  /**
+   * Tuning for one vehicle: the class baseline with its garage modifiers.
+   *
+   * Cached because this is asked for every vehicle on every tick — sixty times
+   * a second times eight cars — and it is a pure function of an id.
+   */
+  private tuningCache = new Map<string, VehicleTuning>();
+
+  vehicleTuningFor(vehicleId: string): VehicleTuning {
+    const cached = this.tuningCache.get(vehicleId);
+    if (cached) return cached;
+
+    const base = this.tuning();
+    const m = vehicleById(this.gameId, vehicleId).modifiers;
+    const tuned: VehicleTuning = {
+      ...base,
+      maxSpeed: base.maxSpeed * m.maxSpeed,
+      acceleration: base.acceleration * m.acceleration,
+      steerRate: base.steerRate * m.steerRate,
+      centrifugal: base.centrifugal * m.centrifugal,
+      nitroMultiplier: base.nitroMultiplier * m.nitroMultiplier,
+      // A modifier above one is more forgiving, and crashPenalty is the speed
+      // *kept* — so it moves towards 1 rather than past it.
+      crashPenalty: Math.min(0.85, base.crashPenalty * m.crashPenalty),
+    };
+
+    this.tuningCache.set(vehicleId, tuned);
+    return tuned;
+  }
+
   /** Metres, when the config does not say. */
   protected defaultTrackLength(): number {
     return 3000;
@@ -103,6 +134,7 @@ export abstract class RacingEngine extends AbstractGameEngine<
     order.forEach((playerId, index) => {
       vehicles[playerId] = {
         playerId,
+        vehicleId: vehicleById(this.gameId, config.vehicles?.[playerId]).id,
         // The grid sits *behind* the start line, which is where a grid
         // belongs on a circuit: the cars cross the line to begin lap one and
         // cross it again to complete it. Starting on the line would put the
@@ -327,7 +359,7 @@ export abstract class RacingEngine extends AbstractGameEngine<
     collected: Set<string>,
     events: RacingEvent[],
   ): VehicleState {
-    const t = this.tuning();
+    const t = this.vehicleTuningFor(vehicle.vehicleId);
     const stunned = vehicle.crashTicks > 0;
     const input = stunned ? NEUTRAL_INPUT : vehicle.input;
 

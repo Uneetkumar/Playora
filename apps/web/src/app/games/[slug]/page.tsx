@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Badge, Button, Card, LoadingState, buttonVariants, cn } from "@playora/ui";
 import { rankForRating } from "@playora/progression";
-import { RECOMMENDED_AI_LEVEL } from "@playora/bot-engine";
+import { AI_LEVELS, AI_LEVEL_LABELS, RECOMMENDED_AI_LEVEL, type AiLevel } from "@playora/bot-engine";
 import type { GameId } from "@playora/game-types";
 import {
   ArrowLeft, Users, Clock, Trophy, BookOpen, Bot, Swords, Zap, WifiOff, Wifi, Lock,
@@ -31,6 +31,10 @@ export default function GameDetailPage() {
   const router = useRouter();
   const slug = (params?.slug as string) ?? "";
   const { user } = useAuthStore();
+  // Lives here because this page is now the only place a mode is chosen. It
+  // used to be duplicated on /play, so the platform asked the same question
+  // twice on two different screens.
+  const [aiLevel, setAiLevel] = React.useState<AiLevel>(RECOMMENDED_AI_LEVEL);
 
   const game = GAME_CATALOG.find((g) => g.id === slug);
   const playable = game ? isGameImplemented(game.id) : false;
@@ -118,7 +122,9 @@ export default function GameDetailPage() {
                   mode={mode}
                   gameId={game.id}
                   signedIn={Boolean(user)}
-                  onStart={() => router.push(routeFor(mode, game.id))}
+                  aiLevel={aiLevel}
+                  onAiLevel={setAiLevel}
+                  onStart={() => router.push(routeFor(mode, game.id, aiLevel))}
                 />
               ))}
             </div>
@@ -224,17 +230,23 @@ export default function GameDetailPage() {
   );
 }
 
-/** Where a mode actually takes you. Every ready mode has a real destination. */
-function routeFor(mode: PlayMode, gameId: string): string {
+/**
+ * Where a mode actually takes you.
+ *
+ * Every destination carries the full decision, so /play never has to ask
+ * anything: it receives the game, the mode and the difficulty and starts.
+ */
+function routeFor(mode: PlayMode, gameId: string, aiLevel: AiLevel): string {
   switch (mode.id) {
     case "offline-ai":
+      return `/play?game=${gameId}&mode=vs-ai&level=${aiLevel}`;
     case "offline-local":
-      return `/play?game=${gameId}`;
+      return `/play?game=${gameId}&mode=pass-and-play`;
     case "online-friends":
     case "online-ai":
       return `/rooms?game=${gameId}`;
     case "online-random":
-      return `/rooms?game=${gameId}&quick=1`;
+      return `/play?game=${gameId}&quick=1`;
     default:
       return `/games`;
   }
@@ -244,11 +256,15 @@ function ModeCard({
   mode,
   gameId,
   signedIn,
+  aiLevel,
+  onAiLevel,
   onStart,
 }: {
   mode: PlayMode;
   gameId: string;
   signedIn: boolean;
+  aiLevel: AiLevel;
+  onAiLevel: (level: AiLevel) => void;
   onStart: () => void;
 }) {
   const Icon = MODE_ICON[mode.id] ?? Zap;
@@ -275,10 +291,42 @@ function ModeCard({
       </div>
       <p className="text-xs text-muted-foreground">{mode.tagline}</p>
 
+      {ready && mode.id === "offline-ai" && (
+        <div>
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Difficulty
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {AI_LEVELS.map((level) => (
+              <button
+                key={level}
+                type="button"
+                onClick={() => onAiLevel(level)}
+                aria-pressed={level === aiLevel}
+                className={cn(
+                  "numeric h-7 w-7 rounded-md text-xs font-bold transition-colors",
+                  level === aiLevel
+                    ? "bg-primary text-white"
+                    : "bg-muted text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {level}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            {AI_LEVEL_LABELS[aiLevel]}
+            {aiLevel === RECOMMENDED_AI_LEVEL && (
+              <span className="ml-1 text-success">Recommended</span>
+            )}
+          </p>
+        </div>
+      )}
+
       {ready ? (
         <Button size="sm" className="mt-auto gap-1.5" onClick={onStart}>
           {blocked && <Lock className="h-3 w-3" aria-hidden />}
-          {mode.id === "offline-ai" ? `Play level ${RECOMMENDED_AI_LEVEL}` : mode.label}
+          {mode.id === "offline-ai" ? `Play level ${aiLevel}` : mode.label}
         </Button>
       ) : (
         <p className="mt-auto text-xs text-muted-foreground">

@@ -9,6 +9,7 @@ Add items anywhere; renumbering is fine.
 
 | # | Item | Status | Size |
 |---|---|---|---|
+| 0 | **Unity racing — build it in the Editor.** The project, the C# architecture and the platform bridge are scaffolded at `unity/car-race/` (see its README). What needs a person with Unity open: scenes, a track generated from `trackSeed`, vehicle prefabs with WheelColliders, Photon Fusion 2, audio and camera. Drop a WebGL build into `apps/web/public/unity/car-race/Build/` and the platform switches over on its own. | 🔴 | XL |
 | 1 | **Look at the current UI and report what's wrong** — home shell, UNO board, sidebar. None of it has been visually confirmed; the browser pane failed all session. | 🔴 | — |
 | 2 | **Rotate the two leaked secrets** — Supabase secret key and Google client secret were pasted into chat. | 🔴 | XS |
 | 3 | **Rename the GitHub repo** `Playden` → `Playora`. | 🔴 | XS |
@@ -48,6 +49,7 @@ Add items anywhere; renumbering is fine.
 | 36 | **Presence and notifications** — a friend's online/in-game status, and an alert when a request or invite arrives. Needs a presence channel; nothing tracks it today, and the friends page says so rather than showing everyone as offline. | ⬜ | M |
 | 39 | **Career ladder for the other games** — racing has eight unlockable levels per game; chess and UNO have no equivalent single-player progression. | ⬜ | M |
 | 40 | **Race progress is per-device** — the career ladder lives in localStorage because offline races are deliberately unrated and never written to the server. Signing in on another machine restarts the ladder. Storing it on the account would need a decision about whether offline play counts. | ⬜ | S |
+| 43 | **Spec v2 gaps** — done: animation tokens (§6), Sentry + PostHog, TanStack Query, Cloudflare Queues. Remaining: admin panel, LiveKit voice (needs credentials), Rive (needs authored `.riv` files), GSAP cinematics, seasons. | 🟨 | L |
 | 41 | **Racing UI pack — remaining screens** — the design pack (`~/Downloads/PLAYORA_RACING_UI_PACK`) also specifies vehicle selection and customization (paint, wheels, spoilers, exhaust, tyres, performance stats), a track-select screen, an in-race settings overlay with Controls/Audio/Graphics/Gameplay tabs, in-race chat/voice/connection indicators, on-screen touch steering for mobile, and a bike trick system. None of these exist. | ⬜ | L |
 | 42 | **Race result screen to the design** — results currently reuse the generic MatchResult plus a level card. The pack specifies placement, race time, best lap, XP and rating change, with Play Again / Replay / Home. | ⬜ | M |
 | 37 | **Client-side prediction for racing** — the online race interpolates between server snapshots, which costs about 120 ms of input latency. Prediction plus reconciliation would remove it; the engine already carries `lastInputSeq` for exactly that, so no protocol change is needed. | ⬜ | M |

@@ -1,0 +1,3 @@
+Drop a Unity WebGL build here as Build/car-race.loader.js and friends.
+The platform detects it and switches over automatically — see
+apps/web/src/games/racing/unity/use-racing-renderer.ts

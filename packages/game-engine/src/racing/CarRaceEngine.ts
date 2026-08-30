@@ -22,7 +22,11 @@ export class CarRaceEngine extends RacingEngine {
       brakePower: 46,
       engineBrake: 9,
       steerRate: 1.5,
-      centrifugal: 0.42,
+      // Set so the tightest corner on a circuit is *just* holdable at full
+      // lock and top speed. Lower than this and cornering is free: nothing
+      // demands a lift, braking never pays, and grip stops being a trade-off
+      // worth choosing a car for.
+      centrifugal: 0.9,
       offRoadDrag: 26,
       offRoadMaxSpeed: 30,
       wallPenalty: 0.72,

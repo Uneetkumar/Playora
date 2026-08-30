@@ -1,5 +1,7 @@
 import { APP_VERSION } from "./version.js";
 import type { Env } from "./types.js";
+import { consumeMatchBatch, type QueueBatch } from "./handlers/match-consumer.js";
+import type { MatchJob } from "./lib/match-queue.js";
 export { RoomDurableObject } from "./durable-objects/RoomDurableObject.js";
 export { MatchmakingDurableObject } from "./durable-objects/MatchmakingDurableObject.js";
 
@@ -60,5 +62,15 @@ export default {
     }
 
     return new Response("Not Found", { status: 404 });
+  },
+
+  /**
+   * Post-match work, off the hot path (spec v2 section 70).
+   *
+   * Only called when a queue consumer is configured in wrangler.toml. Without
+   * one the same work runs inline in the Durable Object.
+   */
+  async queue(batch: QueueBatch<MatchJob>, env: Env): Promise<void> {
+    await consumeMatchBatch(batch, env);
   },
 };

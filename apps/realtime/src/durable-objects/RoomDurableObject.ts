@@ -24,9 +24,11 @@ import {
 } from "../lib/progression-store.js";
 import { authenticateConnection } from "../handlers/auth-handler.js";
 import { applyGameAction, finishGame, startGame } from "../handlers/game-handler.js";
+import type { MatchResult } from "../handlers/game-handler.js";
 import { addBot, removeBot, runBotTurns } from "../handlers/bot-handler.js";
 import { voteRematch } from "../handlers/rematch-handler.js";
 import { RaceLoop, applyRaceInput, isRealTimeGame } from "../handlers/race-handler.js";
+import { enqueueMatchWork } from "../lib/match-queue.js";
 import type { RoomContext } from "./room-context.js";
 import {
   AUTH_DEADLINE_MS,
@@ -507,38 +509,81 @@ export class RoomDurableObject {
       closeSocket: (ws, code, reason) => this.closeSocket(ws, code, reason),
       persist: () => this.persist(),
       recordResult: async (record) => {
-        // Built lazily: an unconfigured Worker simply does not record.
-        this.resultStore ??= createResultStore(this.env);
-        const outcome = await recordMatchSafely(this.resultStore, {
-          roomCode: room.roomCode,
-          ...record,
-        });
-
-        // Rating and XP only apply once the match itself is on record.
-        if (!outcome.ok || !outcome.gameId) return;
-        this.progressionStore ??= createProgressionStore(this.env);
-        const progression = await applyProgressionSafely(this.progressionStore, {
-          gameId: outcome.gameId,
-          gameSlug: room.gameId,
-          sessionId: record.sessionId,
-          result: record.result,
-          botIds: Object.values(room.players)
-            .filter((p) => p.isBot)
-            .map((p) => p.userId),
-        });
-
-        // The result screen is already on-screen by now; this fills in the
-        // numbers. Nothing downstream depends on it arriving.
-        if (progression.length > 0) {
-          this.broadcast({
-            type: "MATCH_PROGRESSION",
+        // Everything after a finished match — persistence, rating, XP,
+        // achievements, the progression broadcast — is queued rather than
+        // awaited here (spec v2 section 70). It is several sequential round
+        // trips to Supabase, and the room cannot process anything else while
+        // it waits. The result has already been broadcast by this point.
+        await enqueueMatchWork(
+          this.env.MATCH_QUEUE,
+          {
+            type: "match.finished",
+            enqueuedAt: Date.now(),
             roomId: room.roomId,
+            roomCode: room.roomCode,
+            gameId: room.gameId,
             sessionId: record.sessionId,
-            players: progression,
-          });
-        }
+            startedAt: record.startedAt,
+            endedAt: record.endedAt,
+            result: record.result,
+            botIds: Object.values(room.players)
+              .filter((p) => p.isBot)
+              .map((p) => p.userId),
+          },
+          // No queue binding: do the work here, so a local or unbilled
+          // deployment still records matches.
+          () => this.processMatchResult(record),
+        );
       },
     };
+  }
+
+  /**
+   * The post-match chain, run in this Worker.
+   *
+   * Shared by the inline fallback above and the queue consumer, so a match is
+   * processed identically whichever path it takes — two implementations would
+   * drift, and the one that runs in production would be the less exercised.
+   */
+  private async processMatchResult(record: {
+    sessionId: string;
+    startedAt: number;
+    endedAt: number;
+    result: MatchResult;
+  }): Promise<void> {
+    const room = this.room;
+    if (!room) return;
+
+    this.resultStore ??= createResultStore(this.env);
+    const outcome = await recordMatchSafely(this.resultStore, {
+      roomCode: room.roomCode,
+      ...record,
+    });
+
+    // Rating and XP only apply once the match itself is on record.
+    if (!outcome.ok || !outcome.gameId) return;
+
+    this.progressionStore ??= createProgressionStore(this.env);
+    const progression = await applyProgressionSafely(this.progressionStore, {
+      gameId: outcome.gameId,
+      gameSlug: room.gameId,
+      sessionId: record.sessionId,
+      result: record.result,
+      botIds: Object.values(room.players)
+        .filter((p) => p.isBot)
+        .map((p) => p.userId),
+    });
+
+    // The result screen is already on-screen by now; this fills in the
+    // numbers. Nothing downstream depends on it arriving.
+    if (progression.length > 0) {
+      this.broadcast({
+        type: "MATCH_PROGRESSION",
+        roomId: room.roomId,
+        sessionId: record.sessionId,
+        players: progression,
+      });
+    }
   }
 
   /**

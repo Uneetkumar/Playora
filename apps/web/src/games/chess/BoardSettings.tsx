@@ -42,7 +42,26 @@ export function BoardSettings({
       </Button>
 
       {open && (
-        <div className="absolute right-0 z-40 mt-2 w-72 rounded-xl border border-border bg-card p-4 shadow-raised">
+        <>
+          {/* Below lg the panel is a centred sheet, because there is no room
+              beside the board to put it. */}
+          <div
+            className="fixed inset-0 z-40 bg-black/60 lg:hidden"
+            onClick={() => setOpen(false)}
+            aria-hidden
+          />
+          <div
+            className={cn(
+              "z-50 w-72 rounded-xl border border-border bg-card p-4 shadow-raised",
+              // Docked beside the trigger on a wide screen, so the board stays
+              // visible while a theme is being previewed — the whole point of
+              // previewing one. It used to drop straight down over the board.
+              "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
+              "lg:absolute lg:left-full lg:top-0 lg:ml-3 lg:translate-x-0 lg:translate-y-0",
+            )}
+            role="dialog"
+            aria-label="Board appearance"
+          >
           <div className="flex items-center justify-between">
             <h3 className="font-display text-sm font-bold text-foreground">Appearance</h3>
             <button
@@ -110,11 +129,12 @@ export function BoardSettings({
             ))}
           </div>
 
-          <Button variant="outline" size="sm" className="mt-4 w-full gap-2" onClick={onFlip}>
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-            Flip board
-          </Button>
-        </div>
+            <Button variant="outline" size="sm" className="mt-4 w-full gap-2" onClick={onFlip}>
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+              Flip board
+            </Button>
+          </div>
+        </>
       )}
     </div>
   );

@@ -1,17 +1,19 @@
 "use client";
 
 import * as React from "react";
-import { Button, cn } from "@playora/ui";
+import { Button } from "@playora/ui";
 import type { RacingPlayerView } from "@playora/game-engine";
 import type { AiLevel } from "@playora/bot-engine";
 import type { GameId } from "@playora/game-types";
-import { ArrowLeft, ChevronRight, Lock } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useLocalRace, LOCAL_DRIVER_ID, type LocalRaceMode } from "../../lib/local/use-local-race";
 import { useRaceProgress } from "../../lib/racing/use-race-progress";
 import { isPass, starsFor, type RaceLevel } from "@playora/game-engine";
-import { MatchResult } from "../../components/games/match-result";
 import { useAudio } from "../../lib/audio/use-audio";
-import { LevelSelect, Stars } from "./LevelSelect";
+import { LevelSelect } from "./LevelSelect";
+import { useRacingRenderer } from "./unity/use-racing-renderer";
+import { UnityRaceRun } from "./unity/UnityRaceRun";
+import { RaceResult } from "./RaceResult";
 import { RaceStage, RACE_CONTROLS_HINT } from "./RaceStage";
 
 interface RaceGameViewProps {
@@ -32,12 +34,27 @@ interface RaceGameViewProps {
 export function RaceGameView({ gameId, mode, aiLevel, onExit }: RaceGameViewProps) {
   const progress = useRaceProgress(gameId);
   const [level, setLevel] = React.useState<RaceLevel | null>(null);
+  // Unity when a build is installed, the web build otherwise. See
+  // useRacingRenderer for why both exist at once.
+  const renderer = useRacingRenderer(gameId);
 
   if (mode === "vs-ai" && !level) {
     return (
       <div className="space-y-4">
         <LevelSelect gameId={gameId} onStart={setLevel} />
       </div>
+    );
+  }
+
+  if (renderer === "unity" && level) {
+    return (
+      <UnityRaceRun
+        key={`unity-${level.index}`}
+        gameId={gameId}
+        level={level}
+        onRecord={progress.record}
+        onBackToLevels={() => setLevel(null)}
+      />
     );
   }
 
@@ -55,9 +72,6 @@ export function RaceGameView({ gameId, mode, aiLevel, onExit }: RaceGameViewProp
           ? () => setLevel(progress.levels[level.index] ?? null)
           : null
       }
-      nextLevelLocked={
-        level ? !progress.isUnlocked(progress.levels[level.index] ?? level) : false
-      }
       onExit={onExit}
     />
   );
@@ -71,7 +85,6 @@ function RaceRun({
   onRecord,
   onBackToLevels,
   onNextLevel,
-  nextLevelLocked,
   onExit,
 }: {
   gameId: GameId;
@@ -81,7 +94,6 @@ function RaceRun({
   onRecord: (level: RaceLevel, place: number) => void;
   onBackToLevels: (() => void) | null;
   onNextLevel: (() => void) | null;
-  nextLevelLocked: boolean;
   onExit: () => void;
 }) {
   const drawRef = React.useRef<((view: RacingPlayerView) => void) | null>(null);
@@ -178,58 +190,27 @@ function RaceRun({
         onLeave={onBackToLevels ?? onExit}
       />
 
-      {race.result && level && (
-        <div
-          className={cn(
-            "rounded-2xl border p-5 text-center",
-            passed ? "border-success/50 bg-success/10" : "border-destructive/40 bg-destructive/5",
-          )}
-        >
-          <div className="flex justify-center">
-            <Stars earned={starsFor(level, place)} size="lg" />
-          </div>
-          <p className="mt-2 font-display text-xl font-black text-foreground">
-            {passed ? `Level ${level.index} complete` : "Not quite"}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {passed
-              ? onNextLevel
-                ? `Level ${level.index + 1} is unlocked.`
-                : "That was the last level. The ladder is finished."
-              : `You needed ${level.targetPlace === 1 ? "1st" : `${level.targetPlace}nd or better`} and finished ${place}${suffix(place)}.`}
-          </p>
-
-          <div className="mt-4 flex flex-wrap justify-center gap-2">
-            <Button onClick={race.restart} variant={passed ? "outline" : "default"}>
-              Try again
-            </Button>
-            {passed && onNextLevel && (
-              <Button className="gap-2" onClick={onNextLevel} disabled={nextLevelLocked}>
-                {nextLevelLocked ? (
-                  <Lock className="h-4 w-4" aria-hidden />
-                ) : (
-                  <ChevronRight className="h-4 w-4" aria-hidden />
-                )}
-                Next level
-              </Button>
-            )}
-            {onBackToLevels && (
-              <Button variant="outline" onClick={onBackToLevels}>
-                All levels
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {race.result && !level && (
-        <MatchResult
-          result={race.result}
-          players={race.players}
-          currentUserId={race.currentUserId}
-          onRematch={race.restart}
-          rematchLabel="Race again"
-          onExit={onExit}
+      {race.result && (
+        <RaceResult
+          place={place || race.hud.place}
+          total={race.hud.total}
+          raceTicks={race.hud.raceTicks}
+          bestLapTicks={race.hud.bestLapTicks}
+          coins={race.hud.coins}
+          {...(level
+            ? {
+                stars: starsFor(level, place),
+                passed,
+                levelName: `Level ${level.index} · ${level.name}`,
+                requirement: passed
+                  ? undefined
+                  : `You needed ${level.targetPlace === 1 ? "1st" : `${level.targetPlace}nd or better`} to unlock the next level.`,
+              }
+            : {})}
+          onPlayAgain={race.restart}
+          onNext={passed ? onNextLevel : null}
+          onExit={onBackToLevels ?? onExit}
+          exitLabel={onBackToLevels ? "All levels" : "Back"}
         />
       )}
 
@@ -238,9 +219,3 @@ function RaceRun({
   );
 }
 
-function suffix(place: number): string {
-  if (place === 1) return "st";
-  if (place === 2) return "nd";
-  if (place === 3) return "rd";
-  return "th";
-}

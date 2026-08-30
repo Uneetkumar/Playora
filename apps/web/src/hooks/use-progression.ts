@@ -1,10 +1,11 @@
 "use client";
 
-import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { levelProgress, rankForRating, ratingToNextRank } from "@playora/progression";
 import type { LevelProgress, RankTier } from "@playora/progression";
 import { getSupabaseBrowserClient } from "../lib/supabase/client";
 import { isSupabaseConfigured } from "../lib/env";
+import { queryKeys } from "../lib/query/keys";
 
 export interface GameRating {
   gameSlug: string;
@@ -61,89 +62,69 @@ interface RatingRow {
  * skill, and they live in different tables for that reason.
  */
 export function usePlayerProgression(userId: string | null | undefined) {
-  const [data, setData] = React.useState<PlayerProgression | null>(null);
-  const [isLoading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  const query = useQuery({
+    queryKey: queryKeys.progression(userId),
+    enabled: Boolean(userId) && isSupabaseConfigured,
+    queryFn: async (): Promise<PlayerProgression> => {
+      const supabase = getSupabaseBrowserClient();
 
-  React.useEffect(() => {
-    if (!userId || !isSupabaseConfigured) {
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
+      // Level/XP and per-game rating are separate systems (spec sections 11,
+      // 104.6) in separate tables, so they are two reads issued together
+      // rather than one join.
+      const [profileRes, ratingsRes] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select(
+            "xp,total_games_played,total_wins,total_losses,total_draws,current_streak,best_streak,created_at",
+          )
+          .eq("id", userId!)
+          .maybeSingle(),
+        supabase
+          .from("game_ratings")
+          .select("rating,peak_rating,games_played,wins,losses,draws,games(slug,name)")
+          .eq("user_id", userId!)
+          .order("rating", { ascending: false }),
+      ]);
 
-    (async () => {
-      try {
-        const supabase = getSupabaseBrowserClient();
-        const [profileRes, ratingsRes] = await Promise.all([
-          supabase
-            .from("profiles")
-            .select(
-              "xp,total_games_played,total_wins,total_losses,total_draws,current_streak,best_streak,created_at",
-            )
-            .eq("id", userId)
-            .maybeSingle(),
-          supabase
-            .from("game_ratings")
-            .select("rating,peak_rating,games_played,wins,losses,draws,games(slug,name)")
-            .eq("user_id", userId)
-            .order("rating", { ascending: false }),
-        ]);
+      if (profileRes.error) throw new Error("Couldn't load your profile.");
 
-        if (cancelled) return;
-        if (profileRes.error) {
-          setError("Couldn't load your profile.");
-          return;
-        }
+      const p = profileRes.data as ProfileRow | null;
+      if (!p) throw new Error("Profile not found.");
 
-        const p = profileRes.data as ProfileRow | null;
-        if (!p) {
-          setError("Profile not found.");
-          return;
-        }
+      const ratings: GameRating[] = ((ratingsRes.data ?? []) as unknown as RatingRow[])
+        .filter((r) => r.games)
+        .map((r) => ({
+          gameSlug: r.games!.slug,
+          gameName: r.games!.name,
+          rating: r.rating,
+          peakRating: r.peak_rating,
+          gamesPlayed: r.games_played,
+          wins: r.wins,
+          losses: r.losses,
+          draws: r.draws,
+          rank: rankForRating(r.rating),
+          toNextRank: ratingToNextRank(r.rating),
+        }));
 
-        const rows = (ratingsRes.data ?? []) as unknown as RatingRow[];
-        const ratings: GameRating[] = rows
-          .filter((r) => r.games)
-          .map((r) => ({
-            gameSlug: r.games!.slug,
-            gameName: r.games!.name,
-            rating: r.rating,
-            peakRating: r.peak_rating,
-            gamesPlayed: r.games_played,
-            wins: r.wins,
-            losses: r.losses,
-            draws: r.draws,
-            rank: rankForRating(r.rating),
-            toNextRank: ratingToNextRank(r.rating),
-          }));
+      return {
+        level: levelProgress(p.xp),
+        gamesPlayed: p.total_games_played,
+        wins: p.total_wins,
+        losses: p.total_losses,
+        draws: p.total_draws,
+        // Guard against dividing by zero for a player with no games yet.
+        winRate: p.total_games_played > 0 ? p.total_wins / p.total_games_played : 0,
+        currentStreak: p.current_streak,
+        bestStreak: p.best_streak,
+        memberSince: p.created_at,
+        ratings,
+      };
+    },
+  });
 
-        setData({
-          level: levelProgress(p.xp),
-          gamesPlayed: p.total_games_played,
-          wins: p.total_wins,
-          losses: p.total_losses,
-          draws: p.total_draws,
-          // Guard against dividing by zero for a player with no games yet.
-          winRate: p.total_games_played > 0 ? p.total_wins / p.total_games_played : 0,
-          currentStreak: p.current_streak,
-          bestStreak: p.best_streak,
-          memberSince: p.created_at,
-          ratings,
-        });
-        setError(null);
-      } catch {
-        if (!cancelled) setError("Couldn't load your profile.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
-
-  return { data, isLoading, error };
+  return {
+    data: query.data ?? null,
+    isLoading: query.isPending && query.fetchStatus !== "idle",
+    error: query.error instanceof Error ? query.error.message : null,
+  };
 }

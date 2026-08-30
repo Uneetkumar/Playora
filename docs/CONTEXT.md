@@ -103,7 +103,7 @@ docs/
 | Check | Result |
 |---|---|
 | `pnpm typecheck` | ✅ 20/20 |
-| `pnpm test` | ✅ **323 tests** (game-engine 128, realtime 51, bot-engine 44, progression 37, audio 20, auth 20, game-types 18, protocol 3, db 2) |
+| `pnpm test` | ✅ **362 tests** (game-engine 128, realtime 56, bot-engine 44, progression 37, audio 20, auth 20, game-types 18, animation 16, protocol 10, analytics 8, db 2, ui 3) |
 | `pnpm build` | ✅ 18 routes |
 | `pnpm version:check` | ✅ in sync at 0.1.0 |
 | `pnpm lint` | ✅ clean |
@@ -208,7 +208,7 @@ guest path is proven. Rooms/results persistence remains Slice 3.
 - **"The server keeps restarting while I play."** Root cause was me editing
   files against the same dev server the user was playing on. Fixed structurally
   rather than by asking them to wait: `pnpm play` builds to `.next-stable` and
-  serves on :3000, isolated from `.next`, so neither `pnpm dev` nor `pnpm build`
+  used to serve on :3000, isolated from `.next` (removed — see 11c item 4)
   can disturb a session in progress.
 - **UNO animations were written but did not play.** Three defects, all mine:
   the deal stagger ran entirely while cards were at `opacity: 0` and then snapped
@@ -602,6 +602,99 @@ secrets production. **The Worker does not read `.env.local`.**
 
 ---
 
+## 11b. Spec v2 — the racing architecture conflict
+
+Uneet supplied a v2 master specification. Most of it matches what is built. One
+section does not, and it is the important one.
+
+**§44 requires racing to be Unity 6 + C# + WebGL + Photon Fusion 2**, and says
+in terms: *"Do NOT use React to render the 3D racing world."* Car Race and Bike
+Race are currently Three.js inside React, with the simulation server-authoritative
+in the Durable Object.
+
+What cannot be done from a coding session:
+- Unity WebGL builds need the Unity Editor (GUI, or a licensed CLI) — not
+  installable or runnable here.
+- Photon Fusion 2 needs an App ID from Photon's dashboard.
+
+**Recommendation: do not delete the working implementation first.** Scaffold the
+Unity project and the React↔Unity bridge *alongside* it, and swap the render and
+simulation layer once an actual WebGL build exists. The Three.js version already
+proves the whole platform-side loop — lobby, countdown, race, finish, result,
+rating, XP, history — which is the part that does not change when Unity takes
+over the world. Deleting it would leave the platform with no racing game and no
+way to test that loop until Unity is producing builds.
+
+Note also §102: *"DO NOT build both racing games simultaneously. First: CAR
+RACE."* Both were built. Bike Race shares the engine and tuning, so it costs
+little, but the v2 sequencing is Car Race first, Bike Race only once the
+architecture is stable.
+
+**Decided: scaffold Unity alongside, keep the web build running.**
+
+What exists now:
+- `unity/car-race/` — Unity 6 project with the C# architecture. `VehicleController`
+  is Rigidbody + WheelCollider and assigns no transforms (§47); `RacingAgent`
+  drives only through `SetInput`, the same path a player uses (§56);
+  `QualityTiers` auto-detects LOW/MEDIUM/HIGH (§100).
+- `packages/protocol/src/unity-bridge.ts` — the contract, with Zod schemas and
+  10 tests. The C# in `Core/BridgeTypes.cs` mirrors it.
+- `apps/web/src/games/racing/unity/` — the loader, lifecycle, session handover
+  and the engine switch.
+
+**The switch:** `useRacingRenderer` sends a HEAD request for the Unity loader.
+Build present → Unity. Build absent → the existing web build. Dropping a build
+into `apps/web/public/unity/car-race/Build/` changes the engine with no code
+change and no flag.
+
+**Not compiled.** A Unity WebGL build needs the Editor and a Photon App ID,
+neither of which exist in a coding session. `unity/car-race/README.md` lists
+exactly what a person with Unity open has to do.
+
+**The rule to hold on to:** §58 forbids trusting position, lap, finish or winner
+from a browser. `RaceDirector` reports what it saw and tags it `authority:
+"local"` or `"photon"`. `UnityRaceRun.tsx` only records progression from a
+`local` report, because an offline career race has nobody to cheat — a rated
+online race must be arbitrated before any rating is written.
+
+## 11c. Open bugs reported by Uneet (2026-08-30)
+
+Reported after looking at the running app. Numbered as he sent them.
+
+1. ✅ **"All modes" back button does nothing.** Introduced by the picker dedup:
+   `/play` now derives `started` from the URL, so clearing it locally is
+   immediately undone by the effect that reads the URL again. The button has to
+   navigate to `/games/[slug]` rather than mutate state.
+2. ✅ **Every sidebar item looks selected.** `isActive` strips the query string, so
+   `/games?sort=recent`, `?sort=new`, `?sort=popular` and `?sort=top` all match
+   `/games` and all four highlight at once.
+3. ✅ **The chess view is poor.** The Appearance panel now docks beside the
+   board on wide screens (it was `absolute right-0 mt-2`, dropping straight over
+   it) and is a centred sheet below `lg`. Classic pieces were rendering at 52%
+   of a square and now sit at 74%, which is where a real set sits. The Appearance popover covers the board instead of
+   sitting beside it, and the board/piece treatment needs work.
+4. **Two ports.** ✅ Fixed. `pnpm play`, `build:stable` and `start:stable` are
+   gone, along with the `PLAYORA_STABLE` dist branch. One app server, on :8000.
+   `PLAYORA_DIST_DIR` still gives an extra server its own build directory when
+   one is genuinely needed.
+5. (Uneet's list ended here.)
+
+## 11d. Spec v2 gaps, in the order they are worth doing
+
+Nothing below exists yet. Ordered by what unblocks the most.
+
+| Gap | Why it is where it is |
+|---|---|
+| ~~**Animation tokens (§6)**~~ | ✅ `packages/animation` — durations, springs, easings, Motion variants, 16 tests. Every variant honours reduced motion, and a reduced transition is `duration: 0` rather than a shortened spring (a zero-duration spring still oscillates). |
+| ~~**Sentry + PostHog**~~ | ✅ `packages/analytics` — the §80 event list as a closed union, 8 tests. Both SDKs load dynamically and only when a key is set, so a fresh clone ships neither. Autocapture and session recording are off: nothing records what people type or say. |
+| ~~**TanStack Query**~~ | ✅ Six hooks migrated — progression, match history, match detail, recent matches, leaderboard, achievements, friends. Keys live in `lib/query/keys.ts` so two files cannot cache the same data under different names. The client is created in a ref, not at module scope: a module-level client is shared across server requests and leaks one visitor's cache into another's page. |
+| ~~**Cloudflare Queues**~~ | ✅ `lib/match-queue.ts` + `handlers/match-consumer.ts`. The room enqueues and returns; without a queue binding the identical work runs inline, because Queues need a paid plan and a match must never go unrecorded because billing is not configured. Producer/consumer config is written but commented in `wrangler.toml`. 5 tests. |
+| **Admin panel** | Moderation is mandatory because chat and voice exist (§77). |
+| **LiveKit voice** | Needs a LiveKit project and credentials from Uneet. |
+| **Rive** | Needs authored `.riv` files, which are a design deliverable, not code. |
+| **GSAP** | Cinematics only; least load-bearing of the list. |
+| **Seasons** | Architecture exists (per-game ratings); wants a schema decision first. |
+
 ## 12. Next Action
 
 Work is tracked in **`docs/BACKLOG.md`** — one ordered list, worked top-down.
@@ -763,5 +856,4 @@ Uneet commits and pushes; do not commit on his behalf. Conventional Commits on
 `pnpm version:check && pnpm lint && pnpm typecheck && pnpm test && pnpm build`
 
 Do not run `pnpm build` while `pnpm dev` is running — both write
-`apps/web/.next`. The stable server (`pnpm play`) serves `.next-stable` on
-:3000 and is unaffected.
+`apps/web/.next`. Set `PLAYORA_DIST_DIR` to give a second server its own output.

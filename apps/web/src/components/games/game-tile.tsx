@@ -4,41 +4,7 @@ import Link from "next/link";
 import { Badge, cn } from "@playora/ui";
 import { Play, Lock } from "lucide-react";
 import { isPlayable, type CatalogGame } from "../../lib/games/catalog";
-
-/**
- * Artwork tiles per game, in the absence of real art.
- *
- * Each game gets a distinct, deliberate treatment rather than one shared
- * gradient — a wall of identical tiles is exactly what makes a catalogue look
- * unfinished. Swap these for real artwork when it exists.
- */
-const ART: Record<string, { bg: string; glyph: string; tint: string }> = {
-  chess: {
-    bg: "linear-gradient(150deg,#2A2118,#5B4326 55%,#8A6A3B)",
-    glyph: "♞",
-    tint: "text-[#F0D9A7]",
-  },
-  uno: {
-    bg: "linear-gradient(150deg,#7A1512,#D4362B 55%,#F0A03C)",
-    glyph: "🎴",
-    tint: "text-white",
-  },
-  "uno-no-mercy": {
-    bg: "linear-gradient(150deg,#1A0B22,#5B1240 55%,#B3184F)",
-    glyph: "💥",
-    tint: "text-white",
-  },
-  "car-race": {
-    bg: "linear-gradient(150deg,#0B1C33,#124B7A 55%,#2C93D6)",
-    glyph: "🏎️",
-    tint: "text-white",
-  },
-  "bike-race": {
-    bg: "linear-gradient(150deg,#12240F,#2A5F1E 55%,#57A83A)",
-    glyph: "🏍️",
-    tint: "text-white",
-  },
-};
+import { artFor } from "./game-art";
 
 export function GameTile({
   game,
@@ -48,12 +14,15 @@ export function GameTile({
   size?: "sm" | "md" | "lg";
 }) {
   const playable = isPlayable(game);
-  const art = ART[game.id] ?? ART.chess!;
+  const art = artFor(game.id);
 
+  // Sized by aspect ratio rather than fixed pixels, so a tile fills whatever
+  // cell the layout gives it. Fixed widths were why the row could not reflow
+  // and quietly hid whatever did not fit.
   const dims = {
-    sm: "w-[120px] h-[120px]",
-    md: "w-[168px] h-[168px]",
-    lg: "w-[260px] h-[168px]",
+    sm: "w-full aspect-square",
+    md: "w-full aspect-square",
+    lg: "w-full aspect-[4/3]",
   }[size];
 
   return (
@@ -62,7 +31,11 @@ export function GameTile({
       // is where the rules, your record and the ways to play live, and an
       // upcoming game still has something to say for itself.
       href={`/games/${game.id}`}
-      className="group block shrink-0"
+      className={cn(
+        "group block",
+        // In a scrolling row a tile still needs a width to scroll past.
+        size === "sm" ? "w-[124px] shrink-0" : size === "md" ? "w-[168px] shrink-0" : "w-full",
+      )}
       aria-label={`${game.name}${playable ? "" : ` — ${game.phase}`}`}
     >
       <div
@@ -71,17 +44,9 @@ export function GameTile({
           "group-hover:-translate-y-1 group-hover:border-primary/60 group-hover:shadow-raised",
           dims,
         )}
-        style={{ background: art.bg }}
+        style={{ background: art.background }}
       >
-        <span
-          className={cn(
-            "absolute inset-0 flex items-center justify-center text-6xl drop-shadow-[0_3px_6px_rgba(0,0,0,0.5)]",
-            art.tint,
-          )}
-          aria-hidden
-        >
-          {art.glyph}
-        </span>
+        <art.Art className="absolute inset-0 h-full w-full transition-transform duration-300 group-hover:scale-[1.06]" />
 
         {/* Legibility scrim behind the title. */}
         <span className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/85 to-transparent" aria-hidden />
@@ -92,6 +57,16 @@ export function GameTile({
           </span>
           <span className="block truncate text-[10px] text-white/70">
             {game.minPlayers}-{game.maxPlayers} players · {game.duration}
+          </span>
+        </span>
+
+        {/* A play affordance on hover, as game catalogues do. */}
+        <span
+          className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+          aria-hidden
+        >
+          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/95 shadow-lg">
+            <Play className="ml-0.5 h-5 w-5 fill-black text-black" />
           </span>
         </span>
 
@@ -155,9 +130,10 @@ export function GameRow({
         <div
           className={
             wrap
-              ? "-mx-1 flex flex-wrap gap-3 px-1 pb-2"
-              : // Horizontal scroll keeps long rows dense without wrapping.
-                "-mx-1 flex gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:thin]"
+              ? // A real grid, so tiles reflow at every breakpoint instead of
+                // scrolling sideways and hiding whatever does not fit.
+                "grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+              : "-mx-1 flex gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:thin]"
           }
         >
           {games.map((g) => (

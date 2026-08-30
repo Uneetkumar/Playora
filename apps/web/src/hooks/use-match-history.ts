@@ -1,8 +1,9 @@
 "use client";
 
-import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { getSupabaseBrowserClient } from "../lib/supabase/client";
 import { isSupabaseConfigured } from "../lib/env";
+import { queryKeys } from "../lib/query/keys";
 
 export interface MatchParticipant {
   userId: string;
@@ -73,120 +74,83 @@ export function useMatchHistory(
   userId: string | null | undefined,
   { gameSlug = null, limit = 20, page = 0 }: MatchHistoryOptions = {},
 ) {
-  const [matches, setMatches] = React.useState<MatchRecord[]>([]);
-  const [isLoading, setLoading] = React.useState(true);
-  const [hasMore, setHasMore] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  const query = useQuery({
+    queryKey: queryKeys.matchHistory(userId, gameSlug, page, limit),
+    enabled: Boolean(userId) && isSupabaseConfigured,
+    queryFn: async () => {
+      const supabase = getSupabaseBrowserClient();
+      // One extra row answers "is there a next page" without a count query.
+      const from = page * limit;
+      let request = supabase
+        .from("game_results")
+        .select(
+          "session_id,room_id,winner_id,duration_seconds,finish_reason,created_at,scores,games!inner(slug,name)",
+        )
+        .filter("scores", "cs", participantFilter(userId!))
+        .order("created_at", { ascending: false })
+        .range(from, from + limit);
 
-  React.useEffect(() => {
-    if (!userId || !isSupabaseConfigured) {
-      setMatches([]);
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
+      if (gameSlug) request = request.eq("games.slug", gameSlug);
 
-    (async () => {
-      try {
-        const supabase = getSupabaseBrowserClient();
-        // One extra row answers "is there a next page" without a count query.
-        const from = page * limit;
-        let query = supabase
-          .from("game_results")
-          .select(
-            "session_id,room_id,winner_id,duration_seconds,finish_reason,created_at,scores,games!inner(slug,name)",
-          )
-          .filter("scores", "cs", participantFilter(userId))
-          .order("created_at", { ascending: false })
-          .range(from, from + limit);
+      const { data, error } = await request;
+      if (error) throw new Error(error.message);
 
-        if (gameSlug) query = query.eq("games.slug", gameSlug);
+      const rows = (data ?? []) as unknown as ResultRow[];
+      const pageRows = rows.slice(0, limit);
 
-        const { data, error: queryError } = await query;
-        if (cancelled) return;
-        if (queryError) throw new Error(queryError.message);
+      const [names, ratings] = await Promise.all([
+        resolveNames(supabase, pageRows),
+        resolveRatingChanges(supabase, pageRows, userId!),
+      ]);
 
-        const rows = (data ?? []) as unknown as ResultRow[];
-        const pageRows = rows.slice(0, limit);
-        setHasMore(rows.length > limit);
+      return {
+        matches: pageRows.map((row) => toRecord(row, userId!, names, ratings)),
+        hasMore: rows.length > limit,
+      };
+    },
+  });
 
-        const [names, ratings] = await Promise.all([
-          resolveNames(supabase, pageRows),
-          resolveRatingChanges(supabase, pageRows, userId),
-        ]);
-        if (cancelled) return;
-
-        setMatches(pageRows.map((row) => toRecord(row, userId, names, ratings)));
-        setError(null);
-      } catch (err) {
-        if (cancelled) return;
-        setMatches([]);
-        setError(err instanceof Error ? err.message : "Could not load your matches.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, gameSlug, limit, page]);
-
-  return { matches, isLoading, hasMore, error };
+  return {
+    matches: query.data?.matches ?? [],
+    hasMore: query.data?.hasMore ?? false,
+    isLoading: query.isPending && query.fetchStatus !== "idle",
+    error: query.error instanceof Error ? query.error.message : null,
+  };
 }
 
 /** One finished match, by session id. Used by the detail page. */
 export function useMatchDetail(sessionId: string, userId: string | null | undefined) {
-  const [match, setMatch] = React.useState<MatchRecord | null>(null);
-  const [isLoading, setLoading] = React.useState(true);
-  const [notFound, setNotFound] = React.useState(false);
+  const query = useQuery({
+    queryKey: queryKeys.matchDetail(sessionId, userId),
+    enabled: Boolean(sessionId) && isSupabaseConfigured,
+    queryFn: async () => {
+      const supabase = getSupabaseBrowserClient();
+      const { data } = await supabase
+        .from("game_results")
+        .select(
+          "session_id,room_id,winner_id,duration_seconds,finish_reason,created_at,scores,games(slug,name)",
+        )
+        .eq("session_id", sessionId)
+        .limit(1);
 
-  React.useEffect(() => {
-    if (!sessionId || !isSupabaseConfigured) {
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
+      const row = ((data ?? []) as unknown as ResultRow[])[0];
+      // Null is a legitimate answer here, not a failure: a link can point at a
+      // match that no longer exists.
+      if (!row) return null;
 
-    (async () => {
-      try {
-        const supabase = getSupabaseBrowserClient();
-        const { data } = await supabase
-          .from("game_results")
-          .select(
-            "session_id,room_id,winner_id,duration_seconds,finish_reason,created_at,scores,games(slug,name)",
-          )
-          .eq("session_id", sessionId)
-          .limit(1);
+      const [names, ratings] = await Promise.all([
+        resolveNames(supabase, [row]),
+        resolveRatingChanges(supabase, [row], userId ?? ""),
+      ]);
+      return toRecord(row, userId ?? "", names, ratings);
+    },
+  });
 
-        if (cancelled) return;
-        const row = ((data ?? []) as unknown as ResultRow[])[0];
-        if (!row) {
-          setNotFound(true);
-          return;
-        }
-
-        const [names, ratings] = await Promise.all([
-          resolveNames(supabase, [row]),
-          resolveRatingChanges(supabase, [row], userId ?? ""),
-        ]);
-        if (cancelled) return;
-        setMatch(toRecord(row, userId ?? "", names, ratings));
-      } catch {
-        if (!cancelled) setNotFound(true);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionId, userId]);
-
-  return { match, isLoading, notFound };
+  return {
+    match: query.data ?? null,
+    isLoading: query.isPending && query.fetchStatus !== "idle",
+    notFound: query.isSuccess && query.data === null,
+  };
 }
 
 type SupabaseClient = ReturnType<typeof getSupabaseBrowserClient>;

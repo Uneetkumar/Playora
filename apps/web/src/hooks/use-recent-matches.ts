@@ -1,8 +1,9 @@
 "use client";
 
-import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { getSupabaseBrowserClient } from "../lib/supabase/client";
 import { isSupabaseConfigured } from "../lib/env";
+import { queryKeys } from "../lib/query/keys";
 
 export interface RecentMatch {
   sessionId: string;
@@ -31,56 +32,36 @@ interface ResultRow {
  * match, so this is the record rather than anything the client tracks.
  */
 export function useRecentMatches(userId: string | null | undefined, limit = 5) {
-  const [matches, setMatches] = React.useState<RecentMatch[]>([]);
-  const [isLoading, setLoading] = React.useState(true);
+  const query = useQuery({
+    queryKey: queryKeys.recentMatches(userId, limit),
+    enabled: Boolean(userId) && isSupabaseConfigured,
+    queryFn: async (): Promise<RecentMatch[]> => {
+      const supabase = getSupabaseBrowserClient();
+      // Scoped server-side against the GIN index on `scores` (migration
+      // 00005). This used to fetch the newest 40 results platform-wide and
+      // filter them here, which returns nothing at all once other people are
+      // playing between one visit and the next.
+      const { data } = await supabase
+        .from("game_results")
+        .select("session_id,winner_id,duration_seconds,finish_reason,created_at,scores,games(slug,name)")
+        .filter("scores", "cs", JSON.stringify([{ userId }]))
+        .order("created_at", { ascending: false })
+        .limit(limit);
 
-  React.useEffect(() => {
-    if (!userId || !isSupabaseConfigured) {
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
+      return ((data ?? []) as unknown as ResultRow[]).map((r) => ({
+        sessionId: r.session_id,
+        gameSlug: r.games?.slug ?? "chess",
+        gameName: r.games?.name ?? "Game",
+        isWinner: r.winner_id === userId,
+        isDraw: r.winner_id === null,
+        durationSeconds: r.duration_seconds,
+        playedAt: r.created_at,
+      }));
+    },
+  });
 
-    (async () => {
-      try {
-        const supabase = getSupabaseBrowserClient();
-        // Scoped server-side against the GIN index on `scores` (migration
-        // 00005). This used to fetch the newest 40 results platform-wide and
-        // filter them here, which returns nothing at all once other people are
-        // playing between one visit and the next.
-        const { data } = await supabase
-          .from("game_results")
-          .select("session_id,winner_id,duration_seconds,finish_reason,created_at,scores,games(slug,name)")
-          .filter("scores", "cs", JSON.stringify([{ userId }]))
-          .order("created_at", { ascending: false })
-          .limit(limit);
-
-        if (cancelled) return;
-        const rows = (data ?? []) as unknown as ResultRow[];
-
-        const mine = rows
-          .map((r) => ({
-            sessionId: r.session_id,
-            gameSlug: r.games?.slug ?? "chess",
-            gameName: r.games?.name ?? "Game",
-            isWinner: r.winner_id === userId,
-            isDraw: r.winner_id === null,
-            durationSeconds: r.duration_seconds,
-            playedAt: r.created_at,
-          }));
-
-        setMatches(mine);
-      } catch {
-        if (!cancelled) setMatches([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, limit]);
-
-  return { matches, isLoading };
+  return {
+    matches: query.data ?? [],
+    isLoading: query.isPending && query.fetchStatus !== "idle",
+  };
 }

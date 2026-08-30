@@ -24,7 +24,6 @@ That is correct behaviour for development and very annoying if you are trying to
 play a game while the code is being edited.
 
 ```bash
-pnpm play      # builds and serves a stable copy on http://localhost:3000
 ```
 
 It builds to `.next-stable` rather than `.next`, so neither `pnpm dev` nor

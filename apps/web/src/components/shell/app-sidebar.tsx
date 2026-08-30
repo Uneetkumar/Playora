@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@playora/ui";
 import {
   History,
@@ -39,10 +39,34 @@ const DISCOVER = [
 
 export function AppSidebar() {
   const pathname = usePathname();
+  const search = useSearchParams();
   const [expanded, setExpanded] = React.useState(false);
 
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href.split("?")[0]!);
+  /**
+   * Whether a row is the current page.
+   *
+   * The query string is part of the identity, not decoration. Comparing only
+   * the path made "Recently played", "New games", "Popular" and "Top rated" —
+   * which are all `/games?sort=...` — highlight together, so every one of them
+   * looked selected at once.
+   */
+  const isActive = (href: string) => {
+    const [path, query] = href.split("?");
+
+    if (path === "/") return pathname === "/";
+    if (!pathname.startsWith(path!)) return false;
+    if (!query) {
+      // A row with no query is only active when the URL has no sort either,
+      // or the plain link would also light up alongside a sorted one.
+      return !search?.get("sort");
+    }
+
+    const expected = new URLSearchParams(query);
+    for (const [key, value] of expected) {
+      if (search?.get(key) !== value) return false;
+    }
+    return true;
+  };
 
   const Row = ({
     href,

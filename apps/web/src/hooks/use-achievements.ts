@@ -1,9 +1,10 @@
 "use client";
 
-import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ACHIEVEMENTS, achievementPoints, type AchievementDef } from "@playora/progression";
 import { getSupabaseBrowserClient } from "../lib/supabase/client";
 import { isSupabaseConfigured } from "../lib/env";
+import { queryKeys } from "../lib/query/keys";
 
 export interface AchievementProgress {
   unlockedIds: string[];
@@ -32,49 +33,34 @@ const EMPTY: AchievementProgress = {
  * simply stops being listed — no migration either way.
  */
 export function useAchievements(userId: string | null | undefined) {
-  const [progress, setProgress] = React.useState<AchievementProgress>(EMPTY);
-  const [isLoading, setLoading] = React.useState(true);
+  const query = useQuery({
+    queryKey: queryKeys.achievements(userId),
+    enabled: Boolean(userId) && isSupabaseConfigured,
+    queryFn: async (): Promise<AchievementProgress> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data } = await supabase
+        .from("user_achievements")
+        .select("achievement_id,unlocked_at")
+        .eq("user_id", userId!);
 
-  React.useEffect(() => {
-    if (!userId || !isSupabaseConfigured) {
-      setProgress(EMPTY);
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
+      const rows = (data ?? []) as Array<{ achievement_id: string; unlocked_at: string }>;
+      const ids = new Set(rows.map((r) => r.achievement_id));
 
-    (async () => {
-      try {
-        const supabase = getSupabaseBrowserClient();
-        const { data } = await supabase
-          .from("user_achievements")
-          .select("achievement_id,unlocked_at")
-          .eq("user_id", userId);
+      // Merged against the catalogue in code, so an achievement added to the
+      // list shows up as locked for everyone with no migration.
+      return {
+        unlockedIds: [...ids],
+        unlockedAt: Object.fromEntries(rows.map((r) => [r.achievement_id, r.unlocked_at])),
+        points: achievementPoints([...ids]),
+        totalPoints: EMPTY.totalPoints,
+        unlocked: ACHIEVEMENTS.filter((a) => ids.has(a.id)),
+        locked: ACHIEVEMENTS.filter((a) => !ids.has(a.id)),
+      };
+    },
+  });
 
-        if (cancelled) return;
-        const rows = (data ?? []) as Array<{ achievement_id: string; unlocked_at: string }>;
-        const ids = new Set(rows.map((r) => r.achievement_id));
-
-        setProgress({
-          unlockedIds: [...ids],
-          unlockedAt: Object.fromEntries(rows.map((r) => [r.achievement_id, r.unlocked_at])),
-          points: achievementPoints([...ids]),
-          totalPoints: EMPTY.totalPoints,
-          unlocked: ACHIEVEMENTS.filter((a) => ids.has(a.id)),
-          locked: ACHIEVEMENTS.filter((a) => !ids.has(a.id)),
-        });
-      } catch {
-        if (!cancelled) setProgress(EMPTY);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
-
-  return { progress, isLoading };
+  return {
+    progress: query.data ?? EMPTY,
+    isLoading: query.isPending && query.fetchStatus !== "idle",
+  };
 }

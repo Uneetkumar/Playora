@@ -23,7 +23,9 @@ export class BikeRaceEngine extends RacingEngine {
       engineBrake: 11,
       // Flicks between lanes; the cost is that it keeps going when you stop asking.
       steerRate: 2.1,
-      centrifugal: 0.62,
+      // Higher than the car's, and it has more steering authority to answer
+      // with. A bike is thrown further and turns harder.
+      centrifugal: 1.3,
       offRoadDrag: 34,
       offRoadMaxSpeed: 24,
       // No bodywork to scrape: touching the wall costs far more than in a car.

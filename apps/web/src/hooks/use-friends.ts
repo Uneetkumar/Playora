@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSupabaseBrowserClient } from "../lib/supabase/client";
 import { isSupabaseConfigured } from "../lib/env";
+import { queryKeys } from "../lib/query/keys";
 
 export interface FriendProfile {
   userId: string;
@@ -53,74 +55,54 @@ const EMPTY: FriendsState = { friends: [], incoming: [], outgoing: [] };
  * enforced by RLS in migration 00007, not merely by this UI.
  */
 export function useFriends(userId: string | null | undefined) {
-  const [state, setState] = React.useState<FriendsState>(EMPTY);
-  const [isLoading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [version, setVersion] = React.useState(0);
+  const queryClient = useQueryClient();
 
-  const refresh = React.useCallback(() => setVersion((v) => v + 1), []);
+  const query = useQuery({
+    queryKey: queryKeys.friends(userId),
+    enabled: Boolean(userId) && isSupabaseConfigured,
+    queryFn: async (): Promise<FriendsState> => {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase
+        .from("friendships")
+        .select("id,user_id,friend_id,status,created_at")
+        .or(`user_id.eq.${userId},friend_id.eq.${userId}`);
 
-  React.useEffect(() => {
-    if (!userId || !isSupabaseConfigured) {
-      setState(EMPTY);
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
+      if (error) throw new Error(error.message);
 
-    (async () => {
-      try {
-        const supabase = getSupabaseBrowserClient();
-        const { data, error: queryError } = await supabase
-          .from("friendships")
-          .select("id,user_id,friend_id,status,created_at")
-          .or(`user_id.eq.${userId},friend_id.eq.${userId}`);
+      const rows = (data ?? []) as FriendshipRow[];
+      const otherIds = [
+        ...new Set(rows.map((r) => (r.user_id === userId ? r.friend_id : r.user_id))),
+      ];
+      const profiles = await loadProfiles(supabase, otherIds);
 
-        if (cancelled) return;
-        if (queryError) throw new Error(queryError.message);
+      const next: FriendsState = { friends: [], incoming: [], outgoing: [] };
+      for (const row of rows) {
+        const otherId = row.user_id === userId ? row.friend_id : row.user_id;
+        const profile = profiles[otherId];
+        // A profile can be missing if the account was deleted between the two
+        // queries. Skipping is right: there is no person left to show.
+        if (!profile) continue;
 
-        const rows = (data ?? []) as FriendshipRow[];
-        const otherIds = [
-          ...new Set(rows.map((r) => (r.user_id === userId ? r.friend_id : r.user_id))),
-        ];
-
-        const profiles = await loadProfiles(supabase, otherIds);
-        if (cancelled) return;
-
-        const next: FriendsState = { friends: [], incoming: [], outgoing: [] };
-        for (const row of rows) {
-          const otherId = row.user_id === userId ? row.friend_id : row.user_id;
-          const profile = profiles[otherId];
-          // A profile can be missing if the account was deleted between the two
-          // queries. Skipping is right: there is no person left to show.
-          if (!profile) continue;
-
-          if (row.status === "accepted") next.friends.push(profile);
-          else if (row.status === "pending") {
-            const request = { ...profile, friendshipId: row.id, requestedAt: row.created_at };
-            if (row.friend_id === userId) next.incoming.push(request);
-            else next.outgoing.push(request);
-          }
-          // 'blocked' is deliberately not surfaced anywhere yet.
+        if (row.status === "accepted") next.friends.push(profile);
+        else if (row.status === "pending") {
+          const request = { ...profile, friendshipId: row.id, requestedAt: row.created_at };
+          if (row.friend_id === userId) next.incoming.push(request);
+          else next.outgoing.push(request);
         }
-
-        next.friends.sort((a, b) => a.displayName.localeCompare(b.displayName));
-        setState(next);
-        setError(null);
-      } catch (err) {
-        if (cancelled) return;
-        setState(EMPTY);
-        setError(err instanceof Error ? err.message : "Could not load your friends.");
-      } finally {
-        if (!cancelled) setLoading(false);
+        // 'blocked' is deliberately not surfaced anywhere yet.
       }
-    })();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, version]);
+      next.friends.sort((a, b) => a.displayName.localeCompare(b.displayName));
+      return next;
+    },
+  });
+
+  // Every mutation ends by invalidating the list rather than patching it by
+  // hand: the server decides what a friendship is, and re-reading is both
+  // simpler and correct when two people act at once.
+  const refresh = React.useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.friends(userId) });
+  }, [queryClient, userId]);
 
   /** Sends a request by username. Returns an error message, or null on success. */
   const sendRequest = React.useCallback(
@@ -146,15 +128,15 @@ export function useFriends(userId: string | null | undefined) {
           return "That player is a guest and cannot be added yet.";
         }
 
-        const { error: insertError } = await supabase
+        const { error } = await supabase
           .from("friendships")
           .insert({ user_id: userId, friend_id: target.id, status: "pending" });
 
-        if (insertError) {
+        if (error) {
           // The unique constraint is the normal way to hit this, and "already
           // asked" is a better thing to say than a database message.
-          if (insertError.code === "23505") return "You have already asked them.";
-          return insertError.message;
+          if (error.code === "23505") return "You have already asked them.";
+          return error.message;
         }
 
         refresh();
@@ -173,11 +155,11 @@ export function useFriends(userId: string | null | undefined) {
         // Declining deletes the row rather than storing a refusal: there is no
         // reason to keep a record that someone said no, and it lets them ask
         // again later.
-        const { error: opError } = accept
+        const { error } = accept
           ? await supabase.from("friendships").update({ status: "accepted" }).eq("id", friendshipId)
           : await supabase.from("friendships").delete().eq("id", friendshipId);
 
-        if (opError) return opError.message;
+        if (error) return error.message;
         refresh();
         return null;
       } catch (err) {
@@ -193,14 +175,14 @@ export function useFriends(userId: string | null | undefined) {
       try {
         const supabase = getSupabaseBrowserClient();
         // The row could be in either direction, so match both.
-        const { error: deleteError } = await supabase
+        const { error } = await supabase
           .from("friendships")
           .delete()
           .or(
             `and(user_id.eq.${userId},friend_id.eq.${otherUserId}),` +
               `and(user_id.eq.${otherUserId},friend_id.eq.${userId})`,
           );
-        if (deleteError) return deleteError.message;
+        if (error) return error.message;
         refresh();
         return null;
       } catch (err) {
@@ -210,7 +192,15 @@ export function useFriends(userId: string | null | undefined) {
     [userId, refresh],
   );
 
-  return { ...state, isLoading, error, sendRequest, respond, remove, refresh };
+  return {
+    ...(query.data ?? EMPTY),
+    isLoading: query.isPending && query.fetchStatus !== "idle",
+    error: query.error instanceof Error ? query.error.message : null,
+    sendRequest,
+    respond,
+    remove,
+    refresh,
+  };
 }
 
 type SupabaseClient = ReturnType<typeof getSupabaseBrowserClient>;

@@ -2,6 +2,13 @@ packages:
   - 'apps/*'
   - 'packages/*'
 allowBuilds:
+  # Downloads a platform binary on install. Only needed to upload source maps
+  # during a production build — the runtime SDK reports errors without it. Turn
+  # on in CI, where the download is reviewable, rather than in every clone.
+  '@sentry/cli': false
+  # Postinstall only prints a funding notice.
+  core-js: false
   esbuild: true
   sharp: true
   workerd: true
+

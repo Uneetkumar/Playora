@@ -42,3 +42,15 @@ npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
 .next-verify/
+
+# Unity — generated per machine, and build output is tens of megabytes.
+unity/*/Library/
+unity/*/Temp/
+unity/*/Obj/
+unity/*/Build/
+unity/*/Logs/
+unity/*/UserSettings/
+unity/*/MemoryCaptures/
+unity/*/*.csproj
+unity/*/*.sln
+apps/web/public/unity/*/Build/

@@ -1,8 +1,15 @@
 import { describe, it, expect } from "vitest";
-import type { Player } from "@playora/game-types";
+import type { GameId, Player } from "@playora/game-types";
 import { CarRaceEngine } from "../racing/CarRaceEngine.js";
 import { BikeRaceEngine } from "../racing/BikeRaceEngine.js";
 import { buildTrack, sampleTrack, trackCenterline, trackToWorld } from "../racing/track.js";
+import {
+  BIKES,
+  CARS,
+  vehicleById,
+  vehicleStats,
+  type VehicleSpec,
+} from "../racing/garage.js";
 import {
   BIKE_LEVELS,
   CAR_LEVELS,
@@ -691,5 +698,147 @@ describe("level unlocking", () => {
   it("opens the whole ladder once every level is won", () => {
     const best = Object.fromEntries(CAR_LEVELS.map((l) => [l.index, 1]));
     expect(unlockedLevels(CAR_LEVELS, best).every(Boolean)).toBe(true);
+  });
+});
+
+describe("the garage", () => {
+  const rosters: Array<[GameId, VehicleSpec[]]> = [
+    ["car-race", CARS],
+    ["bike-race", BIKES],
+  ];
+
+  it("gives every vehicle a unique id, a name and copy", () => {
+    for (const [, roster] of rosters) {
+      const ids = roster.map((v) => v.id);
+      expect(new Set(ids).size).toBe(ids.length);
+      for (const vehicle of roster) {
+        expect(vehicle.name.length).toBeGreaterThan(0);
+        expect(vehicle.blurb.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("falls back to the class default for an unknown id", () => {
+    expect(vehicleById("car-race", "nonsense").id).toBe(CARS[0]!.id);
+    expect(vehicleById("bike-race", null).id).toBe(BIKES[0]!.id);
+    expect(vehicleById("car-race", undefined).kind).toBe("car");
+  });
+
+  it("derives the stat bars from the physics, not from a separate list", () => {
+    // The whole reason stats are computed: a car showing more speed must
+    // actually have a higher top speed, or the garage is lying to the player.
+    const fast = vehicleById("car-race", "car-speed");
+    const balanced = vehicleById("car-race", "car-balanced");
+
+    expect(vehicleStats(fast).speed).toBeGreaterThan(vehicleStats(balanced).speed);
+    expect(fast.modifiers.maxSpeed).toBeGreaterThan(balanced.modifiers.maxSpeed);
+
+    const grippy = vehicleById("car-race", "car-grip");
+    expect(vehicleStats(grippy).handling).toBeGreaterThan(vehicleStats(balanced).handling);
+  });
+
+  it("keeps every bar on the scale", () => {
+    for (const [, roster] of rosters) {
+      for (const vehicle of roster) {
+        const stats = vehicleStats(vehicle);
+        for (const [name, value] of Object.entries(stats)) {
+          expect(value, `${vehicle.id} ${name} is ${value}`).toBeGreaterThanOrEqual(1);
+          expect(value, `${vehicle.id} ${name} is ${value}`).toBeLessThanOrEqual(10);
+        }
+      }
+    }
+  });
+
+  it("uses the whole scale, so the bars are worth comparing", () => {
+    // A roster whose bars all sit at the same value tells the player nothing.
+    for (const [, roster] of rosters) {
+      const speeds = roster.map((v) => vehicleStats(v).speed);
+      expect(Math.max(...speeds) - Math.min(...speeds)).toBeGreaterThan(2);
+    }
+  });
+
+  it("applies the modifiers to the tuning the physics actually uses", () => {
+    const engine = new CarRaceEngine();
+    const balanced = engine.vehicleTuningFor("car-balanced");
+    const fast = engine.vehicleTuningFor("car-speed");
+    const grippy = engine.vehicleTuningFor("car-grip");
+
+    expect(fast.maxSpeed).toBeGreaterThan(balanced.maxSpeed);
+    expect(fast.steerRate).toBeLessThan(balanced.steerRate);
+    // Lower centrifugal means a corner throws it less.
+    expect(grippy.centrifugal).toBeLessThan(balanced.centrifugal);
+  });
+
+  it("makes the straight-line car genuinely quicker in a straight line", () => {
+    const engine = new CarRaceEngine();
+
+    const topSpeed = (vehicleId: string) => {
+      let state = engine.init(players(1), {
+        randomSeed: "garage",
+        trackLength: 3000,
+        laps: 1,
+        vehicles: { p1: vehicleId },
+      });
+      for (let i = 0; i < 60 * 5; i += 20) state = engine.applyAction(state, tickAction(20)).state;
+
+      let fastest = 0;
+      for (let elapsed = 0; elapsed < 60 * 90 && !state.isFinished; elapsed += 5) {
+        state = engine.applyAction(state, inputAction("p1", autoInput(state, "p1"))).state;
+        state = engine.applyAction(state, tickAction(5)).state;
+        fastest = Math.max(fastest, state.vehicles.p1!.speed);
+      }
+      return fastest;
+    };
+
+    expect(topSpeed("car-speed")).toBeGreaterThan(topSpeed("car-balanced"));
+  });
+
+  it("makes that speed cost real cornering", () => {
+    // Stated as physics rather than as a lap time. Only about a tenth of a
+    // circuit is tight enough to matter, so straight-line speed dominates the
+    // clock and a lap-time comparison measures the straights, not the trade.
+    const engine = new CarRaceEngine();
+    const grippy = engine.vehicleTuningFor("car-grip");
+    const fast = engine.vehicleTuningFor("car-speed");
+
+    // The tightest corner a circuit actually produces.
+    const curvature = 0.024;
+
+    const holdable = (t: ReturnType<typeof engine.vehicleTuningFor>) => {
+      const push = curvature * t.maxSpeed * t.centrifugal;
+      return { push, lock: t.steerRate, canHold: push < t.steerRate };
+    };
+
+    // The car built for straights cannot take the tightest corner flat out.
+    expect(holdable(fast).canHold).toBe(false);
+    // The car built for corners can.
+    expect(holdable(grippy).canHold).toBe(true);
+  });
+
+  it("asks a stock car to lift for the tightest corners but not the ordinary ones", () => {
+    // The difficulty curve, stated as physics. If full lock beat every corner,
+    // nothing would ever demand a lift and braking would never pay; if it beat
+    // none of them the game would be undriveable.
+    const engine = new CarRaceEngine();
+    const stock = engine.vehicleTuningFor("car-balanced");
+    const push = (curvature: number) => curvature * stock.maxSpeed * stock.centrifugal;
+
+    // A typical fast corner — roughly the tightest tenth of a circuit — is
+    // holdable flat out by a competent driver.
+    expect(push(0.017)).toBeLessThan(stock.steerRate);
+
+    // The tightest a circuit can produce is not. That corner is a braking
+    // point, which is what makes the rest of the lap worth setting up for.
+    expect(push(0.028)).toBeGreaterThan(stock.steerRate);
+  });
+
+  it("seats each player in the vehicle they chose", () => {
+    const engine = new CarRaceEngine();
+    const state = engine.init(players(2), {
+      randomSeed: "seats",
+      vehicles: { p1: "car-grip", p2: "car-speed" },
+    });
+    expect(state.vehicles.p1!.vehicleId).toBe("car-grip");
+    expect(state.vehicles.p2!.vehicleId).toBe("car-speed");
   });
 });

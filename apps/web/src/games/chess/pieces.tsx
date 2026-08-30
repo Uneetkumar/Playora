@@ -80,13 +80,16 @@ export function ChessPiece({
           height: "100%",
           fontFamily: "var(--font-display), system-ui, sans-serif",
           fontWeight: 800,
-          fontSize: "52%",
+          // Roughly three quarters of the square, which is where a real set
+          // sits. At half, a piece floats in the middle of an empty square and
+          // the board reads as a grid with specks on it.
+          fontSize: "74%",
           color: fill,
           background: light ? "transparent" : "transparent",
           textShadow: light
             ? "0 1px 2px rgba(0,0,0,0.45)"
             : "0 1px 1px rgba(255,255,255,0.14)",
-          WebkitTextStroke: `1.2px ${stroke}`,
+          WebkitTextStroke: `1.5px ${stroke}`,
         }}
         aria-hidden
       >

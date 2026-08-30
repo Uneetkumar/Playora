@@ -19,3 +19,29 @@ enabled = true
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["MatchmakingDurableObject"]
+
+# ---------------------------------------------------------------------------
+# Post-match processing (spec v2 section 70)
+#
+# Persistence, rating, XP and achievements are several sequential round trips
+# to Supabase, and none of them should hold up a room. The producer binding is
+# commented out because Queues need a paid plan: without it the same work runs
+# inline in the Durable Object, which is slower but never silently skipped.
+#
+# To turn it on:
+#   wrangler queues create playora-match-results
+# then uncomment both blocks and redeploy.
+# ---------------------------------------------------------------------------
+
+# [[queues.producers]]
+# binding = "MATCH_QUEUE"
+# queue = "playora-match-results"
+
+# [[queues.consumers]]
+# queue = "playora-match-results"
+# max_batch_size = 10
+# max_batch_timeout = 5
+# # A match that fails four times goes to the dead letter queue rather than
+# # being retried forever or dropped without trace.
+# max_retries = 3
+# dead_letter_queue = "playora-match-results-dlq"

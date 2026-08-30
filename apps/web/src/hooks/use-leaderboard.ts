@@ -1,8 +1,9 @@
 "use client";
 
-import * as React from "react";
+import { useQuery } from "@tanstack/react-query";
 import { getSupabaseBrowserClient } from "../lib/supabase/client";
 import { isSupabaseConfigured } from "../lib/env";
+import { queryKeys } from "../lib/query/keys";
 
 export type LeaderboardScope = "global" | "friends";
 
@@ -55,96 +56,62 @@ export function useLeaderboard(
   userId: string | null | undefined,
   { gameSlug, scope = "global", limit = 50 }: LeaderboardOptions,
 ) {
-  const [entries, setEntries] = React.useState<LeaderboardEntry[]>([]);
-  const [me, setMe] = React.useState<LeaderboardEntry | null>(null);
-  const [isLoading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  const query = useQuery({
+    queryKey: queryKeys.leaderboard(gameSlug, scope, userId),
+    enabled: isSupabaseConfigured,
+    queryFn: async (): Promise<{ entries: LeaderboardEntry[]; me: LeaderboardEntry | null }> => {
+      const supabase = getSupabaseBrowserClient();
 
-  React.useEffect(() => {
-    if (!isSupabaseConfigured) {
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
+      const { data: gameRow } = await supabase
+        .from("games")
+        .select("id")
+        .eq("slug", gameSlug)
+        .limit(1);
+      const gameId = (gameRow as Array<{ id: string }> | null)?.[0]?.id;
+      if (!gameId) return { entries: [], me: null };
 
-    (async () => {
-      try {
-        const supabase = getSupabaseBrowserClient();
-
-        const { data: gameRow } = await supabase
-          .from("games")
-          .select("id")
-          .eq("slug", gameSlug)
-          .limit(1);
-        const gameId = (gameRow as Array<{ id: string }> | null)?.[0]?.id;
-        if (!gameId) {
-          if (!cancelled) {
-            setEntries([]);
-            setMe(null);
-            setError(null);
-          }
-          return;
-        }
-
-        let ids: string[] | null = null;
-        if (scope === "friends") {
-          ids = await friendIds(supabase, userId);
-          // Your own row belongs on a friends board; comparing against people
-          // you know is the whole point of it.
-          if (userId) ids = [...new Set([...ids, userId])];
-          if (ids.length === 0) {
-            if (!cancelled) {
-              setEntries([]);
-              setMe(null);
-              setError(null);
-            }
-            return;
-          }
-        }
-
-        let query = supabase
-          .from("game_ratings")
-          .select(SELECT)
-          .eq("game_id", gameId)
-          // An unplayed 1200 is a default, not a ranking.
-          .gt("games_played", 0)
-          .order("rating", { ascending: false })
-          .limit(limit);
-
-        if (ids) query = query.in("user_id", ids);
-
-        const { data, error: queryError } = await query;
-        if (cancelled) return;
-        if (queryError) throw new Error(queryError.message);
-
-        const rows = (data ?? []) as unknown as RatingRow[];
-        const list = rows.map((row, i) => toEntry(row, i + 1, userId));
-        setEntries(list);
-
-        // Where the viewer sits, if they are not already on screen.
-        if (userId && !list.some((e) => e.isMe)) {
-          setMe(await standingFor(supabase, gameId, userId, ids));
-        } else {
-          setMe(null);
-        }
-        setError(null);
-      } catch (err) {
-        if (cancelled) return;
-        setEntries([]);
-        setMe(null);
-        setError(err instanceof Error ? err.message : "Could not load the leaderboard.");
-      } finally {
-        if (!cancelled) setLoading(false);
+      let ids: string[] | null = null;
+      if (scope === "friends") {
+        ids = await friendIds(supabase, userId);
+        // Your own row belongs on a friends board; comparing against people
+        // you know is the whole point of it.
+        if (userId) ids = [...new Set([...ids, userId])];
+        if (ids.length === 0) return { entries: [], me: null };
       }
-    })();
 
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, gameSlug, scope, limit]);
+      let request = supabase
+        .from("game_ratings")
+        .select(SELECT)
+        .eq("game_id", gameId)
+        // An unplayed 1200 is a default, not a ranking.
+        .gt("games_played", 0)
+        .order("rating", { ascending: false })
+        .limit(limit);
 
-  return { entries, me, isLoading, error };
+      if (ids) request = request.in("user_id", ids);
+
+      const { data, error } = await request;
+      if (error) throw new Error(error.message);
+
+      const rows = (data ?? []) as unknown as RatingRow[];
+      const entries = rows.map((row, i) => toEntry(row, i + 1, userId));
+
+      // Where the viewer sits, if they are not already on screen.
+      const me =
+        userId && !entries.some((e) => e.isMe)
+          ? await standingFor(supabase, gameId, userId, ids)
+          : null;
+
+      return { entries, me };
+    },
+  });
+
+  return {
+    entries: query.data?.entries ?? [],
+    me: query.data?.me ?? null,
+    isLoading: query.isPending && query.fetchStatus !== "idle",
+    error: query.error instanceof Error ? query.error.message : null,
+  };
 }
 
 type SupabaseClient = ReturnType<typeof getSupabaseBrowserClient>;

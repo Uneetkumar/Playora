@@ -55,6 +55,8 @@ export const NEUTRAL_INPUT: VehicleInput = {
 
 export interface VehicleState {
   playerId: string;
+  /** Which vehicle from the garage this seat is driving. */
+  vehicleId: string;
   /** Metres travelled along the centreline. */
   distance: number;
   /** Offset across the road, -1..1 at the edges of the drivable surface. */
@@ -181,6 +183,8 @@ export interface RacingConfig extends BaseGameConfig {
   trackLength?: number;
   /** Laps to complete. */
   laps?: number;
+  /** Chosen vehicle per player id. Anything missing gets the class default. */
+  vehicles?: Record<string, string>;
   /** Nitro charges each vehicle starts with. */
   nitroCharges?: number;
   /** Seconds before the race is stopped regardless of who has finished. */

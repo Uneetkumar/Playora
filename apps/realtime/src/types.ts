@@ -3,6 +3,15 @@ import type { DurableObjectNamespace } from "@cloudflare/workers-types";
 export interface Env {
   ROOM_DO: DurableObjectNamespace;
   MATCHMAKING_DO: DurableObjectNamespace;
+
+  /**
+   * Post-match work: persistence, rating, XP, achievements.
+   *
+   * Optional because Queues need a paid plan and a deployed binding. Without
+   * it the same work runs inline in the room, which is slower but never
+   * silently skipped — see lib/match-queue.ts.
+   */
+  MATCH_QUEUE?: import("./lib/match-queue.js").MatchQueue;
   ENVIRONMENT?: string;
 
   /**
