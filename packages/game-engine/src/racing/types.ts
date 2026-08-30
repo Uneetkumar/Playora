@@ -69,6 +69,14 @@ export interface VehicleState {
   coins: number;
   /** Ticks left of the crash stun, during which input is ignored. */
   crashTicks: number;
+  /** Laps completed. The lap being driven is this plus one. */
+  lapsDone: number;
+  /** Tick the current lap started on. */
+  lapStartTick: number;
+  /** Completed lap times, in ticks. */
+  lapTicks: number[];
+  /** Quickest completed lap, in ticks. Null until one is finished. */
+  bestLapTicks: number | null;
   /** Checkpoints passed, used for progress and for anti-shortcut ordering. */
   checkpoint: number;
   finishedAtTick: number | null;
@@ -104,10 +112,29 @@ export interface TrackObstacle extends TrackObject {
   halfWidth: number;
 }
 
+/** One sample of the centreline, in world space. */
+export interface TrackPoint {
+  x: number;
+  y: number;
+  z: number;
+  /** Direction of travel at this point, in radians. */
+  heading: number;
+  /** Metres from the start line. */
+  distance: number;
+}
+
 export interface TrackSpec {
   seed: number;
-  /** Total race distance in metres. */
+  /** Length of one lap, in metres. */
   length: number;
+  /**
+   * The centreline, sampled at even distances and closed into a loop.
+   *
+   * Stored rather than integrated from curvature: integration accumulates
+   * error, and on a circuit that error is a visible step where the road meets
+   * itself. Never sent over the wire — the client rebuilds it from the seed.
+   */
+  points: TrackPoint[];
   segments: TrackSegment[];
   obstacles: TrackObstacle[];
   coins: TrackObject[];
@@ -119,6 +146,8 @@ export interface RacingGameState extends BaseGameState {
   /** Ticks elapsed since the state was created, including the countdown. */
   tick: number;
   racingPhase: RacingPhase;
+  /** Laps that must be completed to finish. */
+  laps: number;
   track: TrackSpec;
   vehicles: Record<string, VehicleState>;
   /** Seat order, which is also grid order. */
@@ -148,8 +177,10 @@ export interface RacingAction extends BaseGameAction {
 }
 
 export interface RacingConfig extends BaseGameConfig {
-  /** Race distance in metres. */
+  /** Length of one lap, in metres. */
   trackLength?: number;
+  /** Laps to complete. */
+  laps?: number;
   /** Nitro charges each vehicle starts with. */
   nitroCharges?: number;
   /** Seconds before the race is stopped regardless of who has finished. */
@@ -180,12 +211,23 @@ export interface RacingPlayerView {
    */
   trackSeed: number;
   trackLength: number;
+  /** Laps required to finish. */
+  laps: number;
+  /** Ticks since the lights went green; 0 during the countdown. */
+  raceTicks: number;
   /** Distances at which progress is recorded; small, and needed for the HUD. */
   checkpoints: number[];
   me: VehicleState | null;
   vehicles: VehicleState[];
   /** Current standings, best first. */
-  standings: Array<{ playerId: string; place: number; distance: number; finished: boolean }>;
+  standings: Array<{
+    playerId: string;
+    place: number;
+    distance: number;
+    finished: boolean;
+    lapsDone: number;
+    bestLapTicks: number | null;
+  }>;
   collectedCoins: string[];
   winnerId: string | null;
   sequenceNumber: number;
@@ -199,6 +241,7 @@ export type RacingEventType =
   | "CRASHED"
   | "NITRO_USED"
   | "CHECKPOINT"
+  | "LAP_COMPLETED"
   | "VEHICLE_FINISHED"
   | "RACE_FINISHED";
 

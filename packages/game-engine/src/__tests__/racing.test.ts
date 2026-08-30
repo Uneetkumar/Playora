@@ -4,6 +4,14 @@ import { CarRaceEngine } from "../racing/CarRaceEngine.js";
 import { BikeRaceEngine } from "../racing/BikeRaceEngine.js";
 import { buildTrack, sampleTrack, trackCenterline, trackToWorld } from "../racing/track.js";
 import {
+  BIKE_LEVELS,
+  CAR_LEVELS,
+  isPass,
+  levelsFor,
+  starsFor,
+  unlockedLevels,
+} from "../racing/levels.js";
+import {
   COUNTDOWN_TICKS,
   SERVER_PLAYER_ID,
   TICK_RATE,
@@ -105,11 +113,26 @@ describe("track generation", () => {
     expect(a.segments).not.toEqual(b.segments);
   });
 
-  it("opens and closes with a straight", () => {
-    const track = buildTrack("straights", 2000);
-    // The grid and the finish must not sit on a bend.
-    expect(Math.abs(track.segments[0]!.curvature)).toBeLessThan(0.005);
-    expect(Math.abs(track.segments.at(-1)!.curvature)).toBeLessThan(0.005);
+  it("closes into a loop", () => {
+    // A lap needs the road to come back to where it started.
+    for (const seed of ["c1", "c2", "c3", "c4"]) {
+      const track = buildTrack(seed, 2000);
+      const first = track.points[0]!;
+      const last = track.points[track.points.length - 1]!;
+      const gap = Math.hypot(last.x - first.x, last.z - first.z);
+      // Within one sample step, which is what "adjacent" means here.
+      expect(gap, `seed ${seed} leaves a ${gap.toFixed(1)}m gap at the join`).toBeLessThan(14);
+    }
+  });
+
+  it("starts on the straightest part of the circuit", () => {
+    // The grid, the countdown and the finish line all sit here.
+    for (const seed of ["s1", "s2", "s3"]) {
+      const track = buildTrack(seed, 2000);
+      const opening = track.segments.slice(0, 6).reduce((m, s) => Math.max(m, Math.abs(s.curvature)), 0);
+      const worst = track.segments.reduce((m, s) => Math.max(m, Math.abs(s.curvature)), 0);
+      expect(opening).toBeLessThan(worst);
+    }
   });
 
   it("never blocks the road completely", () => {
@@ -145,13 +168,18 @@ describe("track generation", () => {
     }
   });
 
-  it("builds a centreline that matches the curvature it was generated from", () => {
-    const track = buildTrack("line", 1000);
+  it("spaces the centreline evenly by distance", () => {
+    // Sampled by arc length, not by angle: uneven spacing would build the road
+    // out of stretched quads exactly where it turns.
+    const track = buildTrack("line", 2000);
     const line = trackCenterline(track);
     expect(line.length).toBeGreaterThan(10);
-    // A straight opening means the first points run down +z with no drift.
-    expect(Math.abs(line[1]!.x)).toBeLessThan(0.5);
-    expect(line[1]!.z).toBeGreaterThan(0);
+
+    for (let i = 1; i < line.length; i++) {
+      const gap = Math.hypot(line[i]!.x - line[i - 1]!.x, line[i]!.z - line[i - 1]!.z);
+      expect(gap).toBeGreaterThan(8);
+      expect(gap).toBeLessThan(12);
+    }
     expect(sampleTrack(track, 0).curvature).toBeCloseTo(track.segments[0]!.curvature);
   });
 });
@@ -292,18 +320,68 @@ describe("racing", () => {
   });
 
   it("finishes the race and names a winner", () => {
-    let state = engine.init(players(1), { randomSeed: "finish", trackLength: 800 });
+    let state = engine.init(players(1), { randomSeed: "finish", trackLength: 800, laps: 1 });
     for (let i = 0; i < 60 * 5; i += 20) state = engine.applyAction(state, tickAction(20)).state;
-    state = engine.applyAction(state, inputAction("p1", { throttle: true })).state;
-
-    for (let i = 0; i < 60 * 90 && !state.isFinished; i += 20) {
-      state = engine.applyAction(state, tickAction(20)).state;
-    }
+    // Driven competently: a circuit has no straight to coast down, so holding
+    // the throttle with no steering just parks the car in the first wall.
+    state = raceToEnd(engine, state);
 
     expect(state.isFinished).toBe(true);
     expect(state.winnerId).toBe("p1");
     expect(state.vehicles.p1!.place).toBe(1);
-    expect(state.vehicles.p1!.distance).toBeGreaterThanOrEqual(800);
+    expect(state.vehicles.p1!.distance).toBeGreaterThanOrEqual(state.track.length);
+  });
+
+  it("counts laps and records a time for each", () => {
+    let state = engine.init(players(1), { randomSeed: "laps", trackLength: 700, laps: 3 });
+    for (let i = 0; i < 60 * 5; i += 20) state = engine.applyAction(state, tickAction(20)).state;
+    state = raceToEnd(engine, state);
+
+    const me = state.vehicles.p1!;
+    expect(state.isFinished).toBe(true);
+    expect(me.lapsDone).toBeGreaterThanOrEqual(3);
+    expect(me.lapTicks.length).toBeGreaterThanOrEqual(3);
+    expect(me.bestLapTicks).toBe(Math.min(...me.lapTicks));
+    // Three laps is three times the distance of one.
+    expect(me.distance).toBeGreaterThanOrEqual(state.track.length * 3);
+  });
+
+  it("does not end a three-lap race after one lap", () => {
+    let state = engine.init(players(1), { randomSeed: "one-lap", trackLength: 700, laps: 3 });
+    for (let i = 0; i < 60 * 5; i += 20) state = engine.applyAction(state, tickAction(20)).state;
+
+    let completedOne = false;
+    for (let elapsed = 0; elapsed < 60 * 200 && !completedOne; elapsed += 5) {
+      for (const id of state.playerOrder) {
+        state = engine.applyAction(state, inputAction(id, autoInput(state, id))).state;
+      }
+      state = engine.applyAction(state, tickAction(5)).state;
+      completedOne = state.vehicles.p1!.lapsDone >= 1;
+    }
+
+    expect(completedOne).toBe(true);
+    expect(state.isFinished).toBe(false);
+    expect(state.vehicles.p1!.finishedAtTick).toBeNull();
+  });
+
+  it("resets the checkpoint progress each lap", () => {
+    // The bar measures the lap being driven, not the whole race.
+    let state = engine.init(players(1), { randomSeed: "cp", trackLength: 700, laps: 3 });
+    for (let i = 0; i < 60 * 5; i += 20) state = engine.applyAction(state, tickAction(20)).state;
+
+    let sawReset = false;
+    let previous = 0;
+    for (let elapsed = 0; elapsed < 60 * 200 && !sawReset; elapsed += 5) {
+      for (const id of state.playerOrder) {
+        state = engine.applyAction(state, inputAction(id, autoInput(state, id))).state;
+      }
+      state = engine.applyAction(state, tickAction(5)).state;
+      const now = state.vehicles.p1!.checkpoint;
+      if (previous > 0 && now < previous) sawReset = true;
+      previous = now;
+      expect(now).toBeLessThanOrEqual(state.track.checkpoints.length);
+    }
+    expect(sawReset).toBe(true);
   });
 
   it("stops the race at the time limit even if nobody finishes", () => {
@@ -442,17 +520,21 @@ describe("track to world space", () => {
     expect(point.z).toBeCloseTo(line[0]!.z, 5);
   });
 
-  it("maps a positive lateral offset to the camera's right", () => {
-    // The chase camera looks along +z, and a camera looking down +z has its
-    // right hand pointing at -x. So steering right (a positive lateral) must
-    // produce a *smaller* x, or the car moves the wrong way on screen — which
-    // is a bug no still frame can show.
-    const centre = at(0, 0);
-    const right = at(0, 1);
-    const left = at(0, -1);
+  it("maps a positive lateral offset to the driver's right, at any heading", () => {
+    // Steering right must move the car to the right of the picture. Stated as a
+    // cross product rather than "smaller x", because on a circuit the heading
+    // at a given distance is arbitrary — the old form only held near heading 0
+    // and would have passed while the game steered backwards.
+    for (const distance of [0, 137, 421, 905, 1500]) {
+      const centre = at(distance, 0);
+      const right = at(distance, 1);
 
-    expect(right.x).toBeLessThan(centre.x);
-    expect(left.x).toBeGreaterThan(centre.x);
+      const forward = { x: Math.sin(centre.heading), z: Math.cos(centre.heading) };
+      const offset = { x: right.x - centre.x, z: right.z - centre.z };
+      const cross = forward.x * offset.z - forward.z * offset.x;
+
+      expect(cross, `wrong side at ${distance}m`).toBeGreaterThan(0);
+    }
   });
 
   it("offsets by exactly the road half-width at the edge", () => {
@@ -470,9 +552,15 @@ describe("track to world space", () => {
     expect(mid.z).toBeLessThan(Math.max(a.z, b.z));
   });
 
-  it("clamps rather than returning nonsense off either end", () => {
+  it("wraps around the loop rather than clamping", () => {
+    // Grid positions are negative and racing distances run past a lap, so both
+    // ends have to come back onto the circuit.
+    const start = at(0, 0);
+    const wrapped = at(track.length, 0);
+    expect(wrapped.x).toBeCloseTo(start.x, 3);
+    expect(wrapped.z).toBeCloseTo(start.z, 3);
     expect(Number.isFinite(at(-50, 0).x)).toBe(true);
-    expect(Number.isFinite(at(track.length + 500, 0).x)).toBe(true);
+    expect(Number.isFinite(at(track.length * 3 + 120, 0).x)).toBe(true);
   });
 
   it("returns null for an empty centreline", () => {
@@ -480,42 +568,128 @@ describe("track to world space", () => {
   });
 });
 
-describe("tracks do not spiral into themselves", () => {
-  it("keeps any single corner under a right angle and a half", () => {
-    for (const seed of ["s1", "s2", "s3", "s4", "s5", "s6"]) {
-      const track = buildTrack(seed, 5000);
-      let corner = 0;
-      let sign = 0;
-
-      for (const segment of track.segments) {
-        const turned = segment.curvature * segment.length;
-        if (Math.sign(turned) !== sign || turned === 0) {
-          sign = Math.sign(turned);
-          corner = 0;
-        }
-        corner += turned;
-        // Generous, because unwinding takes a segment or two to take effect.
-        expect(Math.abs(corner), `seed ${seed} has a corner of ${corner} radians`)
-          .toBeLessThan(Math.PI);
+describe("circuits are driveable", () => {
+  it("never exceeds the curvature a vehicle can hold", () => {
+    // Above roughly 0.03 the centrifugal push at top speed beats full steering
+    // lock, and the corner is impossible rather than hard.
+    for (const seed of ["d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8"]) {
+      for (const length of [900, 1600, 3000]) {
+        const track = buildTrack(seed, length);
+        const worst = track.segments.reduce((m, s) => Math.max(m, Math.abs(s.curvature)), 0);
+        expect(worst, `seed ${seed} at ${length}m has a corner of ${worst}`).toBeLessThanOrEqual(0.03);
       }
     }
   });
 
-  it("does not wander away in one direction forever", () => {
-    // A track whose total heading keeps growing is a spiral, and it renders
-    // across its own path — the driver sees walls crossing a road they will
-    // never reach.
-    for (const seed of ["w1", "w2", "w3", "w4", "w5", "w6"]) {
-      const track = buildTrack(seed, 6000);
+  it("turns exactly once around", () => {
+    // The defining property of a closed loop, and the thing that makes a lap
+    // mean something.
+    for (const seed of ["w1", "w2", "w3", "w4"]) {
+      const track = buildTrack(seed, 2500);
       const total = track.segments.reduce((sum, s) => sum + s.curvature * s.length, 0);
-      expect(Math.abs(total), `seed ${seed} turns ${total} radians overall`)
-        .toBeLessThan(Math.PI * 1.5);
+      expect(Math.abs(total)).toBeCloseTo(Math.PI * 2, 1);
     }
   });
 
   it("still produces corners worth driving", () => {
-    const track = buildTrack("variety", 4000);
-    const corners = track.segments.filter((s) => Math.abs(s.curvature) > 0.012);
-    expect(corners.length).toBeGreaterThan(15);
+    // A perfect circle would pass every other test here and be no fun at all,
+    // so the curvature has to actually vary around the lap.
+    const track = buildTrack("variety", 1400);
+    const curvatures = track.segments.map((s) => Math.abs(s.curvature));
+    const max = Math.max(...curvatures);
+    const min = Math.min(...curvatures);
+    expect(max).toBeGreaterThan(min * 3);
+  });
+});
+
+describe("the racing career ladder", () => {
+  const ladders = [CAR_LEVELS, BIKE_LEVELS];
+
+  it("gets harder on every axis, never easier", () => {
+    for (const levels of ladders) {
+      for (let i = 1; i < levels.length; i++) {
+        const previous = levels[i - 1]!;
+        const level = levels[i]!;
+        // Total race distance is what actually grows: lap length and lap count
+        // both climb, and one long lap is a gentler circuit than three short ones.
+        expect(level.trackLength * level.laps).toBeGreaterThan(
+          previous.trackLength * previous.laps,
+        );
+        expect(level.laps).toBeGreaterThanOrEqual(previous.laps);
+        expect(level.opponents).toBeGreaterThanOrEqual(previous.opponents);
+        expect(level.aiLevel).toBeGreaterThanOrEqual(previous.aiLevel);
+        expect(level.nitroCharges).toBeLessThanOrEqual(previous.nitroCharges);
+      }
+    }
+  });
+
+  it("numbers levels from one, in order, with copy on every card", () => {
+    for (const levels of ladders) {
+      levels.forEach((level, i) => {
+        expect(level.index).toBe(i + 1);
+        expect(level.name.length).toBeGreaterThan(0);
+        expect(level.blurb.length).toBeGreaterThan(0);
+        expect(level.targetPlace).toBeGreaterThanOrEqual(1);
+        // A target nobody could meet would be a level that cannot be passed.
+        expect(level.targetPlace).toBeLessThanOrEqual(level.opponents + 1);
+      });
+    }
+  });
+
+  it("picks the ladder for the game", () => {
+    expect(levelsFor("car-race")).toBe(CAR_LEVELS);
+    expect(levelsFor("bike-race")).toBe(BIKE_LEVELS);
+  });
+
+  it("awards stars by finishing position", () => {
+    const level = CAR_LEVELS[2]!; // target is 2nd
+    expect(starsFor(level, 1)).toBe(3);
+    expect(starsFor(level, 2)).toBe(2);
+    expect(starsFor(level, 3)).toBe(0);
+    expect(isPass(level, 2)).toBe(true);
+    expect(isPass(level, 3)).toBe(false);
+    // Never finishing is not a pass.
+    expect(isPass(level, 0)).toBe(false);
+  });
+
+  it("gives one star for meeting a loose target without a podium", () => {
+    const loose = { ...CAR_LEVELS[0]!, targetPlace: 4 };
+    expect(starsFor(loose, 4)).toBe(1);
+    expect(isPass(loose, 4)).toBe(true);
+    expect(starsFor(loose, 5)).toBe(0);
+  });
+});
+
+describe("level unlocking", () => {
+  it("opens only the first level to a new player", () => {
+    const unlocked = unlockedLevels(CAR_LEVELS, {});
+    expect(unlocked[0]).toBe(true);
+    expect(unlocked.slice(1).every((u) => u === false)).toBe(true);
+  });
+
+  it("opens the next level once the previous is passed", () => {
+    const unlocked = unlockedLevels(CAR_LEVELS, { 1: 1 });
+    expect(unlocked[1]).toBe(true);
+    expect(unlocked[2]).toBe(false);
+  });
+
+  it("does not open the next level for a finish short of the target", () => {
+    // Level 1 needs a win; finishing second is not a pass.
+    expect(unlockedLevels(CAR_LEVELS, { 1: 2 })[1]).toBe(false);
+  });
+
+  it("does not let a later result unlock past a gap", () => {
+    // Progress recorded for level 5 must not open level 4 -- there is no path
+    // that produces this, but a bug in the storage layer could write it.
+    const unlocked = unlockedLevels(CAR_LEVELS, { 1: 1, 5: 1 });
+    expect(unlocked[1]).toBe(true);
+    expect(unlocked[2]).toBe(false);
+    expect(unlocked[5]).toBe(true);
+    expect(unlocked[3]).toBe(false);
+  });
+
+  it("opens the whole ladder once every level is won", () => {
+    const best = Object.fromEntries(CAR_LEVELS.map((l) => [l.index, 1]));
+    expect(unlockedLevels(CAR_LEVELS, best).every(Boolean)).toBe(true);
   });
 });

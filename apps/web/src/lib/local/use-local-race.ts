@@ -14,6 +14,7 @@ import {
   type VehicleInput,
 } from "@playora/game-engine";
 import type { GameId, GameResult, Player } from "@playora/game-types";
+import { gearFor } from "../../games/racing/gears";
 
 export const LOCAL_DRIVER_ID = "local-you";
 
@@ -26,12 +27,17 @@ export interface LocalRaceOptions {
   /** AI cars on the grid. Ignored in a time trial. */
   opponents?: number;
   trackLength?: number;
+  /** Nitro charges each vehicle starts with. */
+  nitroCharges?: number;
   /** Called every simulation frame, outside React. */
   onFrame?: (view: RacingPlayerView) => void;
 }
 
 /** How often the HUD is refreshed. */
 const HUD_HZ = 12;
+
+/** Only used to spread the gear display across the rev range. */
+const MAX_SPEED_FOR_GEARS = 78;
 
 /**
  * A race running locally, on the same engine the server runs.
@@ -53,6 +59,7 @@ export function useLocalRace({
   aiLevel = RECOMMENDED_AI_LEVEL,
   opponents = 3,
   trackLength = 3000,
+  nitroCharges = 2,
   onFrame,
 }: LocalRaceOptions = {}) {
   const engine = React.useMemo<RacingEngine>(
@@ -92,6 +99,10 @@ export function useLocalRace({
   }, [seats]);
 
   const [seed, setSeed] = React.useState(() => `race-${Date.now()}`);
+  // Read by the loop each frame rather than being a dependency of it: a paused
+  // race must stop advancing without tearing down and rebuilding the whole
+  // simulation, which would reset the track.
+  const pausedRef = React.useRef(false);
   const [result, setResult] = React.useState<GameResult | null>(null);
   const [running, setRunning] = React.useState(false);
 
@@ -116,14 +127,29 @@ export function useLocalRace({
     checkpoint: 0,
     checkpoints: 4,
     finished: false,
+    distance: 0,
+    lap: 1,
+    laps: 3,
+    raceTicks: 0,
+    currentLapTicks: 0,
+    bestLapTicks: null as number | null,
+    lastLapTicks: null as number | null,
+    gear: 1,
+    standings: [] as Array<{
+      playerId: string;
+      place: number;
+      distance: number;
+      finished: boolean;
+      seat: number;
+    }>,
   });
 
   const initial = React.useCallback(() => {
     return engine.init(
       seats.map((id) => players[id]!),
-      { randomSeed: seed, trackLength },
+      { randomSeed: seed, trackLength, nitroCharges },
     );
-  }, [engine, seats, players, seed, trackLength]);
+  }, [engine, seats, players, seed, trackLength, nitroCharges]);
 
   const [track, setTrack] = React.useState(() => initial().track);
 
@@ -135,6 +161,10 @@ export function useLocalRace({
   }, []);
 
   /** Called by the input layer. Never causes a render. */
+  const setPaused = React.useCallback((paused: boolean) => {
+    pausedRef.current = paused;
+  }, []);
+
   const setInput = React.useCallback((patch: Partial<VehicleInput>) => {
     inputRef.current = { ...inputRef.current, ...patch };
     if (patch.throttle) setRunning((was) => was || true);
@@ -170,7 +200,7 @@ export function useLocalRace({
       const delta = Math.min(0.25, (now - last) / 1000);
       last = now;
 
-      if (!state.isFinished) {
+      if (!state.isFinished && !pausedRef.current) {
         accumulator += delta;
         sinceBotDecision += delta;
 
@@ -238,6 +268,23 @@ export function useLocalRace({
           checkpoint: me?.checkpoint ?? 0,
           checkpoints: current.track.checkpoints.length,
           finished: current.isFinished,
+          lap: Math.min(current.laps, (me?.lapsDone ?? 0) + 1),
+          laps: current.laps,
+          raceTicks: view.raceTicks,
+          currentLapTicks: Math.max(0, current.tick - (me?.lapStartTick ?? 0)),
+          bestLapTicks: me?.bestLapTicks ?? null,
+          lastLapTicks: me?.lapTicks.at(-1) ?? null,
+          gear: gearFor(me?.speed ?? 0, MAX_SPEED_FOR_GEARS),
+          distance: me?.distance ?? 0,
+          standings: view.standings.map((row) => ({
+            playerId: row.playerId,
+            place: row.place,
+            distance: row.distance,
+            finished: row.finished,
+            // Seat order is the order vehicles were added to the scene, so the
+            // colour on the map matches the car on the track.
+            seat: view.vehicles.findIndex((v) => v.playerId === row.playerId),
+          })),
         });
       }
 
@@ -262,6 +309,7 @@ export function useLocalRace({
     currentUserId: LOCAL_DRIVER_ID,
     isBike: gameId === "bike-race",
     setInput,
+    setPaused,
     restart,
   };
 }

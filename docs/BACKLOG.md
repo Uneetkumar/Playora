@@ -46,8 +46,12 @@ Add items anywhere; renumbering is fine.
 | 32 | **Admin panel** — dashboard, users, rooms, matches, reports, moderation (pack 43–49). | ⬜ | XL |
 | 33 | **Remove deprecated `profiles.rating`** once nothing reads it. | ⬜ | XS |
 | 36 | **Presence and notifications** — a friend's online/in-game status, and an alert when a request or invite arrives. Needs a presence channel; nothing tracks it today, and the friends page says so rather than showing everyone as offline. | ⬜ | M |
+| 39 | **Career ladder for the other games** — racing has eight unlockable levels per game; chess and UNO have no equivalent single-player progression. | ⬜ | M |
+| 40 | **Race progress is per-device** — the career ladder lives in localStorage because offline races are deliberately unrated and never written to the server. Signing in on another machine restarts the ladder. Storing it on the account would need a decision about whether offline play counts. | ⬜ | S |
+| 41 | **Racing UI pack — remaining screens** — the design pack (`~/Downloads/PLAYORA_RACING_UI_PACK`) also specifies vehicle selection and customization (paint, wheels, spoilers, exhaust, tyres, performance stats), a track-select screen, an in-race settings overlay with Controls/Audio/Graphics/Gameplay tabs, in-race chat/voice/connection indicators, on-screen touch steering for mobile, and a bike trick system. None of these exist. | ⬜ | L |
+| 42 | **Race result screen to the design** — results currently reuse the generic MatchResult plus a level card. The pack specifies placement, race time, best lap, XP and rating change, with Play Again / Replay / Home. | ⬜ | M |
 | 37 | **Client-side prediction for racing** — the online race interpolates between server snapshots, which costs about 120 ms of input latency. Prediction plus reconciliation would remove it; the engine already carries `lastInputSeq` for exactly that, so no protocol change is needed. | ⬜ | M |
-| 38 | **Racing polish** — no vehicle models beyond boxes, no particles, no skid marks, no engine audio, and the bike does not visibly lean into a corner as much as it should. | ⬜ | M |
+| 38 | **Racing presentation** — done: vehicle models with spinning wheels, bloom, particles, speed lines, striped obstacles, minimap, running order, closed circuits, laps and lap timing, gear + km/h dial, pause menu, key caps. | ✅ | M |
 | 35 | **Background music** — the music bus is built and mixed but plays nothing. Needs licensed or commissioned loops per game; procedural synthesis is fine for a 40ms card flip and not fine for two minutes of menu music. | ⬜ | M |
 | 34 | **Regional leaderboard** — needs a region on `profiles`, which nothing collects today. Add the field (signup or settings, opt-in), backfill nothing, then add the scope. Split out of #13 rather than faked. | ⬜ | S |
 
@@ -62,4 +66,5 @@ mobile bottom nav · design tokens + Playora rebrand · hover-expanding sidebar 
 match result screens with rating/XP · rematch handshake · match history ·
 per-game leaderboards · game detail pages · achievements · friends ·
 procedural audio system · **all five games playable** — Car Race and Bike Race
-in 3D, offline and online · 309 tests, full gate green.
+in 3D with bloom, particles and an eight-level career ladder each, offline and
+online · 319 tests, full gate green.

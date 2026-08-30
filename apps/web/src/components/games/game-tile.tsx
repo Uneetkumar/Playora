@@ -121,12 +121,22 @@ export function GameRow({
   href,
   size = "md",
   emptyNote,
+  wrap = false,
 }: {
   title: string;
   games: CatalogGame[];
   href?: string;
   size?: "sm" | "md" | "lg";
   emptyNote?: string;
+  /**
+   * Wrap onto more rows instead of scrolling sideways.
+   *
+   * A horizontal scroller silently hides whatever does not fit, and on a wide
+   * screen the fifth game sat just past the right edge with no visible
+   * affordance — Bike Race shipped and was invisible. For a short, complete
+   * list, showing all of it beats a row that scrolls.
+   */
+  wrap?: boolean;
 }) {
   if (games.length === 0 && !emptyNote) return null;
 
@@ -142,8 +152,14 @@ export function GameRow({
       </div>
 
       {games.length > 0 ? (
-        // Horizontal scroll keeps rows dense without wrapping into a grid.
-        <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:thin]">
+        <div
+          className={
+            wrap
+              ? "-mx-1 flex flex-wrap gap-3 px-1 pb-2"
+              : // Horizontal scroll keeps long rows dense without wrapping.
+                "-mx-1 flex gap-3 overflow-x-auto px-1 pb-2 [scrollbar-width:thin]"
+          }
+        >
           {games.map((g) => (
             <GameTile key={g.id} game={g} size={size} />
           ))}

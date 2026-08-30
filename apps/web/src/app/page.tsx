@@ -68,7 +68,7 @@ export default function HomePage() {
             <GameRow title="Continue playing" games={continuePlaying} href="/games" />
           )}
 
-          <GameRow title="Playable now" games={playable} href="/games" size="lg" />
+          <GameRow title="Playable now" games={playable} href="/games" size="lg" wrap />
 
           <GameRow
             title="Coming soon"

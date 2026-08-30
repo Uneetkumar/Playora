@@ -103,7 +103,7 @@ docs/
 | Check | Result |
 |---|---|
 | `pnpm typecheck` | ✅ 20/20 |
-| `pnpm test` | ✅ **309 tests** (game-engine 114, realtime 51, bot-engine 44, progression 37, audio 20, auth 20, game-types 18, protocol 3, db 2) |
+| `pnpm test` | ✅ **323 tests** (game-engine 128, realtime 51, bot-engine 44, progression 37, audio 20, auth 20, game-types 18, protocol 3, db 2) |
 | `pnpm build` | ✅ 18 routes |
 | `pnpm version:check` | ✅ in sync at 0.1.0 |
 | `pnpm lint` | ✅ clean |
@@ -676,6 +676,51 @@ unused; it can go when nothing 2D is planned.
 - `RacingBot` drives rather than following waypoints: it scores lanes for
   blockage, racing line and coins, brakes for what it can see, and saves nitro
   for a straight. Difficulty is how far ahead it looks, never a speed bonus.
+
+**Presentation pass (after Uneet saw it running)**
+- Vehicles are built from parts in `games/racing/vehicles.ts`, not boxes. Every
+  wheel has a bright rim, spokes and tread blocks — a smooth dark cylinder
+  spinning at speed looks completely still, which is why the first build read as
+  a box on rails. The body leans and pitches; the wheels stay on the road.
+- `games/racing/effects.ts` — a pooled particle system (nitro flame, crash
+  sparks, runoff dust, coin pickup) and camera-parented speed lines.
+- **Bloom**, via Three's own `UnrealBloomPass`. On a neon night scene this is
+  the single largest visual gain available: without it the rails, headlights and
+  coins are brightly coloured polygons rather than light sources.
+- Obstacles are recognisable objects — coned base and reflective band, striped
+  barrier, chevroned block — because an unlit grey box at ninety metres is an
+  unfair game rather than a hard one.
+- **An eight-level career ladder per game** (`racing/levels.ts` in the engine,
+  so the unlock rules are tested rather than clicked through). Difficulty rises
+  on four axes at once: length, rivals, rival skill, and the finishing position
+  required. Progress is per-device localStorage; see backlog #40.
+- The HUD shows the actual key on each control. Restart displayed an "R" that
+  had never been bound to anything.
+- A **minimap** built from the same centreline the physics uses, showing the
+  track shape, start, finish and every driver, plus a **running order** with
+  names and gaps. Map dot colours are drawn from the same list, in the same
+  order, as the cars in the 3D scene — a car that is red on the track and blue
+  on the map is worse than no map at all.
+- `GameRow` can wrap. "Playable now" was a horizontal scroller, so on a wide
+  screen Bike Race sat just past the right edge and was effectively invisible.
+
+**Circuits and laps (from the racing UI design pack)**
+- The track generator was rewritten to produce **closed circuits**. The old one
+  walked curvature forward and hoped: it could not return to its start, so laps
+  were impossible and the minimap was a squiggle. The shape is now a closed
+  polar curve — a circle with a few low harmonics — which closes by
+  construction rather than by correction.
+- **Laps, lap timing and a race clock.** Vehicles carry total distance, so laps
+  are `floor(distance / lapLength)` and the standings order a field spread
+  across different laps by comparing one number.
+- The level ladder now raises **lap count** rather than lap length. A single
+  long loop is geometrically forced to be gentle — a 5 km circle has an 800 m
+  radius and no corner worth the name — so difficulty comes from a tighter
+  circuit driven more times.
+- HUD rebuilt to the pack: POS/LAP plates, race clock with best lap, running
+  order, minimap top-right, current/last lap, bottom-centre dial with gear and
+  km/h, nitro and brake. Plus a pause menu — which pauses for real offline, and
+  offers only to leave online, where the server's clock does not stop.
 
 **Bugs found while building it**
 1. `offRoadDrag` was set equal to `acceleration`, so a car that stopped on the

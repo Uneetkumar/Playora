@@ -146,6 +146,10 @@ function GameBoard({
           gameId={gameId}
           gameState={gameState as RacingPlayerView | null}
           currentUserId={currentUserId}
+          players={players}
+          // Leaving an online race returns to the room, which is what the
+          // rematch handler already does from the result screen.
+          onLeave={onRematch}
           sendGameAction={sendGameAction}
         />
       );

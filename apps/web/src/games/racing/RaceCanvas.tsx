@@ -13,6 +13,8 @@ interface RaceCanvasProps {
   setInput: (patch: Partial<VehicleInput>) => void;
   /** Steering is disabled while the result screen is up. */
   interactive: boolean;
+  /** Bound to R. The HUD shows the key, so it has to actually do something. */
+  onRestart: () => void;
 }
 
 /** How fast the steering follows the keys, in units per second. */
@@ -38,6 +40,7 @@ export function RaceCanvas({
   onReady,
   setInput,
   interactive,
+  onRestart,
 }: RaceCanvasProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const sceneRef = React.useRef<RaceScene | null>(null);
@@ -46,6 +49,8 @@ export function RaceCanvas({
   const pointerSteerRef = React.useRef<number | null>(null);
   const setInputRef = React.useRef(setInput);
   setInputRef.current = setInput;
+  const restartRef = React.useRef(onRestart);
+  restartRef.current = onRestart;
 
   // Build the scene. Rebuilt only when the track changes, because building it
   // means uploading the whole road to the GPU.
@@ -134,6 +139,9 @@ export function RaceCanvas({
         case "n":
         case " ":
           setInputRef.current({ nitro: true });
+          break;
+        case "r":
+          restartRef.current();
           break;
         default:
           return;

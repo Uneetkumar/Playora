@@ -87,8 +87,14 @@ export abstract class RacingEngine extends AbstractGameEngine<
     return 2;
   }
 
+  /** Laps in a race, when the config does not say. */
+  protected defaultLaps(): number {
+    return 3;
+  }
+
   init(players: Player[], config: RacingConfig = {}): RacingGameState {
     const length = Math.max(500, config.trackLength ?? this.defaultTrackLength());
+    const laps = Math.max(1, Math.round(config.laps ?? this.defaultLaps()));
     const track = buildTrack(config.randomSeed ?? `${this.gameId}-${Date.now()}`, length);
 
     const order = players.map((p) => p.userId);
@@ -97,12 +103,15 @@ export abstract class RacingEngine extends AbstractGameEngine<
     order.forEach((playerId, index) => {
       vehicles[playerId] = {
         playerId,
-        // Staggered grid, running *forward* from seat one. The chase camera
-        // sits behind the player, so any car placed behind them would be
-        // between the lens and the car it is following — which is exactly what
-        // it looked like. Putting the field ahead also gives the player
-        // something to chase from the first corner.
-        distance: Math.floor(index / 2) * 6,
+        // The grid sits *behind* the start line, which is where a grid
+        // belongs on a circuit: the cars cross the line to begin lap one and
+        // cross it again to complete it. Starting on the line would put the
+        // start gate directly over the camera on the first frame.
+        //
+        // Rows run forward from seat one, because the chase camera sits behind
+        // the player and any car further back would be between the lens and the
+        // car it is following.
+        distance: -34 + Math.floor(index / 2) * 6,
         lateral: index % 2 === 0 ? -0.35 : 0.35,
         speed: 0,
         lean: 0,
@@ -110,6 +119,10 @@ export abstract class RacingEngine extends AbstractGameEngine<
         nitroUntilTick: 0,
         coins: 0,
         crashTicks: 0,
+        lapsDone: 0,
+        lapStartTick: COUNTDOWN_TICKS,
+        lapTicks: [],
+        bestLapTicks: null,
         checkpoint: 0,
         finishedAtTick: null,
         place: null,
@@ -131,6 +144,7 @@ export abstract class RacingEngine extends AbstractGameEngine<
       isFinished: false,
       tick: 0,
       racingPhase: "countdown",
+      laps,
       track,
       vehicles,
       playerOrder: order,
@@ -411,16 +425,39 @@ export abstract class RacingEngine extends AbstractGameEngine<
       events.push({ type: "COIN_COLLECTED", playerId: vehicle.playerId, value: coins });
     }
 
-    while (
-      checkpoint < state.track.checkpoints.length &&
-      distance >= state.track.checkpoints[checkpoint]!
-    ) {
-      checkpoint += 1;
-      events.push({ type: "CHECKPOINT", playerId: vehicle.playerId, value: checkpoint });
+    // Checkpoints reset each lap, so the progress bar measures the lap being
+    // driven rather than the whole race.
+    const alongLap = ((distance % state.track.length) + state.track.length) % state.track.length;
+    const reached = state.track.checkpoints.filter((at) => alongLap >= at).length;
+    if (reached !== checkpoint) {
+      if (reached > checkpoint) {
+        events.push({ type: "CHECKPOINT", playerId: vehicle.playerId, value: reached });
+      }
+      checkpoint = reached;
+    }
+
+    // Laps are counted from total distance travelled rather than by wrapping
+    // it, so the standings can order a field spread across different laps by
+    // comparing one number.
+    let lapsDone = vehicle.lapsDone;
+    let lapStartTick = vehicle.lapStartTick;
+    let lapTicks = vehicle.lapTicks;
+    let bestLapTicks = vehicle.bestLapTicks;
+
+    // Clamped at zero: the grid is behind the line, so distance starts
+    // negative and would otherwise report a lap count of minus one.
+    const lapsCrossed = Math.max(0, Math.floor(distance / state.track.length));
+    if (lapsCrossed > lapsDone) {
+      const lapTime = tick - lapStartTick;
+      lapsDone = lapsCrossed;
+      lapStartTick = tick;
+      lapTicks = [...lapTicks, lapTime];
+      bestLapTicks = bestLapTicks === null ? lapTime : Math.min(bestLapTicks, lapTime);
+      events.push({ type: "LAP_COMPLETED", playerId: vehicle.playerId, value: lapsDone });
     }
 
     let finishedAtTick = vehicle.finishedAtTick;
-    if (finishedAtTick === null && distance >= state.track.length) {
+    if (finishedAtTick === null && lapsDone >= state.laps) {
       finishedAtTick = tick;
       events.push({ type: "VEHICLE_FINISHED", playerId: vehicle.playerId, value: tick });
     }
@@ -436,6 +473,10 @@ export abstract class RacingEngine extends AbstractGameEngine<
       coins,
       crashTicks,
       checkpoint,
+      lapsDone,
+      lapStartTick,
+      lapTicks,
+      bestLapTicks,
       finishedAtTick,
       // Nitro is edge-triggered, so the request is consumed once it is read.
       input: { ...vehicle.input, nitro: false },
@@ -461,6 +502,8 @@ export abstract class RacingEngine extends AbstractGameEngine<
         place: v.place ?? i + 1,
         distance: v.distance,
         finished: v.finishedAtTick !== null,
+        lapsDone: v.lapsDone,
+        bestLapTicks: v.bestLapTicks,
       }));
 
     return {
@@ -474,6 +517,8 @@ export abstract class RacingEngine extends AbstractGameEngine<
           : 0,
       trackSeed: state.track.seed,
       trackLength: state.track.length,
+      laps: state.laps,
+      raceTicks: Math.max(0, state.tick - COUNTDOWN_TICKS),
       checkpoints: state.track.checkpoints,
       me: playerId ? (state.vehicles[playerId] ?? null) : null,
       vehicles,

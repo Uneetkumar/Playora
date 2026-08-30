@@ -1,153 +1,233 @@
 import { createRng, seedFromString } from "../lib/rng.js";
-import type { TrackObject, TrackObstacle, TrackSegment, TrackSpec } from "./types.js";
+import type {
+  TrackObject,
+  TrackObstacle,
+  TrackPoint,
+  TrackSegment,
+  TrackSpec,
+} from "./types.js";
 
-/** Length of one road segment, in metres. Short enough to curve smoothly. */
-const SEGMENT_LENGTH = 20;
+/** Distance between stored centreline points, in metres. */
+const POINT_STEP = 10;
 
 const CHECKPOINT_COUNT = 4;
 
 /**
- * How far one corner may turn before it has to straighten out, in radians.
+ * The tightest corner a vehicle can hold at speed.
  *
- * Without a cap, curvature drifts and stays put: sustained maximum curvature is
- * a circle of about thirty metres' radius, so a long track spirals into itself.
- * The road then renders across its own path and the driver sees walls crossing
- * a road they will never reach.
+ * Above this the centrifugal push at top speed exceeds full steering lock and
+ * the bend becomes impossible rather than difficult — no input keeps the car on
+ * the road.
  */
-const MAX_CORNER_RADIANS = Math.PI * 0.45;
-
-/** Beyond this total heading, new corners are biased back the other way. */
-const HEADING_BUDGET = Math.PI * 0.75;
+const MAX_CURVATURE = 0.028;
 
 /**
- * Builds a race track from a seed.
+ * Builds a closed race circuit from a seed.
  *
- * Deterministic on purpose, and for the same reason the deck is: the server
- * sends every client the seed, each builds the identical road, and no track
- * geometry ever has to travel over the wire. It also means a replay of a match
- * reproduces the exact track it was raced on.
+ * A circuit, not a ribbon with two ends. Laps need the road to come back to
+ * where it started, and the previous point-to-point generator could not do
+ * that: it walked curvature forward and hoped, which spiralled into its own
+ * path and left the start and the finish in unrelated places.
  *
- * The layout is a sequence of constant-curvature segments rather than a spline.
- * That keeps the physics honest — curvature at any distance is a lookup, not a
- * derivative — and it is what lets the renderer build the road as a ribbon.
+ * The shape is a closed polar curve — a circle with a few low harmonics added
+ * to its radius. That closes by construction rather than by correction, and
+ * gives long straights and distinct corners instead of a road that wanders.
+ * Everything else is derived from it: the centreline is that curve resampled at
+ * even distances, and curvature is the turn from one sample to the next.
+ *
+ * Deterministic, so the server sends only the seed and every client rebuilds
+ * the identical circuit. No geometry crosses the network.
  */
 export function buildTrack(seedSource: string | number, length: number): TrackSpec {
   const seed = typeof seedSource === "number" ? seedSource : seedFromString(seedSource);
   const rng = createRng(seed);
 
-  const segmentCount = Math.max(8, Math.ceil(length / SEGMENT_LENGTH));
-  const segments: TrackSegment[] = [];
+  const points = buildCentreline(rng, Math.max(600, length));
+  const actualLength = points.length * POINT_STEP;
 
-  // Curvature is walked rather than drawn independently per segment: picking a
-  // fresh random curve each time gives a road that zigzags every 20 metres,
-  // which is unreadable to drive and unpleasant to look at.
-  let curvature = 0;
-  let gradient = 0;
-  /** Radians turned so far in the corner currently being driven. */
-  let cornerHeading = 0;
-  /** Radians turned over the whole track, used to keep it from spiralling. */
-  let totalHeading = 0;
+  const segments: TrackSegment[] = points.map((point, i) => {
+    const next = points[(i + 1) % points.length]!;
+    return {
+      length: POINT_STEP,
+      curvature: angleDelta(point.heading, next.heading) / POINT_STEP,
+      gradient: (next.y - point.y) / POINT_STEP,
+    };
+  });
 
-  for (let i = 0; i < segmentCount; i++) {
-    // The first stretch is straight so the grid and the countdown are readable.
-    const isOpening = i < 6;
-    // The last stretch is straight so the finish line is approached cleanly.
-    const isClosing = i > segmentCount - 5;
-
-    if (isOpening || isClosing) {
-      curvature += (0 - curvature) * 0.5;
-      gradient += (0 - gradient) * 0.5;
-      cornerHeading = 0;
-    } else if (Math.abs(cornerHeading) >= MAX_CORNER_RADIANS) {
-      // This corner has turned far enough. Unwind to a straight before the
-      // road is allowed to bend again.
-      // Unwound briskly: a gentle taper keeps turning while it straightens,
-      // and the corner overshoots its budget by most of a right angle before
-      // the curvature is actually gone.
-      curvature += (0 - curvature) * 0.7;
-      if (Math.abs(curvature) < 0.004) {
-        curvature = 0;
-        cornerHeading = 0;
-      }
-    } else {
-      // Occasionally commit to a new corner; otherwise drift towards the
-      // current one. The result is recognisable straights and bends.
-      if (rng() < 0.12) {
-        const magnitude = rng() * 0.02 + 0.004;
-        // A track that has wandered a long way one way is steered back, so it
-        // stays a road going somewhere rather than a spiral.
-        const direction =
-          totalHeading > HEADING_BUDGET
-            ? -1
-            : totalHeading < -HEADING_BUDGET
-              ? 1
-              // Corners alternate more often than not, the way a real circuit
-              // does. Left after right also keeps the track from wandering.
-              : curvature !== 0 && rng() < 0.7
-                ? -Math.sign(curvature)
-                : rng() < 0.5
-                  ? -1
-                  : 1;
-
-        // The budget only resets when the road actually changes direction. A
-        // "new" corner the same way as the old one is the same corner
-        // continuing, and resetting there lets it sweep round indefinitely.
-        if (curvature === 0 || Math.sign(direction) !== Math.sign(curvature)) {
-          cornerHeading = 0;
-        }
-        curvature = magnitude * direction;
-      } else {
-        curvature += (rng() - 0.5) * 0.004;
-      }
-      // Capped so the tightest corner stays inside the steering authority of
-      // the slowest-turning vehicle. Above this the centrifugal push at top
-      // speed exceeds full lock, and the bend becomes impossible rather than
-      // difficult — no input keeps the car on the road.
-      curvature = clamp(curvature, -0.03, 0.03);
-
-      if (rng() < 0.1) gradient = (rng() - 0.5) * 0.12;
-      gradient = clamp(gradient, -0.08, 0.08);
-    }
-
-    const turned = curvature * SEGMENT_LENGTH;
-    cornerHeading += turned;
-    totalHeading += turned;
-
-    segments.push({ length: SEGMENT_LENGTH, curvature, gradient });
-  }
-
-  const obstacles = placeObstacles(rng, length);
-  const coins = placeCoins(rng, length, obstacles);
+  const obstacles = placeObstacles(rng, actualLength);
+  const coins = placeCoins(rng, actualLength, obstacles);
 
   const checkpoints = Array.from(
     { length: CHECKPOINT_COUNT },
-    (_, i) => Math.round((length * (i + 1)) / CHECKPOINT_COUNT),
+    (_, i) => Math.round((actualLength * (i + 1)) / CHECKPOINT_COUNT),
   );
 
-  return { seed, length, segments, obstacles, coins, checkpoints };
+  return { seed, length: actualLength, points, segments, obstacles, coins, checkpoints };
+}
+
+/**
+ * The closed centreline, sampled at even distances.
+ *
+ * Built in polar form and then resampled by arc length, because a curve that is
+ * even in angle is not even in distance — the outside of a bend would get fewer
+ * points than the inside, and the road would be built from stretched quads
+ * exactly where it turns.
+ */
+function buildCentreline(rng: () => number, targetLength: number): TrackPoint[] {
+  // A handful of low harmonics. Higher ones make a road that wriggles rather
+  // than corners, and there is no way to drive a wriggle well.
+  const harmonics = [2, 3, 4, 5].map((k) => ({
+    k,
+    amplitude: (0.05 + rng() * 0.13) / (k * 0.55),
+    phase: rng() * Math.PI * 2,
+  }));
+
+  const radiusAt = (theta: number) =>
+    1 + harmonics.reduce((sum, h) => sum + h.amplitude * Math.sin(h.k * theta + h.phase), 0);
+
+  // Fine sample first, so arc length is measured accurately.
+  const FINE = 4096;
+  const fine: Array<{ x: number; z: number }> = [];
+  for (let i = 0; i < FINE; i++) {
+    const theta = (i / FINE) * Math.PI * 2;
+    const r = radiusAt(theta);
+    fine.push({ x: Math.cos(theta) * r, z: Math.sin(theta) * r });
+  }
+
+  const cumulative: number[] = [0];
+  for (let i = 1; i <= FINE; i++) {
+    const a = fine[i - 1]!;
+    const b = fine[i % FINE]!;
+    cumulative.push(cumulative[i - 1]! + Math.hypot(b.x - a.x, b.z - a.z));
+  }
+  const perimeter = cumulative[FINE]!;
+  const scale = targetLength / perimeter;
+
+  const count = Math.max(24, Math.round(targetLength / POINT_STEP));
+  const spacingInCurveUnits = perimeter / count;
+
+  const raw: Array<{ x: number; z: number }> = [];
+  let cursor = 0;
+  for (let i = 0; i < count; i++) {
+    const target = i * spacingInCurveUnits;
+    while (cursor < FINE - 1 && cumulative[cursor + 1]! < target) cursor++;
+
+    const span = cumulative[cursor + 1]! - cumulative[cursor]!;
+    const t = span > 0 ? (target - cumulative[cursor]!) / span : 0;
+    const a = fine[cursor]!;
+    const b = fine[(cursor + 1) % FINE]!;
+    raw.push({
+      x: (a.x + (b.x - a.x) * t) * scale,
+      z: (a.z + (b.z - a.z) * t) * scale,
+    });
+  }
+
+  // Gentle elevation, periodic so there is no step at the join.
+  const hillPhase = rng() * Math.PI * 2;
+  const hillAmplitude = 5 + rng() * 9;
+
+  const points: TrackPoint[] = raw.map((point, i) => {
+    const next = raw[(i + 1) % raw.length]!;
+    return {
+      x: point.x,
+      y: Math.sin((i / raw.length) * Math.PI * 4 + hillPhase) * hillAmplitude,
+      z: point.z,
+      heading: Math.atan2(next.x - point.x, next.z - point.z),
+      distance: i * POINT_STEP,
+    };
+  });
+
+  // Start on the straightest part, so the grid, the countdown and the finish
+  // line all sit somewhere a driver can use.
+  const startIndex = straightestIndex(points);
+  const rotated = [...points.slice(startIndex), ...points.slice(0, startIndex)];
+  rotated.forEach((point, i) => {
+    point.distance = i * POINT_STEP;
+  });
+
+  return tame(rotated, 0);
+}
+
+/** The index whose surrounding stretch turns least. */
+function straightestIndex(points: TrackPoint[]): number {
+  let best = 0;
+  let bestTurn = Infinity;
+
+  for (let i = 0; i < points.length; i++) {
+    let turn = 0;
+    for (let j = 0; j < 8; j++) {
+      const a = points[(i + j) % points.length]!;
+      const b = points[(i + j + 1) % points.length]!;
+      turn += Math.abs(angleDelta(a.heading, b.heading));
+    }
+    if (turn < bestTurn) {
+      bestTurn = turn;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/**
+ * Rounds off corners too tight to drive.
+ *
+ * The harmonics are random, so occasionally they stack into a hairpin no
+ * vehicle can hold. Rather than clamping curvature — which would break the
+ * closure this whole approach exists to guarantee — the shape is pulled
+ * towards its own mean radius until every corner fits. Bounded, because a
+ * shape that will not converge must not take the generator down with it.
+ */
+function tame(points: TrackPoint[], depth: number): TrackPoint[] {
+  const worst = points.reduce((max, point, i) => {
+    const next = points[(i + 1) % points.length]!;
+    return Math.max(max, Math.abs(angleDelta(point.heading, next.heading)) / POINT_STEP);
+  }, 0);
+
+  if (worst <= MAX_CURVATURE || depth >= 12) return points;
+
+  const blend = Math.min(0.7, 1 - MAX_CURVATURE / worst);
+  const cx = points.reduce((sum, p) => sum + p.x, 0) / points.length;
+  const cz = points.reduce((sum, p) => sum + p.z, 0) / points.length;
+  const meanRadius =
+    points.reduce((sum, p) => sum + Math.hypot(p.x - cx, p.z - cz), 0) / points.length;
+
+  const pulled = points.map((point) => {
+    const dx = point.x - cx;
+    const dz = point.z - cz;
+    const radius = Math.hypot(dx, dz) || 1;
+    const factor = 1 + (meanRadius / radius - 1) * blend;
+    return { ...point, x: cx + dx * factor, z: cz + dz * factor };
+  });
+
+  pulled.forEach((point, i) => {
+    const next = pulled[(i + 1) % pulled.length]!;
+    point.heading = Math.atan2(next.x - point.x, next.z - point.z);
+  });
+
+  return tame(pulled, depth + 1);
 }
 
 /**
  * Scatters obstacles, leaving a gap that is always driveable.
  *
- * The important rule is the last one: whatever is placed across a given stretch
- * of road, at least one lateral corridor stays clear. A track that can be
- * blocked outright is not difficult, it is broken.
+ * The important rule is the last one: whatever is placed across a stretch of
+ * road, at least one lateral corridor stays clear. A track that can be blocked
+ * outright is not difficult, it is broken.
  */
 function placeObstacles(rng: () => number, length: number): TrackObstacle[] {
   const obstacles: TrackObstacle[] = [];
-  // Nothing in the first 150 m: the player is still reading the road.
-  let distance = 150;
+  // Clear either side of the start line: it is crossed once a lap, and the
+  // grid must not begin inside a barrier.
+  let distance = 140;
 
-  while (distance < length - 80) {
+  while (distance < length - 140) {
     distance += 60 + rng() * 110;
-    if (distance >= length - 80) break;
+    if (distance >= length - 140) break;
 
     const roll = rng();
     const kind: TrackObstacle["kind"] = roll < 0.5 ? "cone" : roll < 0.82 ? "block" : "barrier";
     const halfWidth = kind === "cone" ? 0.1 : kind === "block" ? 0.18 : 0.3;
 
-    // A barrier is wide, so it is pushed towards one side and never centred.
     const lateral =
       kind === "barrier"
         ? (rng() < 0.5 ? -1 : 1) * (0.35 + rng() * 0.35)
@@ -155,7 +235,6 @@ function placeObstacles(rng: () => number, length: number): TrackObstacle[] {
 
     obstacles.push({ distance: Math.round(distance), lateral: round2(lateral), kind, halfWidth });
 
-    // A second obstacle alongside, only where a clear corridor survives.
     if (rng() < 0.35) {
       const otherSide = -Math.sign(lateral || 1) * (0.4 + rng() * 0.4);
       const gap = Math.abs(otherSide - lateral) - halfWidth - 0.18;
@@ -182,16 +261,14 @@ function placeCoins(
   const coins: TrackObject[] = [];
   let distance = 60;
 
-  while (distance < length - 40) {
+  while (distance < length - 60) {
     distance += 50 + rng() * 90;
     const lateral = round2((rng() - 0.5) * 1.5);
     const runLength = 3 + Math.floor(rng() * 5);
 
     for (let i = 0; i < runLength; i++) {
       const at = Math.round(distance + i * 8);
-      if (at >= length - 20) break;
-      // Skip any coin that would sit inside an obstacle: an uncollectable coin
-      // reads as a bug, and a coin that lures the player into a barrier is worse.
+      if (at >= length - 40) break;
       const blocked = obstacles.some(
         (o) => Math.abs(o.distance - at) < 12 && Math.abs(o.lateral - lateral) < o.halfWidth + 0.2,
       );
@@ -203,45 +280,47 @@ function placeCoins(
   return coins;
 }
 
-/** Curvature and gradient at a distance along the track. */
+/**
+ * Wraps a distance onto the circuit.
+ *
+ * Vehicles carry total distance travelled, which grows past a lap and is
+ * negative on the grid. Everything asking "where on the road is this" comes
+ * through here.
+ */
+export function wrapDistance(track: TrackSpec, distance: number): number {
+  const length = track.length;
+  return ((distance % length) + length) % length;
+}
+
+/** Curvature and gradient at a distance along the circuit. */
 export function sampleTrack(
   track: TrackSpec,
   distance: number,
 ): { curvature: number; gradient: number } {
-  const index = Math.floor(Math.max(0, distance) / SEGMENT_LENGTH);
-  const segment = track.segments[Math.min(index, track.segments.length - 1)];
+  if (track.segments.length === 0) return { curvature: 0, gradient: 0 };
+  const index = Math.floor(wrapDistance(track, distance) / POINT_STEP) % track.segments.length;
+  const segment = track.segments[index];
   return segment
     ? { curvature: segment.curvature, gradient: segment.gradient }
     : { curvature: 0, gradient: 0 };
 }
 
 /**
- * The centreline in world space, for the renderer.
+ * The centreline in world space.
  *
- * Integrating heading over the segments here — rather than in the renderer —
- * means the geometry the player drives on and the geometry they see come from
- * one calculation. Two integrations would drift apart, and the car would visibly
- * corner differently from the road.
+ * Returned from the stored points rather than integrated from curvature:
+ * integration accumulates error, and on a closed circuit that shows up as a
+ * visible step where the road meets itself.
  */
-export function trackCenterline(
-  track: TrackSpec,
-  step = SEGMENT_LENGTH,
-): Array<{ x: number; y: number; z: number; heading: number; distance: number }> {
-  const points: Array<{ x: number; y: number; z: number; heading: number; distance: number }> = [];
-  let x = 0;
-  let y = 0;
-  let z = 0;
-  let heading = 0;
+export function trackCenterline(track: TrackSpec, step = POINT_STEP): TrackPoint[] {
+  if (step === POINT_STEP || track.points.length === 0) return track.points;
 
-  for (let distance = 0; distance <= track.length; distance += step) {
-    points.push({ x, y, z, heading, distance });
-    const { curvature, gradient } = sampleTrack(track, distance);
-    heading += curvature * step;
-    x += Math.sin(heading) * step;
-    z += Math.cos(heading) * step;
-    y += gradient * step;
+  const out: TrackPoint[] = [];
+  for (let distance = 0; distance < track.length; distance += step) {
+    const point = trackToWorld(track.points, distance, 0, 0, POINT_STEP);
+    if (point) out.push({ ...point, distance });
   }
-  return points;
+  return out;
 }
 
 export interface WorldPoint {
@@ -257,12 +336,12 @@ export interface WorldPoint {
  * The sign of the lateral offset is the whole reason this is a tested function
  * rather than three lines inside the renderer. The chase camera looks along
  * +z, and a camera looking down +z has its right hand pointing at **-x**. With
- * the geometrically obvious normal, steering right moved the car to the left
- * of the picture — a bug that is invisible in every still frame and obvious the
- * instant anybody drives. Encoding it here means it is asserted, not eyeballed.
+ * the geometrically obvious normal, steering right moved the car to the left of
+ * the picture — invisible in every still frame, obvious the instant anybody
+ * drives.
  */
 export function trackToWorld(
-  centerline: ReturnType<typeof trackCenterline>,
+  centerline: readonly TrackPoint[],
   distance: number,
   lateral: number,
   halfWidth: number,
@@ -270,17 +349,22 @@ export function trackToWorld(
 ): WorldPoint | null {
   if (centerline.length === 0) return null;
 
-  const raw = distance / step;
-  const index = Math.floor(raw);
-  const t = raw - index;
+  // A circuit, so both ends wrap rather than clamp.
+  const span = centerline.length * step;
+  const wrapped = ((distance % span) + span) % span;
+  const raw = wrapped / step;
+  const index = Math.floor(raw) % centerline.length;
+  const t = raw - Math.floor(raw);
 
-  const a = centerline[Math.min(centerline.length - 1, Math.max(0, index))]!;
-  const b = centerline[Math.min(centerline.length - 1, Math.max(0, index + 1))]!;
+  const a = centerline[index]!;
+  const b = centerline[(index + 1) % centerline.length]!;
 
   const x = a.x + (b.x - a.x) * t;
   const y = a.y + (b.y - a.y) * t;
   const z = a.z + (b.z - a.z) * t;
-  const heading = a.heading + (b.heading - a.heading) * t;
+  // Interpolated as a delta so a heading crossing pi does not spin the vehicle
+  // the long way round.
+  const heading = a.heading + angleDelta(a.heading, b.heading) * t;
 
   const offset = lateral * halfWidth;
   return {
@@ -291,10 +375,14 @@ export function trackToWorld(
   };
 }
 
-export const SEGMENT_METRES = SEGMENT_LENGTH;
+export const SEGMENT_METRES = POINT_STEP;
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
+/** Shortest signed angle from a to b, so headings wrap cleanly at plus or minus pi. */
+export function angleDelta(a: number, b: number): number {
+  let delta = (b - a) % (Math.PI * 2);
+  if (delta > Math.PI) delta -= Math.PI * 2;
+  if (delta < -Math.PI) delta += Math.PI * 2;
+  return delta;
 }
 
 function round2(value: number): number {

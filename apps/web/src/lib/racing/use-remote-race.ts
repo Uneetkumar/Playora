@@ -3,6 +3,7 @@
 import * as React from "react";
 import type { RacingPlayerView, VehicleInput, VehicleState } from "@playora/game-engine";
 import type { RaceHudState } from "../../games/racing/RaceHud";
+import { gearFor } from "../../games/racing/gears";
 
 /** How often driving input is sent to the server. */
 const INPUT_HZ = 20;
@@ -70,6 +71,15 @@ export function useRemoteRace(
     checkpoint: 0,
     checkpoints: 4,
     finished: false,
+    distance: 0,
+    lap: 1,
+    laps: 3,
+    raceTicks: 0,
+    currentLapTicks: 0,
+    bestLapTicks: null,
+    lastLapTicks: null,
+    gear: 1,
+    standings: [],
   });
 
   // Buffer every snapshot the socket delivers.
@@ -141,6 +151,23 @@ export function useRemoteRace(
           checkpoint: me?.checkpoint ?? 0,
           checkpoints: view.checkpoints.length,
           finished: view.isFinished,
+          lap: Math.min(view.laps, (me?.lapsDone ?? 0) + 1),
+          laps: view.laps,
+          raceTicks: view.raceTicks,
+          currentLapTicks: Math.max(0, view.tick - (me?.lapStartTick ?? 0)),
+          bestLapTicks: me?.bestLapTicks ?? null,
+          lastLapTicks: me?.lapTicks.at(-1) ?? null,
+          gear: gearFor(me?.speed ?? 0, 78),
+          distance: me?.distance ?? 0,
+          standings: view.standings.map((row) => ({
+            playerId: row.playerId,
+            place: row.place,
+            distance: row.distance,
+            finished: row.finished,
+            // Seat order is the order vehicles were added to the scene, so the
+            // colour on the map matches the car on the track.
+            seat: view.vehicles.findIndex((v) => v.playerId === row.playerId),
+          })),
         });
       }
     };

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { buildTrack } from "@playora/game-engine";
 import type { RacingPlayerView, TrackSpec, VehicleInput } from "@playora/game-engine";
-import type { GameId } from "@playora/game-types";
+import type { GameId, Player } from "@playora/game-types";
 import { useRemoteRace } from "../../lib/racing/use-remote-race";
 import { RaceStage, RACE_CONTROLS_HINT } from "./RaceStage";
 
@@ -12,6 +12,10 @@ interface OnlineRaceViewProps {
   /** The latest GAME_STATE from the room socket. */
   gameState: RacingPlayerView | null;
   currentUserId: string;
+  /** Names for the standings list. */
+  players: Record<string, Player>;
+  /** Leaves the race from the pause menu. */
+  onLeave: () => void;
   sendGameAction: (type: string, payload: Record<string, unknown>) => void;
 }
 
@@ -27,6 +31,8 @@ export function OnlineRaceView({
   gameId,
   gameState,
   currentUserId,
+  players,
+  onLeave,
   sendGameAction,
 }: OnlineRaceViewProps) {
   const sendInput = React.useCallback(
@@ -71,6 +77,11 @@ export function OnlineRaceView({
         started
         onReady={onReady}
         setInput={setInput}
+        players={players}
+        currentUserId={currentUserId}
+        // No onPauseChange: the server's clock keeps running, so the menu can
+        // only offer to leave rather than pretending to freeze the race.
+        onLeave={onLeave}
         onRestart={() => {
           /* Restarting an online race is the rematch vote, offered by the
              result screen rather than by a button on the track. */

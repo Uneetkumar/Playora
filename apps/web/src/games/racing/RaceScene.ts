@@ -1,4 +1,10 @@
 import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
+import { buildBike, buildCar, type VehicleRig } from "./vehicles";
+import { ParticleField, SpeedLines } from "./effects";
 import {
   ROAD_HALF_WIDTH,
   trackCenterline,
@@ -35,13 +41,6 @@ const CAR_COLOURS = [0xff2b3d, 0x3ba7ff, 0x4ade80, 0xfbbf24, 0xa855f7, 0xf472b6,
 /** Metres between road cross-sections. Lower is smoother and costs more. */
 const ROAD_STEP = 10;
 
-interface VehicleRig {
-  group: THREE.Group;
-  body: THREE.Mesh;
-  wheels: THREE.Mesh[];
-  glow: THREE.PointLight | null;
-}
-
 /**
  * Renders a race.
  *
@@ -65,6 +64,13 @@ export class RaceScene {
   private cameraPosition = new THREE.Vector3();
   private disposed = false;
   private isBike: boolean;
+  private composer: EffectComposer | null = null;
+  private bloom: UnrealBloomPass | null = null;
+  private particles: ParticleField | null = null;
+  private speedLines: SpeedLines | null = null;
+  private lastFrameAt = 0;
+  /** Per-vehicle memory, for spotting the moment something happens. */
+  private previous = new Map<string, { distance: number; crashTicks: number; coins: number }>();
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -82,7 +88,7 @@ export class RaceScene {
     // a moving 3D scene, and it is the first thing to cost frames on a phone.
     this.renderer.setPixelRatio(Math.min(2, globalThis.devicePixelRatio || 1));
 
-    this.camera = new THREE.PerspectiveCamera(72, 16 / 9, 0.5, 900);
+    this.camera = new THREE.PerspectiveCamera(64, 16 / 9, 0.5, 900);
     this.scene.fog = new THREE.Fog(PALETTE.fog, 90, 620);
     this.scene.background = new THREE.Color(PALETTE.fog);
 
@@ -95,7 +101,37 @@ export class RaceScene {
     this.buildCity(track);
     this.buildObstacles(track);
     this.buildCoins(track);
-    this.buildFinish(track);
+    this.buildFinish();
+
+    // Bloom. A neon night scene lives or dies on whether the emissive surfaces
+    // actually glow: without it the rails, headlights, coins and nitro flame
+    // are just brightly coloured polygons. Tuned low-threshold and modest
+    // strength, so the road stays readable rather than washing out.
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.0;
+
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+
+    this.bloom = new UnrealBloomPass(
+      new THREE.Vector2(1, 1),
+      0.42, // strength
+      0.5, // radius
+      // A high threshold on purpose. Low values bloom the road surface itself
+      // and the whole frame washes to white — only lights, neon and the nitro
+      // flame should glow, not everything they illuminate.
+      0.62,
+    );
+    this.composer.addPass(this.bloom);
+    // Converts back to the display colour space; without it the whole scene
+    // comes out washed and pale once a composer is in the chain.
+    this.composer.addPass(new OutputPass());
+
+    this.particles = new ParticleField(this.scene);
+    this.speedLines = new SpeedLines(this.camera);
+    // The camera has children now, so it has to be in the scene graph for them
+    // to be drawn at all.
+    this.scene.add(this.camera);
 
     this.resize();
   }
@@ -104,9 +140,15 @@ export class RaceScene {
   update(view: RacingPlayerView, followId: string | null): void {
     if (this.disposed) return;
 
+    const now = performance.now();
+    // Clamped: a backgrounded tab hands back a delta of many seconds, and the
+    // effects would fire a whole race's worth of particles in one frame.
+    const delta = this.lastFrameAt === 0 ? 1 / 60 : Math.min(0.1, (now - this.lastFrameAt) / 1000);
+    this.lastFrameAt = now;
+
     view.vehicles.forEach((vehicle, index) => {
       const rig = this.vehicles.get(vehicle.playerId) ?? this.addVehicle(vehicle.playerId, index);
-      this.placeVehicle(rig, vehicle);
+      this.placeVehicle(rig, vehicle, delta, view.tick);
     });
 
     for (const key of view.collectedCoins) {
@@ -119,7 +161,11 @@ export class RaceScene {
     const follow = followId ? view.vehicles.find((v) => v.playerId === followId) : view.vehicles[0];
     if (follow) this.followCamera(follow, view.racingPhase === "countdown");
 
-    this.renderer.render(this.scene, this.camera);
+    this.particles?.update(delta);
+    this.speedLines?.update(delta, follow?.speed ?? 0, this.isBike ? 72 : 78);
+
+    if (this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 
   resize(): void {
@@ -127,6 +173,8 @@ export class RaceScene {
     const width = this.canvas.clientWidth || 960;
     const height = this.canvas.clientHeight || 540;
     this.renderer.setSize(width, height, false);
+    this.composer?.setSize(width, height);
+    this.bloom?.setSize(width, height);
     this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();
   }
@@ -134,6 +182,9 @@ export class RaceScene {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.speedLines?.dispose();
+    this.particles?.dispose();
+    this.composer?.dispose();
     // Three does not free GPU memory on garbage collection: every geometry and
     // material has to be released by hand or a few restarts exhaust the context.
     this.scene.traverse((object) => {
@@ -200,7 +251,11 @@ export class RaceScene {
     const runoffPositions: number[] = [];
     const runoffIndices: number[] = [];
 
-    this.centerline.forEach((point, i) => {
+    // The centreline plus its own first point again: the circuit is a loop, and
+    // without the repeat there is a missing quad where the road meets itself.
+    const ring = [...this.centerline, this.centerline[0]!];
+
+    ring.forEach((point, i) => {
       const nx = Math.cos(point.heading);
       const nz = -Math.sin(point.heading);
 
@@ -266,7 +321,8 @@ export class RaceScene {
       const half = ROAD_HALF_WIDTH * 1.36;
       const height = 3.2;
 
-      this.centerline.forEach((point, i) => {
+      const ring = [...this.centerline, this.centerline[0]!];
+      ring.forEach((point, i) => {
         const nx = Math.cos(point.heading) * side;
         const nz = -Math.sin(point.heading) * side;
         positions.push(point.x + nx * half, point.y, point.z + nz * half);
@@ -339,35 +395,26 @@ export class RaceScene {
     this.scene.add(buildings);
   }
 
+  /**
+   * Obstacles you can recognise before you hit them.
+   *
+   * Each is built from a few parts with a bright reflective band, because the
+   * track is dark and an unlit grey box at ninety metres is invisible until it
+   * is too late to avoid — which reads as an unfair game rather than a hard one.
+   */
   private buildObstacles(track: TrackSpec): void {
     for (const obstacle of track.obstacles) {
       const position = this.worldPoint(obstacle.distance, obstacle.lateral);
       if (!position) continue;
 
-      let geometry: THREE.BufferGeometry;
-      let colour: number;
+      const item =
+        obstacle.kind === "cone"
+          ? buildCone()
+          : obstacle.kind === "block"
+            ? buildBlock()
+            : buildBarrier();
 
-      if (obstacle.kind === "cone") {
-        geometry = new THREE.ConeGeometry(0.7, 1.6, 10);
-        colour = PALETTE.cone;
-      } else if (obstacle.kind === "block") {
-        geometry = new THREE.BoxGeometry(2.6, 1.8, 1.6);
-        colour = PALETTE.block;
-      } else {
-        geometry = new THREE.BoxGeometry(ROAD_HALF_WIDTH * 0.62, 2.1, 1.2);
-        colour = PALETTE.barrier;
-      }
-
-      const item = new THREE.Mesh(
-        geometry,
-        new THREE.MeshStandardMaterial({
-          color: colour,
-          emissive: new THREE.Color(colour),
-          emissiveIntensity: 0.45,
-          roughness: 0.5,
-        }),
-      );
-      item.position.set(position.x, position.y + 0.9, position.z);
+      item.position.set(position.x, position.y, position.z);
       item.rotation.y = position.heading;
       this.scene.add(item);
     }
@@ -394,16 +441,19 @@ export class RaceScene {
     }
   }
 
-  private buildFinish(track: TrackSpec): void {
-    const position = this.worldPoint(track.length, 0);
+  private buildFinish(): void {
+    // On a circuit the start line and the finish line are the same place.
+    const position = this.worldPoint(0, 0);
     if (!position) return;
 
     const gate = new THREE.Mesh(
       new THREE.TorusGeometry(ROAD_HALF_WIDTH * 1.15, 0.55, 10, 28, Math.PI),
       new THREE.MeshStandardMaterial({
-        color: 0xffffff,
+        color: 0x6d4aa8,
         emissive: new THREE.Color(0x8b5cf6),
-        emissiveIntensity: 0.9,
+        // Restrained: the gate stands directly over the grid, so a bright one
+        // blooms straight into the camera on the first frame of every race.
+        emissiveIntensity: 0.35,
       }),
     );
     gate.position.set(position.x, position.y, position.z);
@@ -413,7 +463,7 @@ export class RaceScene {
     // A chequered strip on the road itself, so the line is unmistakable.
     const strip = new THREE.Mesh(
       new THREE.PlaneGeometry(ROAD_HALF_WIDTH * 2, 4),
-      new THREE.MeshBasicMaterial({ color: 0xffffff }),
+      new THREE.MeshBasicMaterial({ color: 0xd8d8e8 }),
     );
     strip.rotation.x = -Math.PI / 2;
     strip.rotation.z = -position.heading;
@@ -424,83 +474,87 @@ export class RaceScene {
   // ---------------------------------------------------------------- vehicles
 
   private addVehicle(playerId: string, index: number): VehicleRig {
-    const group = new THREE.Group();
     const colour = CAR_COLOURS[index % CAR_COLOURS.length]!;
-
-    const bodyGeometry = this.isBike
-      ? new THREE.BoxGeometry(0.9, 0.8, 3.0)
-      : new THREE.BoxGeometry(2.1, 0.85, 4.2);
-
-    const body = new THREE.Mesh(
-      bodyGeometry,
-      new THREE.MeshStandardMaterial({
-        color: colour,
-        emissive: new THREE.Color(colour),
-        emissiveIntensity: 0.28,
-        metalness: 0.45,
-        roughness: 0.3,
-      }),
-    );
-    body.position.y = 0.95;
-    group.add(body);
-
-    // Cabin/rider, so the vehicle reads as a shape rather than a brick.
-    const cabin = new THREE.Mesh(
-      this.isBike ? new THREE.BoxGeometry(0.6, 0.9, 0.9) : new THREE.BoxGeometry(1.5, 0.7, 1.9),
-      new THREE.MeshStandardMaterial({ color: 0x1a1030, roughness: 0.4, metalness: 0.2 }),
-    );
-    cabin.position.set(0, this.isBike ? 1.7 : 1.6, this.isBike ? -0.2 : -0.25);
-    group.add(cabin);
-
-    const wheels: THREE.Mesh[] = [];
-    const wheelGeometry = new THREE.CylinderGeometry(
-      this.isBike ? 0.62 : 0.62,
-      this.isBike ? 0.62 : 0.62,
-      this.isBike ? 0.22 : 0.5,
-      14,
-    );
-    const wheelMaterial = new THREE.MeshStandardMaterial({ color: 0x120a22, roughness: 0.85 });
-
-    const offsets: Array<[number, number]> = this.isBike
-      ? [[0, 1.25], [0, -1.25]]
-      : [[-1.05, 1.4], [1.05, 1.4], [-1.05, -1.4], [1.05, -1.4]];
-
-    for (const [x, z] of offsets) {
-      const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
-      wheel.rotation.z = Math.PI / 2;
-      wheel.position.set(x, 0.62, z);
-      group.add(wheel);
-      wheels.push(wheel);
-    }
-
-    // Only the followed car gets a light: a point light per vehicle is one of
-    // the most expensive things a scene like this can do.
-    const glow = new THREE.PointLight(colour, 1.6, 26);
-    glow.position.set(0, 1.4, -1.6);
-    group.add(glow);
-
-    this.scene.add(group);
-    const rig: VehicleRig = { group, body, wheels, glow };
+    const rig = this.isBike ? buildBike(colour) : buildCar(colour);
+    this.scene.add(rig.group);
     this.vehicles.set(playerId, rig);
     return rig;
   }
 
-  private placeVehicle(rig: VehicleRig, vehicle: VehicleState): void {
+  /**
+   * Places one vehicle, and emits whatever it is doing.
+   *
+   * The wheel spin, the lean, the pitch under braking and the flame out of the
+   * exhaust are all derived from state the engine already reports. None of it
+   * changes the simulation; all of it is the difference between a car and a
+   * box sliding along a texture.
+   */
+  private placeVehicle(rig: VehicleRig, vehicle: VehicleState, delta: number, tick: number): void {
     const point = this.worldPoint(vehicle.distance, vehicle.lateral);
     if (!point) return;
 
     rig.group.position.set(point.x, point.y, point.z);
     rig.group.rotation.y = point.heading;
 
-    // Lean into the corner, and nose down under braking. Both are cosmetic, and
-    // both are what stops the vehicle looking like a sticker sliding on glass.
-    rig.body.rotation.z = -vehicle.lean * (this.isBike ? 0.5 : 0.16);
-    rig.body.rotation.x = vehicle.crashTicks > 0 ? -0.16 : 0;
+    const before = this.previous.get(vehicle.playerId);
+    const boosting = vehicle.nitroUntilTick > tick;
+    const crashed = before !== undefined && vehicle.crashTicks > before.crashTicks;
+    const tookCoin = before !== undefined && vehicle.coins > before.coins;
 
-    const spin = vehicle.speed * 0.06;
-    for (const wheel of rig.wheels) wheel.rotation.x += spin;
+    // Wheels turn at the rate the car is actually travelling: circumference is
+    // 2*pi*r, so radians per second is speed / r.
+    const spin = (vehicle.speed / 0.6) * delta;
+    for (const wheel of rig.wheels) wheel.rotation.x -= spin;
 
-    if (rig.glow) rig.glow.intensity = vehicle.nitroUntilTick > vehicle.distance ? 3 : 1.6;
+    // Front wheels also point where the driver is steering.
+    for (const wheel of rig.steeringWheels) {
+      wheel.rotation.y += (vehicle.input.steer * 0.42 - wheel.rotation.y) * Math.min(1, delta * 12);
+    }
+
+    // The body leans and pitches; the wheels stay flat on the road.
+    const leanTarget = -vehicle.lean * (rig.isBike ? 0.62 : 0.13);
+    rig.chassis.rotation.z += (leanTarget - rig.chassis.rotation.z) * Math.min(1, delta * 9);
+
+    const pitchTarget = vehicle.crashTicks > 0 ? -0.2 : vehicle.input.brake ? 0.05 : boosting ? -0.05 : 0;
+    rig.chassis.rotation.x += (pitchTarget - rig.chassis.rotation.x) * Math.min(1, delta * 8);
+
+    rig.brakeLights.emissiveIntensity = vehicle.input.brake ? 4 : 0.9;
+    rig.headlight.intensity = boosting ? 4 : 2.2;
+
+    const particles = this.particles;
+    if (particles) {
+      if (boosting) {
+        for (const exhaust of rig.exhausts) {
+          const at = exhaust.getWorldPosition(new THREE.Vector3());
+          const backward = new THREE.Vector3(
+            -Math.sin(point.heading),
+            0,
+            -Math.cos(point.heading),
+          );
+          particles.flame(at, backward);
+        }
+      }
+
+      if (crashed) {
+        particles.sparks(rig.group.position.clone().setY(point.y + 0.6));
+      }
+
+      if (tookCoin) {
+        particles.pickup(rig.group.position.clone().setY(point.y + 1.1));
+      }
+
+      // Dust only off the tarmac, and only when actually moving.
+      if (Math.abs(vehicle.lateral) > 1 && vehicle.speed > 6 && Math.random() < 0.6) {
+        const wheel = rig.wheels[rig.wheels.length - 1]!;
+        particles.dust(wheel.getWorldPosition(new THREE.Vector3()));
+      }
+    }
+
+    this.previous.set(vehicle.playerId, {
+      distance: vehicle.distance,
+      crashTicks: vehicle.crashTicks,
+      coins: vehicle.coins,
+    });
   }
 
   private spinCoins(): void {
@@ -517,14 +571,17 @@ export class RaceScene {
    * to look at for more than a few seconds.
    */
   private followCamera(vehicle: VehicleState, isCountdown: boolean): void {
-    const point = this.worldPoint(vehicle.distance, vehicle.lateral * 0.55);
+    // Tracks the car most of the way across the road. At a low fraction the
+    // car sits off to one side of the picture with dead road beside it, which
+    // is what the first build looked like.
+    const point = this.worldPoint(vehicle.distance, vehicle.lateral * 0.88);
     if (!point) return;
 
     // Pulls back and drops as speed rises, which is the cheapest and most
     // effective sense-of-speed trick there is.
     const speedFactor = Math.min(1, vehicle.speed / 70);
-    const back = isCountdown ? 15 : 13 + speedFactor * 4;
-    const height = isCountdown ? 7.5 : 6.2 + speedFactor * 1.2;
+    const back = isCountdown ? 14 : 12 + speedFactor * 3.5;
+    const height = isCountdown ? 6.4 : 5.2 + speedFactor * 1.1;
 
     const behind = new THREE.Vector3(
       point.x - Math.sin(point.heading) * back,
@@ -544,7 +601,10 @@ export class RaceScene {
     else this.cameraTarget.lerp(lookAt, 0.14);
     this.camera.lookAt(this.cameraTarget);
 
-    this.camera.fov = 72 + speedFactor * 9;
+    // A narrower base angle than the wide-angle look of the first build: 72
+    // degrees bows the road at the edges. The kick with speed stays, because
+    // that is doing real work.
+    this.camera.fov = 64 + speedFactor * 10;
     this.camera.updateProjectionMatrix();
   }
 
@@ -560,6 +620,120 @@ export class RaceScene {
   ): { x: number; y: number; z: number; heading: number } | null {
     return trackToWorld(this.centerline, distance, lateral, ROAD_HALF_WIDTH, ROAD_STEP);
   }
+}
+
+const HAZARD = new THREE.MeshStandardMaterial({
+  color: 0xfff6e0,
+  emissive: new THREE.Color(0xfff6e0),
+  emissiveIntensity: 0.55,
+  roughness: 0.4,
+});
+
+/** A traffic cone: weighted base, tapered body, reflective band. */
+function buildCone(): THREE.Group {
+  const group = new THREE.Group();
+
+  const base = new THREE.Mesh(
+    new THREE.BoxGeometry(1.1, 0.14, 1.1),
+    new THREE.MeshStandardMaterial({ color: 0x2a1a3a, roughness: 0.9 }),
+  );
+  base.position.y = 0.07;
+  group.add(base);
+
+  const body = new THREE.Mesh(
+    new THREE.ConeGeometry(0.42, 1.5, 12),
+    new THREE.MeshStandardMaterial({
+      color: 0xff7a2d,
+      emissive: new THREE.Color(0xff7a2d),
+      emissiveIntensity: 0.5,
+      roughness: 0.6,
+    }),
+  );
+  body.position.y = 0.83;
+  group.add(body);
+
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.36, 0.22, 12), HAZARD);
+  band.position.y = 0.86;
+  group.add(band);
+
+  return group;
+}
+
+/** A road barrier: striped panel on two feet. */
+function buildBarrier(): THREE.Group {
+  const group = new THREE.Group();
+  const width = ROAD_HALF_WIDTH * 0.6;
+
+  const panel = new THREE.Mesh(
+    new THREE.BoxGeometry(width, 0.9, 0.22),
+    new THREE.MeshStandardMaterial({
+      color: 0xff4d6d,
+      emissive: new THREE.Color(0xff4d6d),
+      emissiveIntensity: 0.45,
+      roughness: 0.5,
+    }),
+  );
+  panel.position.y = 1.25;
+  group.add(panel);
+
+  // Diagonal stripes, which is what makes a barrier read as a barrier.
+  const stripes = Math.max(3, Math.round(width / 0.7));
+  for (let i = 0; i < stripes; i++) {
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.26, 1.05, 0.26), HAZARD);
+    stripe.position.set(-width / 2 + (i + 0.5) * (width / stripes), 1.25, 0);
+    stripe.rotation.z = 0.5;
+    group.add(stripe);
+  }
+
+  const rail = new THREE.Mesh(
+    new THREE.BoxGeometry(width, 0.12, 0.3),
+    new THREE.MeshStandardMaterial({ color: 0x3a2a5a, roughness: 0.7, metalness: 0.4 }),
+  );
+  rail.position.y = 1.78;
+  group.add(rail);
+
+  for (const side of [-1, 1]) {
+    const leg = new THREE.Mesh(
+      new THREE.BoxGeometry(0.2, 0.85, 0.7),
+      new THREE.MeshStandardMaterial({ color: 0x2a1a3a, roughness: 0.9 }),
+    );
+    leg.position.set((side * width) / 2.4, 0.42, 0);
+    group.add(leg);
+  }
+
+  return group;
+}
+
+/** A concrete block, chevroned so its edges are visible at distance. */
+function buildBlock(): THREE.Group {
+  const group = new THREE.Group();
+
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(2.4, 1.5, 1.5),
+    new THREE.MeshStandardMaterial({
+      color: 0x4ad6ff,
+      emissive: new THREE.Color(0x2a86b8),
+      emissiveIntensity: 0.35,
+      roughness: 0.65,
+      metalness: 0.2,
+    }),
+  );
+  body.position.y = 0.75;
+  group.add(body);
+
+  // A bright cap and two chevrons: enough contrast to be read in one glance.
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.16, 1.6), HAZARD);
+  cap.position.y = 1.56;
+  group.add(cap);
+
+  for (const side of [-1, 1]) {
+    const chevron = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.2, 0.12), HAZARD);
+    chevron.position.set(side * 0.55, 0.8, 0.78);
+    chevron.rotation.z = side * 0.55;
+    group.add(chevron);
+  }
+
+  return group;
 }
 
 function mesh(positions: number[], indices: number[], material: THREE.Material): THREE.Mesh {
