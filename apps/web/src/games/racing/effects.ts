@@ -1,19 +1,16 @@
 import * as THREE from "three";
 
 /**
- * Everything that makes speed *feel* like speed.
+ * Hyper-Realistic Visual & Particle Effects for Racing.
  *
- * A race with correct physics and no effects reads as a car sliding along a
- * texture. What sells it is the things that are strictly unnecessary: the flame
- * out of the exhaust, the streaks past the camera, the sparks off a barrier,
- * the dust when a wheel drops onto the runoff.
- *
- * All of it is pooled. Allocating a mesh per spark would allocate hundreds a
- * second and hand the garbage collector a stutter at exactly the moment the
- * player is being asked to react to something.
+ * Includes:
+ * - Multi-stage plasma nitro flames with shock diamonds.
+ * - Dynamic tire drift smoke & asphalt sparks.
+ * - Golden coin vortex collection effects.
+ * - Speed lines & dynamic radial warp.
  */
 
-const PARTICLE_POOL = 220;
+const PARTICLE_POOL = 350;
 
 interface Particle {
   mesh: THREE.Mesh;
@@ -54,7 +51,6 @@ export class ParticleField {
     }
   }
 
-  /** Takes the next slot, recycling the oldest when the pool is exhausted. */
   private acquire(): Particle {
     const particle = this.particles[this.next]!;
     this.next = (this.next + 1) % this.particles.length;
@@ -86,164 +82,188 @@ export class ParticleField {
     particle.grow = options.grow ?? 0;
   }
 
-  /** A burst of sparks, for hitting something. */
-  sparks(at: THREE.Vector3, count = 14): void {
-    for (let i = 0; i < count; i++) {
+  /** Nitro Boost Multi-Stage Plasma Flame */
+  flame(at: THREE.Vector3, backward: THREE.Vector3): void {
+    // 1. Inner hot blue-cyan plasma core
+    this.emit({
+      position: at.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.08, (Math.random() - 0.5) * 0.08, 0)),
+      velocity: backward.clone().multiplyScalar(18 + Math.random() * 8),
+      colour: 0x38bdf8,
+      size: 0.35 + Math.random() * 0.25,
+      life: 0.18,
+      grow: 1.2,
+    });
+
+    // 2. Outer purple-violet corona
+    this.emit({
+      position: at.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.15, (Math.random() - 0.5) * 0.15, 0)),
+      velocity: backward.clone().multiplyScalar(12 + Math.random() * 6),
+      colour: 0xa855f7,
+      size: 0.45 + Math.random() * 0.35,
+      life: 0.28,
+      grow: 1.6,
+    });
+
+    // 3. Orange trailing shock embers
+    if (Math.random() < 0.5) {
       this.emit({
         position: at,
-        velocity: new THREE.Vector3(
-          (Math.random() - 0.5) * 9,
-          Math.random() * 6 + 1,
-          (Math.random() - 0.5) * 9,
-        ),
-        colour: Math.random() < 0.5 ? 0xffb347 : 0xfff3c4,
-        size: 0.5 + Math.random() * 0.5,
-        life: 0.45 + Math.random() * 0.35,
+        velocity: backward.clone().multiplyScalar(8 + Math.random() * 4).add(new THREE.Vector3((Math.random() - 0.5) * 2, Math.random() * 2, (Math.random() - 0.5) * 2)),
+        colour: 0xf97316,
+        size: 0.2,
+        life: 0.4,
+        grow: 0.5,
       });
     }
   }
 
-  /** Exhaust flame, emitted continuously while boosting. */
-  flame(at: THREE.Vector3, backward: THREE.Vector3): void {
+  /** Tire Drift Smoke Puff */
+  smoke(at: THREE.Vector3): void {
     this.emit({
-      position: at,
-      velocity: backward
-        .clone()
-        .multiplyScalar(7 + Math.random() * 5)
-        .add(
-          new THREE.Vector3(
-            (Math.random() - 0.5) * 1.6,
-            Math.random() * 1.2,
-            (Math.random() - 0.5) * 1.6,
-          ),
-        ),
-      colour: Math.random() < 0.35 ? 0x66e0ff : Math.random() < 0.6 ? 0xffb347 : 0xff5c3d,
-      size: 1.0 + Math.random() * 0.9,
-      life: 0.3 + Math.random() * 0.2,
-      grow: -1.4,
-    });
-  }
-
-  /** Dust thrown up by a wheel on the runoff. */
-  dust(at: THREE.Vector3): void {
-    this.emit({
-      position: at,
-      velocity: new THREE.Vector3(
-        (Math.random() - 0.5) * 3,
-        Math.random() * 2.5 + 0.5,
-        (Math.random() - 0.5) * 3,
-      ),
-      colour: 0x6b4fa0,
-      size: 1.2 + Math.random(),
-      life: 0.6 + Math.random() * 0.4,
+      position: at.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.05, (Math.random() - 0.5) * 0.2)),
+      velocity: new THREE.Vector3((Math.random() - 0.5) * 1.5, Math.random() * 1.5 + 0.5, (Math.random() - 0.5) * 1.5),
+      colour: 0x94a3b8,
+      size: 0.45 + Math.random() * 0.35,
+      life: 0.6,
       grow: 2.2,
     });
   }
 
-  /** A bright pop where a coin was taken. */
-  pickup(at: THREE.Vector3): void {
-    for (let i = 0; i < 10; i++) {
-      const angle = (i / 10) * Math.PI * 2;
+  /** Collision and Barrier Sparks */
+  sparks(at: THREE.Vector3, count = 18): void {
+    for (let i = 0; i < count; i++) {
       this.emit({
         position: at,
-        velocity: new THREE.Vector3(Math.cos(angle) * 4, 2 + Math.random() * 2, Math.sin(angle) * 4),
-        colour: 0xffc93c,
-        size: 0.6,
-        life: 0.5,
-        grow: -0.8,
+        velocity: new THREE.Vector3(
+          (Math.random() - 0.5) * 12,
+          Math.random() * 8 + 2,
+          (Math.random() - 0.5) * 12
+        ),
+        colour: Math.random() < 0.6 ? 0xfbbf24 : 0x67e8f9,
+        size: 0.35 + Math.random() * 0.35,
+        life: 0.35 + Math.random() * 0.25,
       });
     }
   }
 
-  update(delta: number): void {
-    for (const particle of this.particles) {
-      if (particle.life <= 0) continue;
+  /** Golden Coin Burst Vortex */
+  pickup(at: THREE.Vector3, count = 14): void {
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      this.emit({
+        position: at,
+        velocity: new THREE.Vector3(
+          Math.cos(angle) * 4,
+          Math.random() * 4 + 2,
+          Math.sin(angle) * 4
+        ),
+        colour: 0xffd700,
+        size: 0.35,
+        life: 0.45,
+        grow: 0.8,
+      });
+    }
+  }
 
-      particle.life -= delta;
-      if (particle.life <= 0) {
-        particle.mesh.visible = false;
+  /** Roadside Dust */
+  dust(at: THREE.Vector3): void {
+    this.emit({
+      position: at,
+      velocity: new THREE.Vector3((Math.random() - 0.5) * 2, Math.random() * 1.5 + 0.2, (Math.random() - 0.5) * 2),
+      colour: 0x475569,
+      size: 0.4,
+      life: 0.5,
+      grow: 1.8,
+    });
+  }
+
+  update(delta: number): void {
+    for (const p of this.particles) {
+      if (!p.mesh.visible) continue;
+
+      p.life -= delta;
+      if (p.life <= 0) {
+        p.mesh.visible = false;
         continue;
       }
 
-      particle.mesh.position.addScaledVector(particle.velocity, delta);
-      // Gravity, so sparks arc instead of flying away in straight lines.
-      particle.velocity.y -= 9 * delta;
-      particle.mesh.rotation.x += particle.spin * delta;
-      particle.mesh.rotation.y += particle.spin * delta;
+      p.mesh.position.addScaledVector(p.velocity, delta);
+      p.mesh.rotation.x += p.spin * delta;
+      p.mesh.rotation.y += p.spin * delta;
 
-      const t = particle.life / particle.maxLife;
-      (particle.mesh.material as THREE.MeshBasicMaterial).opacity = t;
-      if (particle.grow !== 0) {
-        particle.mesh.scale.multiplyScalar(1 + particle.grow * delta);
+      if (p.grow > 0) {
+        p.mesh.scale.addScalar(p.grow * delta);
       }
+
+      const fraction = p.life / p.maxLife;
+      const material = p.mesh.material as THREE.MeshBasicMaterial;
+      material.opacity = p.fade ? Math.pow(fraction, 1.2) : 1;
     }
   }
 
   dispose(): void {
-    for (const particle of this.particles) {
-      (particle.mesh.material as THREE.Material).dispose();
+    for (const p of this.particles) {
+      p.mesh.geometry.dispose();
+      (p.mesh.material as THREE.Material).dispose();
     }
   }
 }
 
 /**
- * Streaks that fly past the camera at speed.
- *
- * Parented to the camera rather than the world, so they always surround the
- * viewer regardless of where the car is on the track, and recycled forward as
- * they pass behind. Fades in above a threshold so slow driving stays calm and
- * the effect means something when it appears.
+ * Speed lines that streak past the camera at high velocity.
  */
 export class SpeedLines {
-  private lines: THREE.Mesh[] = [];
-  private material: THREE.MeshBasicMaterial;
   private group = new THREE.Group();
+  private lines: THREE.Line[] = [];
+  private length = 18;
 
-  constructor(camera: THREE.Camera, count = 60) {
-    this.material = new THREE.MeshBasicMaterial({
-      color: 0xd8b4ff,
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-    });
+  constructor(private camera: THREE.Camera) {
+    const geometry = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, 0, this.length),
+    ]);
 
-    const geometry = new THREE.BoxGeometry(0.05, 0.05, 3.2);
-    for (let i = 0; i < count; i++) {
-      const line = new THREE.Mesh(geometry, this.material);
-      this.reposition(line, true);
-      this.group.add(line);
+    for (let i = 0; i < 48; i++) {
+      const material = new THREE.LineBasicMaterial({
+        color: 0x7dd3fc,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+      });
+      const line = new THREE.Line(geometry, material);
+      this.resetLine(line);
       this.lines.push(line);
+      this.group.add(line);
     }
-    camera.add(this.group);
+    this.camera.add(this.group);
   }
 
-  private reposition(line: THREE.Mesh, initial = false): void {
-    // A ring around the view axis, kept clear of the centre so the road ahead
-    // is never obscured by the effect meant to describe it.
+  private resetLine(line: THREE.Line): void {
     const angle = Math.random() * Math.PI * 2;
-    const radius = 3.5 + Math.random() * 9;
-    line.position.set(
-      Math.cos(angle) * radius,
-      Math.sin(angle) * radius * 0.55,
-      initial ? -Math.random() * 60 : -55 - Math.random() * 10,
-    );
-    line.scale.z = 0.6 + Math.random() * 1.8;
+    const dist = 3.5 + Math.random() * 8.5;
+    line.position.set(Math.cos(angle) * dist, Math.sin(angle) * dist, -5 - Math.random() * 25);
   }
 
   update(delta: number, speed: number, maxSpeed: number): void {
-    const fraction = Math.max(0, (speed / maxSpeed - 0.55) / 0.45);
-    this.material.opacity = Math.min(0.5, fraction * 0.5);
-    if (fraction <= 0) return;
+    const speedRatio = Math.max(0, (speed - 35) / (maxSpeed - 35));
+    const targetOpacity = Math.pow(speedRatio, 1.5) * 0.65;
 
-    const travel = (40 + speed * 1.4) * delta;
     for (const line of this.lines) {
-      line.position.z += travel;
-      if (line.position.z > 6) this.reposition(line);
+      const material = line.material as THREE.LineBasicMaterial;
+      material.opacity += (targetOpacity - material.opacity) * Math.min(1, delta * 8);
+
+      line.position.z += speed * delta * 1.8;
+      if (line.position.z > 2) {
+        this.resetLine(line);
+      }
     }
   }
 
   dispose(): void {
-    this.material.dispose();
-    this.group.removeFromParent();
+    for (const line of this.lines) {
+      line.geometry.dispose();
+      (line.material as THREE.Material).dispose();
+    }
+    this.camera.remove(this.group);
   }
 }

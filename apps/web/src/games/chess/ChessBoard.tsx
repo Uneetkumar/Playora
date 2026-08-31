@@ -133,9 +133,9 @@ export function ChessBoard({
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full flex justify-center">
       <div
-        className="relative mx-auto aspect-square w-full max-w-[min(88vw,620px)] overflow-hidden rounded-xl shadow-raised ring-1 ring-black/30"
+        className="relative mx-auto aspect-square w-[min(94vw,calc(100dvh-270px),620px)] overflow-hidden rounded-2xl shadow-2xl border-2 sm:border-4 border-[#1E2333]"
         role="grid"
         aria-label="Chess board"
       >

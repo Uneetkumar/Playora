@@ -106,11 +106,16 @@ export interface TrackObject {
   lateral: number;
 }
 
-export type ObstacleKind = "cone" | "barrier" | "block";
+export type ObstacleKind = "cone" | "barrier" | "block" | "barrel" | "spikes" | "laser";
 
 export interface TrackObstacle extends TrackObject {
   kind: ObstacleKind;
   /** Half-width in lateral units. */
+  halfWidth: number;
+}
+
+export interface BoostPad extends TrackObject {
+  /** Width across the road. */
   halfWidth: number;
 }
 
@@ -140,6 +145,7 @@ export interface TrackSpec {
   segments: TrackSegment[];
   obstacles: TrackObstacle[];
   coins: TrackObject[];
+  boostPads: BoostPad[];
   /** Distances at which progress is recorded. */
   checkpoints: number[];
 }

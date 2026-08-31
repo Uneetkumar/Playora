@@ -12,6 +12,8 @@
       "outputs": [
         ".next/**",
         "!.next/cache/**",
+        ".next-build/**",
+        "!.next-build/cache/**",
         "dist/**",
         ".wrangler/**"
       ]

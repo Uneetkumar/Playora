@@ -3,6 +3,7 @@
 import * as React from "react";
 import type { RacingPlayerView, TrackSpec, VehicleInput } from "@playora/game-engine";
 import { RaceScene } from "./RaceScene";
+import { NO_CONTROLS, type HeldControls } from "./touch-controls";
 
 interface RaceCanvasProps {
   track: TrackSpec;
@@ -15,6 +16,21 @@ interface RaceCanvasProps {
   interactive: boolean;
   /** Bound to R. The HUD shows the key, so it has to actually do something. */
   onRestart: () => void;
+  /**
+   * On-screen controls the player is holding, when there are any.
+   *
+   * Read every frame and merged with the keyboard, so a tablet with a keyboard
+   * attached can use either without one cancelling the other.
+   */
+  touchInput?: React.RefObject<HeldControls>;
+  /**
+   * Whether dragging on the canvas itself steers.
+   *
+   * Turned off once there are dedicated on-screen controls: with both active, a
+   * thumb on the steering pad and a thumb on the canvas fight each other for
+   * the wheel, and the canvas wins because it is absolute.
+   */
+  pointerSteering?: boolean;
 }
 
 /** How fast the steering follows the keys, in units per second. */
@@ -41,12 +57,16 @@ export function RaceCanvas({
   setInput,
   interactive,
   onRestart,
+  touchInput,
+  pointerSteering = true,
 }: RaceCanvasProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const sceneRef = React.useRef<RaceScene | null>(null);
   const keysRef = React.useRef({ left: false, right: false, throttle: false, brake: false });
   const steerRef = React.useRef(0);
   const pointerSteerRef = React.useRef<number | null>(null);
+  const touchRef = React.useRef(touchInput);
+  touchRef.current = touchInput;
   const setInputRef = React.useRef(setInput);
   setInputRef.current = setInput;
   const restartRef = React.useRef(onRestart);
@@ -58,7 +78,13 @@ export function RaceCanvas({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const scene = new RaceScene(canvas, track, { isBike });
+    let themeName: string | undefined;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      themeName = params.get("theme") || undefined;
+    }
+
+    const scene = new RaceScene(canvas, track, { isBike, themeName });
     sceneRef.current = scene;
 
     onReady((view) => scene.update(view, followId));
@@ -84,7 +110,16 @@ export function RaceCanvas({
       const delta = Math.min(0.1, (now - last) / 1000);
       last = now;
 
-      const keys = keysRef.current;
+      // Keyboard and on-screen controls are merged rather than switched
+      // between, so neither disables the other on a device that has both.
+      const touch = touchRef.current?.current ?? NO_CONTROLS;
+      const pressed = keysRef.current;
+      const keys = {
+        left: pressed.left || touch.left,
+        right: pressed.right || touch.right,
+        throttle: pressed.throttle || touch.throttle,
+        brake: pressed.brake || touch.brake,
+      };
       const pointer = pointerSteerRef.current;
 
       if (pointer !== null) {
@@ -205,22 +240,24 @@ export function RaceCanvas({
       className="h-full w-full touch-none rounded-xl"
       aria-label="Race view"
       onPointerDown={(e) => {
-        if (!interactive) return;
+        if (!interactive || !pointerSteering) return;
         (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
         keysRef.current.throttle = true;
         pointerSteer(e.clientX, e.currentTarget);
       }}
       onPointerMove={(e) => {
-        if (!interactive) return;
+        if (!interactive || !pointerSteering) return;
         // Only steer with the pointer while it is down, or a resting cursor
         // would hold the wheel over.
         if (e.buttons > 0) pointerSteer(e.clientX, e.currentTarget);
       }}
       onPointerUp={() => {
+        if (!pointerSteering) return;
         keysRef.current.throttle = false;
         pointerSteerRef.current = null;
       }}
       onPointerLeave={() => {
+        if (!pointerSteering) return;
         keysRef.current.throttle = false;
         pointerSteerRef.current = null;
       }}

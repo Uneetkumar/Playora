@@ -4,10 +4,10 @@ import type { GameId } from "@playora/game-types";
 
 export type PlayModeId =
   | "offline-ai"
+  | "offline-career"
   | "offline-local"
   | "online-friends"
   | "online-random"
-  | "online-ai"
   | "lan";
 
 export interface PlayMode {
@@ -23,30 +23,68 @@ export interface PlayMode {
 }
 
 /**
- * Single source of truth for how a game can be played.
+ * Games that have a full engine + bot implementation.
  *
- * Home, the games list and the play hub all read from here, so a mode is never
- * advertised in one place and missing in another. Availability is derived from
- * the registries rather than hardcoded per screen.
+ * The engine/bot registries are singletons that are initialized when the
+ * server bundle runs. On the client, those packages may not re-execute their
+ * side-effects, so `gameEngineRegistry.has()` can silently return false even
+ * though the game is perfectly playable. Maintaining this whitelist alongside
+ * the registry is the simplest fix that never produces a false negative.
+ */
+const IMPLEMENTED_GAMES = new Set<GameId>([
+  "chess",
+  "uno",
+  "uno-no-mercy",
+  "car-race",
+  "bike-race",
+  "rope-rescue",
+  "ant-attack",
+  "bomb-pass",
+  "color-rush",
+  "falling-floor",
+  "pin-puzzle",
+  "target-rush",
+  "hot-potato",
+  "bridge-builder",
+  "ice-breaker",
+]);
+
+/**
+ * Single source of truth for how a game can be played.
  */
 export function getPlayModes(gameId: GameId): PlayMode[] {
-  const hasEngine = gameEngineRegistry.has(gameId);
-  const hasBot = botRegistry.has(gameId);
-  // Two people cannot share one steering input, so a race has no pass-and-play.
-  // The same slot becomes a time trial rather than being removed, which keeps
-  // every game offering something offline and solo.
+  // A game is considered implemented if it is in the whitelist OR the runtime
+  // registries confirm it (the latter catches dynamically registered engines).
+  const hasEngine = IMPLEMENTED_GAMES.has(gameId) || gameEngineRegistry.has(gameId);
+  const hasBot = IMPLEMENTED_GAMES.has(gameId) || botRegistry.has(gameId);
   const isRace = gameId === "car-race" || gameId === "bike-race";
 
-  return [
+  const list: PlayMode[] = [
     {
       id: "offline-ai",
       label: "Play vs AI",
-      tagline: "Seven difficulty levels, no internet needed",
+      tagline: isRace
+        ? "Quick race against AI rivals with chosen difficulty"
+        : "Seven difficulty levels, no internet needed",
       needsAuth: false,
       needsInternet: false,
       status: hasEngine && hasBot ? "ready" : "coming-soon",
       ...(hasBot ? {} : { note: "No AI opponent for this game yet" }),
     },
+  ];
+
+  if (isRace) {
+    list.push({
+      id: "offline-career",
+      label: "Career Mode",
+      tagline: "8 championship circuits, star challenges, and unlocks",
+      needsAuth: false,
+      needsInternet: false,
+      status: "ready",
+    });
+  }
+
+  list.push(
     {
       id: "offline-local",
       label: isRace ? "Time trial" : "Pass & Play",
@@ -60,7 +98,7 @@ export function getPlayModes(gameId: GameId): PlayMode[] {
     {
       id: "online-friends",
       label: "Play with a friend",
-      tagline: "Share a room code and play online",
+      tagline: "Create a private room, invite friends, or add AI bots",
       needsAuth: true,
       needsInternet: true,
       status: hasEngine ? "ready" : "coming-soon",
@@ -74,23 +112,16 @@ export function getPlayModes(gameId: GameId): PlayMode[] {
       status: hasEngine ? "ready" : "coming-soon",
     },
     {
-      id: "online-ai",
-      label: "Online vs AI",
-      tagline: "Add an AI opponent to your room",
-      needsAuth: true,
-      needsInternet: true,
-      status: hasEngine && hasBot ? "ready" : "coming-soon",
-    },
-    {
       id: "lan",
       label: "Same wifi",
-      tagline: "Play nearby with no internet at all",
+      tagline: "Direct local network play with 0ms lag — scan QR code to join",
       needsAuth: false,
       needsInternet: false,
-      status: "coming-soon",
-      note: "Coming later — connects two devices by QR code",
-    },
-  ];
+      status: hasEngine ? "ready" : "coming-soon",
+    }
+  );
+
+  return list;
 }
 
 export function readyModes(gameId: GameId): PlayMode[] {
@@ -104,10 +135,7 @@ export function isInstantlyPlayable(gameId: GameId): boolean {
 
 /**
  * Whether a game has an engine behind it.
- *
- * Every surface derives "playable" from here, so the catalog can list a game as
- * upcoming without any screen offering a route into a game that does not exist.
  */
 export function isGameImplemented(gameId: GameId): boolean {
-  return gameEngineRegistry.has(gameId);
+  return IMPLEMENTED_GAMES.has(gameId) || gameEngineRegistry.has(gameId);
 }

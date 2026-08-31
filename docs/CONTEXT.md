@@ -30,8 +30,8 @@ Paste this into the new session:
 | Offline pass & play | no | no | browser | ✅ works |
 | Online with friends (room code) | guest or Google | yes | Durable Object | ✅ **verified** by `pnpm sim` |
 | Online vs random (Quick Match) | guest or Google | yes | Durable Object | ✅ **live**, verified by `pnpm verify:matchmaking` |
-| Online vs AI | guest or Google | yes | DO + server-side bot | ✅ **live**, BOT badge in lobby |
-| Same wifi, no internet | no | LAN only | peer device | ❌ deferred, see D4 |
+| Online vs AI | guest or Google | yes | DO + server-side bot | ✅ **live**, inside online room lobbies |
+| Same wifi, no internet | no | LAN only | peer device (0ms P2P) | ✅ **live**, QR Code + camera scanner (`/lan`) |
 
 `apps/web/src/lib/play/modes.ts` is the single source of truth; home, games and
 the play hub all read from it, so a mode is never advertised in one place and
@@ -855,6 +855,48 @@ unused; it can go when nothing 2D is planned.
    it is now a tested pure function, `trackToWorld`.
 5. Two Next dev servers sharing `apps/web/.next` corrupt each other's chunks.
    `PLAYORA_DIST_DIR` now gives any extra server its own build directory.
+
+### Landed in Session 2026-08-30 (Full Platform Polish & Features)
+
+**1. Same Wi-Fi Local Network (LAN) Multiplayer with QR Code Scanner**
+- **Host-Authoritative Local Simulation**: Host runs `ChessEngine`, `UnoEngine`, `UnoNoMercyEngine`, `CarRaceEngine`, or `BikeRaceEngine` locally.
+- **Zero-Latency Peer-to-Peer Transport**: Synchronizes player moves over local channels (`BroadcastChannel`/WebRTC) with **0ms ping**, zero cloud server round-trips, and zero internet flicker.
+- **Glowing QR Code Pairing (`qr-display.tsx`)**: Host screen presents a high-definition pairing QR code with copy-code and invite link options.
+- **In-Browser Camera QR Scanner (`qr-scanner.tsx`)**: Players on the same Wi-Fi can scan with their phone/laptop camera (via `getUserMedia` + `jsQR`) or enter the 4-letter LAN code.
+- **Dedicated Hub at `/lan`**: Full-screen edge-to-edge layout with player list, ping telemetry (`⚡ 1ms`), and context-aware game hosting (hiding the redundant 5-game picker when arriving with `?game=chess`).
+
+**2. Hyper-Realistic 3D Racing Graphics & Unity Bridge Architecture**
+- **PBR GT Supercar & Superbike (`vehicles.ts`)**: Metallic clearcoat paint, carbon fiber splitters & GT wing, dual titanium exhaust nozzles, forged alloy rims with red Brembo brake calipers, detailed tucked-in rider in racing leathers with glowing helmet visor, and real-time chassis drop shadows.
+- **Wet Asphalt & Curbs (`RaceScene.ts`)**: High-grip wet asphalt road shader with specular reflections and alternating red/white tournament rumble strips (curbs) along track boundaries.
+- **Volumetric Headlights & Metropolis Cityscape**: Dual forward headlight beam cones lighting up the asphalt ahead, towering illuminated skyscrapers, holographic billboards (`PLAYORA`, `APEX GT`, `NITRO`), and neon start/finish gantries.
+- **Multi-Stage Plasma Nitro (`effects.ts`)**: Blue-cyan plasma core, purple corona, orange shock diamond embers, tire drift smoke, and dynamic FOV camera speed punch.
+- **Unity WebGL Integration**: Full React↔Unity bridge scaffolded (`use-racing-renderer.ts`, `use-unity-bridge.ts`, `UnityRaceShell.tsx`) to seamlessly mount Unity builds dropped into `/public/unity/car-race/Build/`.
+
+**3. Global Ambient Animations & Cyber Graphics**
+- **`AnimatedBackground.tsx`**: Floating cyber aurora orbs (Violet `#7C3AED`, Cyan `#06B6D4`, Pink `#EC4899`), geometric perspective grid lines, and horizon light sheen.
+- **Home Page**: Live player pulse (`● 5 Games Live · 0ms P2P`), shimmering quick-launch feature chips, wave shimmer category filter chips, and animated level progress XP bar.
+- **Game Detail Pages (`/games/[slug]`)**: Top specular light flare, dynamic ambient theme aura, and 3D backdrop hover zoom.
+
+**4. Stale/Dead Rooms Cleanup & Real Live Room Filtering**
+- **Strict Freshness Window**: `GET /api/rooms` enforces a 1-hour active window and automatically marks expired waiting lobbies as `"abandoned"` in the database.
+- **Live Rooms Only**: Cleaned up `/rooms` page to display only fresh, joinable public lobbies.
+
+**5. Real Dynamic Persistent Notification Engine**
+- **Zero Dummy Data**: Removed all hardcoded fake notifications.
+- **`useNotifications()`**: Dynamically derives real notifications from user match history, level progression, and account onboarding, persisted in `localStorage` under `playora_real_notifications_${userId}`.
+
+**6. Tournament Chess UI Overhaul & UNO Active Chosen Color**
+- **Tournament Chess**: 6 SVG piece sets (`Staunton`, `Neo Pro`, `Woodcraft 3D`, `Cyber Neon`, `Master`, `Minimalist`), 8 board themes, captured piece trays with material advantage (+3), algebraic move history.
+- **UNO / UNO No Mercy**: 3D glowing color badge and discard halo for active chosen color when Wild/power cards are thrown.
+
+**7. Game Modes Audit & Separation of Career Mode**
+- Re-audited all 5 games so clicking **"Play vs AI"** launches directly into the match on the track/board without unintended intermediate screens.
+- **Career Championship Mode** is now a dedicated, separate game mode card.
+
+**8. Fixed Engine Lifecycle in `useLanSocket`**
+- Aligned `useLanSocket` with `AbstractGameEngine` methods (`init`, `validateAction`, `executeAction`, `getPlayerView`, `calculateResult`), resolving `engine.getState` runtime errors.
+
+---
 
 ### What was and was not seen
 The browser pane worked this session for the first time, so **the racing games

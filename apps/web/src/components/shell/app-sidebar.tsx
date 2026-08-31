@@ -10,21 +10,24 @@ import {
   History,
   Award,
   ShieldAlert,
-  Home, Clock, Sparkles, Flame, Swords, Users, Trophy,
-  Gamepad2, Zap, User, Settings,
+  Home,
+  Clock,
+  Sparkles,
+  Flame,
+  Swords,
+  Users,
+  Trophy,
+  User,
+  Settings,
+  Wifi,
 } from "lucide-react";
 
 /**
- * Collapsed icon rail that expands on hover.
- *
- * Keeps the full width of the page for games — which is the point of a games
- * platform — while still giving every destination a visible label the moment
- * the pointer arrives. Hidden below `lg`, where the bottom nav takes over.
+ * Clean, non-redundant sidebar icon rail.
  */
 const ITEMS = [
   { href: "/", label: "Home", icon: Home },
-  { href: "/play", label: "Play", icon: Zap },
-  { href: "/games", label: "All games", icon: Gamepad2 },
+  { href: "/lan", label: "Local Wi-Fi", icon: Wifi },
   { href: "/rooms", label: "Rooms", icon: Swords },
   { href: "/history", label: "History", icon: History },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
@@ -34,39 +37,71 @@ const ITEMS = [
 ] as const;
 
 const DISCOVER = [
-  { href: "/games?sort=recent", label: "Recently played", icon: Clock },
-  { href: "/games?sort=new", label: "New games", icon: Sparkles },
-  { href: "/games?sort=popular", label: "Popular", icon: Flame },
-  { href: "/games?sort=top", label: "Top rated", icon: Trophy },
+  { href: "/?sort=recent", label: "Recently played", icon: Clock },
+  { href: "/?sort=new", label: "New games", icon: Sparkles },
+  { href: "/?sort=popular", label: "Popular", icon: Flame },
+  { href: "/?sort=top", label: "Top rated", icon: Trophy },
 ] as const;
 
 export function AppSidebar() {
   const pathname = usePathname();
   const search = useSearchParams();
   const [expanded, setExpanded] = React.useState(false);
-  // Shown only to staff. Not a security measure — every admin table enforces
-  // access in Postgres (migration 00008) — just a link nobody else needs.
+  const sidebarRef = React.useRef<HTMLElement | null>(null);
   const { user } = useAuthStore();
   const { isStaff } = useStaffRole(user?.id);
 
-  /**
-   * Whether a row is the current page.
-   *
-   * The query string is part of the identity, not decoration. Comparing only
-   * the path made "Recently played", "New games", "Popular" and "Top rated" —
-   * which are all `/games?sort=...` — highlight together, so every one of them
-   * looked selected at once.
-   */
+  // Auto-collapse on route changes
+  React.useEffect(() => {
+    setExpanded(false);
+  }, [pathname, search]);
+
+  // Bulletproof pointer tracking: auto-close whenever pointer exits the sidebar bounding box
+  React.useEffect(() => {
+    if (!expanded) return;
+
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!sidebarRef.current) return;
+      const rect = sidebarRef.current.getBoundingClientRect();
+      if (
+        e.clientX > rect.right + 8 ||
+        e.clientX < rect.left - 8 ||
+        e.clientY < rect.top - 8 ||
+        e.clientY > rect.bottom + 8
+      ) {
+        setExpanded(false);
+      }
+    };
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (sidebarRef.current && !sidebarRef.current.contains(e.target as Node)) {
+        setExpanded(false);
+      }
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [expanded]);
+
   const isActive = (href: string) => {
     const [path, query] = href.split("?");
 
-    if (path === "/") return pathname === "/";
-    if (!pathname.startsWith(path!)) return false;
-    if (!query) {
-      // A row with no query is only active when the URL has no sort either,
-      // or the plain link would also light up alongside a sorted one.
-      return !search?.get("sort");
+    if (path === "/") {
+      if (pathname !== "/") return false;
+      if (!query) return !search?.get("sort");
+      const expected = new URLSearchParams(query);
+      for (const [key, value] of expected) {
+        if (search?.get(key) !== value) return false;
+      }
+      return true;
     }
+
+    if (!pathname.startsWith(path!)) return false;
+    if (!query) return !search?.get("sort");
 
     const expected = new URLSearchParams(query);
     for (const [key, value] of expected) {
@@ -89,12 +124,13 @@ export function AppSidebar() {
       <Link
         href={href}
         title={label}
+        onClick={() => setExpanded(false)}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "group flex h-11 items-center gap-3 rounded-lg px-3 transition-colors",
+          "group flex h-11 items-center gap-3 rounded-xl px-3 transition-all",
           active
-            ? "bg-primary/15 text-primary"
-            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+            ? "bg-[#7C3AED]/20 text-[#A855F7] font-bold shadow-sm"
+            : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
         )}
       >
         <Icon className="h-5 w-5 shrink-0" aria-hidden />
@@ -112,15 +148,12 @@ export function AppSidebar() {
 
   return (
     <aside
+      ref={sidebarRef}
       onMouseEnter={() => setExpanded(true)}
       onMouseLeave={() => setExpanded(false)}
-      onFocusCapture={() => setExpanded(true)}
-      onBlurCapture={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) setExpanded(false);
-      }}
       aria-label="Sections"
       className={cn(
-        "fixed left-0 top-16 z-40 hidden h-[calc(100vh-4rem)] flex-col border-r border-border bg-card/95 py-3 backdrop-blur-xl transition-[width] duration-200 lg:flex",
+        "fixed left-0 top-16 z-40 hidden h-[calc(100vh-4rem)] flex-col border-r border-white/10 bg-[#0B0D19]/95 py-3 backdrop-blur-xl transition-[width] duration-200 lg:flex",
         expanded ? "w-56" : "w-16",
       )}
     >
@@ -131,12 +164,12 @@ export function AppSidebar() {
         {isStaff && <Row href="/admin" label="Staff" icon={ShieldAlert} />}
       </nav>
 
-      <div className="my-3 mx-3 border-t border-border" />
+      <div className="my-3 mx-3 border-t border-white/10" />
 
       <nav className="flex flex-col gap-1 px-2">
         <p
           className={cn(
-            "px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground transition-opacity",
+            "px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-white/40 transition-opacity",
             expanded ? "opacity-100" : "opacity-0",
           )}
         >

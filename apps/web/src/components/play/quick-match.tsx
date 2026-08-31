@@ -36,6 +36,11 @@ export function QuickMatch({
   const mm = useMatchmaking(gameId);
   const [countdown, setCountdown] = React.useState(START_COUNTDOWN_SECONDS);
 
+  const mmSearchRef = React.useRef(mm.search);
+  mmSearchRef.current = mm.search;
+  const mmSetStartingRef = React.useRef(mm.setStarting);
+  mmSetStartingRef.current = mm.setStarting;
+
   // Start searching once when the panel opens. Guarded by a ref rather than an
   // empty dependency array, so re-running the effect can never restart a queue
   // the player is already in.
@@ -43,25 +48,26 @@ export function QuickMatch({
   React.useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    void mm.search("casual");
-  }, [mm]);
+    void mmSearchRef.current("casual");
+  }, []);
 
   // Once matched, count down then hand off to the room.
+  const matchRoomCode = mm.match?.roomCode ?? null;
   React.useEffect(() => {
-    if (mm.state !== "match_found" || !mm.match) return;
+    if (mm.state !== "match_found" || !matchRoomCode) return;
     setCountdown(START_COUNTDOWN_SECONDS);
 
-    const tick = setInterval(() => setCountdown((c) => c - 1), 1000);
+    const tick = setInterval(() => setCountdown((c) => Math.max(0, c - 1)), 1000);
     const go = setTimeout(() => {
-      mm.setStarting();
-      router.push(`/rooms/${mm.match!.roomCode}`);
+      mmSetStartingRef.current();
+      router.push(`/rooms/${matchRoomCode}`);
     }, START_COUNTDOWN_SECONDS * 1000);
 
     return () => {
       clearInterval(tick);
       clearTimeout(go);
     };
-  }, [mm.state, mm.match, router, mm]);
+  }, [mm.state, matchRoomCode, router]);
 
   const opponent = mm.match?.opponents[0];
 

@@ -75,7 +75,7 @@ export function RaceStage({
   }, [paused, setPausedAndReport]);
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-border bg-[#140a2e] shadow-2xl">
+    <div className="relative h-full w-full max-w-[1400px] flex-1 overflow-hidden rounded-2xl sm:rounded-3xl border border-white/15 bg-[#090b14] shadow-[0_0_50px_rgba(0,0,0,0.8)]">
       <RaceCanvas
         track={track}
         isBike={isBike}
@@ -93,6 +93,8 @@ export function RaceStage({
         players={players}
         currentUserId={currentUserId}
         onPause={() => setPausedAndReport(true)}
+        onAccelerate={(held) => setInput({ throttle: held })}
+        onSteer={(steer) => setInput({ steer })}
         onBrake={(held) => setInput({ brake: held })}
         onNitro={() => setInput({ nitro: true })}
       />

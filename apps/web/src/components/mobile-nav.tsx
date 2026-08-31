@@ -2,76 +2,58 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Swords, Gamepad2, Zap, Users, User } from "lucide-react";
+import { Home, Swords, Trophy, User, Camera, type LucideIcon } from "lucide-react";
 import { cn } from "@playora/ui";
 
-/**
- * Mobile bottom navigation.
- *
- * The desktop nav is `hidden md:flex`, which left phones with no navigation at
- * all beyond the home page. The brief is explicit that mobile is designed, not
- * a shrunken desktop, and that the Play action stays visually prominent —
- * hence the raised centre item.
- */
-const ITEMS = [
-  { href: "/", label: "Home", icon: Swords },
-  { href: "/games", label: "Games", icon: Gamepad2 },
-  { href: "/play", label: "Play", icon: Zap, primary: true },
-  { href: "/friends", label: "Friends", icon: Users },
+interface NavItem {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  isCenter?: boolean;
+}
+
+const ITEMS: readonly NavItem[] = [
+  { href: "/", label: "Home", icon: Home },
+  { href: "/lan?scan=true", label: "Scan QR", icon: Camera, isCenter: true },
+  { href: "/rooms", label: "Rooms", icon: Swords },
+  { href: "/leaderboard", label: "Rankings", icon: Trophy },
   { href: "/profile", label: "Profile", icon: User },
-] as const;
+];
 
 export function MobileNav() {
   const pathname = usePathname();
+
+  // Hide mobile nav during active gameplay to give games 100% full screen space
+  if (pathname?.startsWith("/play") || (pathname?.startsWith("/rooms/") && pathname !== "/rooms")) return null;
 
   return (
     <nav
       aria-label="Primary"
       className={cn(
         "fixed inset-x-0 bottom-0 z-40 md:hidden",
-        "border-t border-border bg-card/95 backdrop-blur-xl",
-        // Keeps the bar clear of the iOS home indicator.
+        "border-t border-white/10 bg-[#0B0D19]/95 backdrop-blur-xl",
         "pb-[env(safe-area-inset-bottom)]",
       )}
     >
-      <ul className="flex items-stretch justify-around">
-        {ITEMS.map(({ href, label, icon: Icon, ...rest }) => {
-          const primary = "primary" in rest && rest.primary;
-          const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
-
-          if (primary) {
-            return (
-              <li key={href} className="flex-1">
-                <Link
-                  href={href}
-                  aria-current={isActive ? "page" : undefined}
-                  className="flex flex-col items-center gap-1 px-1 pb-2 pt-1"
-                >
-                  {/* Raised so Play reads as the primary action, not one tab of five. */}
-                  <span className="-mt-5 flex h-12 w-12 items-center justify-center rounded-full bg-primary shadow-glow-primary">
-                    <Icon className="h-6 w-6 text-white" aria-hidden />
-                  </span>
-                  <span className="text-[10px] font-semibold text-primary">{label}</span>
-                </Link>
-              </li>
-            );
-          }
-
+      <ul className="flex items-center justify-around py-1 px-2">
+        {ITEMS.map(({ href, label, icon: Icon, isCenter }) => {
+          const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href.split("?")[0]!);
           return (
-            <li key={href} className="flex-1">
+            <li key={href} className="flex-1 flex justify-center">
               <Link
                 href={href}
                 aria-current={isActive ? "page" : undefined}
                 className={cn(
-                  // 44px minimum touch target.
-                  "flex min-h-[44px] flex-col items-center justify-center gap-1 px-1 py-2 transition-colors",
-                  isActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
+                  "flex flex-col items-center gap-1 transition-all",
+                  isCenter
+                    ? "-mt-5 flex h-12 w-12 items-center justify-center rounded-full border-2 border-cyan-400 bg-gradient-to-tr from-cyan-600 to-blue-600 shadow-[0_0_20px_rgba(6,182,212,0.6)] text-white active:scale-95"
+                    : isActive
+                    ? "px-2 py-1 text-[#A855F7]"
+                    : "px-2 py-1 text-white/50 hover:text-white"
                 )}
               >
-                <Icon className="h-5 w-5" aria-hidden />
-                <span className="text-[10px] font-medium">{label}</span>
-                {/* Active state is not conveyed by colour alone (spec section 32). */}
-                {isActive && <span className="sr-only">(current page)</span>}
+                <Icon className={cn("shrink-0", isCenter ? "h-6 w-6" : "h-5 w-5")} aria-hidden />
+                {!isCenter && <span className="text-[10px] font-semibold">{label}</span>}
               </Link>
             </li>
           );

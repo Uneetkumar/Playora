@@ -9,6 +9,7 @@ import type { GameId, GameResult, Player } from "@playora/game-types";
 import type { PlayerProgressionPayload } from "@playora/protocol";
 import { ChessGameView } from "../../games/chess/ChessGameView";
 import { UnoGameView } from "../../games/uno/UnoGameView";
+import { ArcadeGameView } from "../../games/arcade/ArcadeGameView";
 import dynamic from "next/dynamic";
 
 // Three.js is only needed by the two racing games, so it is kept out of the
@@ -126,6 +127,7 @@ function GameBoard({
           players={players}
           currentUserId={currentUserId}
           lastResult={null}
+          noMercy={gameId === "uno-no-mercy"}
           onPlayCard={(cardId, chosenColor?: UnoColor, declareUno?: boolean) =>
             sendGameAction("PLAY_CARD", {
               cardId,
@@ -153,6 +155,18 @@ function GameBoard({
           sendGameAction={sendGameAction}
         />
       );
+
+    case "rope-rescue":
+    case "ant-attack":
+    case "bomb-pass":
+    case "color-rush":
+    case "falling-floor":
+    case "pin-puzzle":
+    case "target-rush":
+    case "hot-potato":
+    case "bridge-builder":
+    case "ice-breaker":
+      return <ArcadeGameView gameId={gameId} onExit={onRematch} />;
 
     default:
       return <UnsupportedGame gameId={gameId} />;

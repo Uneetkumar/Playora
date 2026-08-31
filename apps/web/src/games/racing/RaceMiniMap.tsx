@@ -12,32 +12,22 @@ export interface MapVehicle {
   finished: boolean;
 }
 
-/**
- * Colours matching the order vehicles are added to the 3D scene.
- *
- * The same list, in the same order, as `CAR_COLOURS` in RaceScene — a car that
- * is red on the track and blue on the map is worse than no map at all.
- */
 export const MAP_COLOURS = [
-  "#ff2b3d",
-  "#3ba7ff",
-  "#4ade80",
-  "#fbbf24",
-  "#a855f7",
-  "#f472b6",
-  "#22d3ee",
-  "#f97316",
+  "#38bdf8", // You (Cyan)
+  "#ef4444", // AI 1 (Red)
+  "#f59e0b", // AI 2 (Amber)
+  "#a855f7", // AI 3 (Purple)
+  "#10b981", // AI 4 (Green)
+  "#ec4899", // AI 5 (Pink)
+  "#3b82f6", // AI 6 (Blue)
+  "#f97316", // AI 7 (Orange)
 ];
 
-const SIZE = 118;
-const PADDING = 10;
+const SIZE = 128;
+const PADDING = 12;
 
 /**
- * The track, seen from above, with everyone on it.
- *
- * Built from the same centreline the physics and the renderer use, so the
- * shape on the map is the shape being driven. The path is computed once per
- * track — it never changes — and only the dots move.
+ * High-Contrast Tactical Radar Minimap.
  */
 export function RaceMiniMap({
   track,
@@ -46,76 +36,94 @@ export function RaceMiniMap({
   track: TrackSpec;
   vehicles: MapVehicle[];
 }) {
-  // Projected once per track. Recomputing a few hundred points twelve times a
-  // second for a shape that cannot change would be pure waste.
   const projection = React.useMemo(() => project(track), [track]);
 
   return (
-    <div className="rounded-xl border border-white/15 bg-black/50 p-1.5 backdrop-blur-sm">
+    <div className="relative rounded-2xl border border-white/20 bg-[#090b14]/85 p-2 shadow-2xl backdrop-blur-md">
+      {/* Top ambient corner glow */}
+      <div className="pointer-events-none absolute -top-4 -right-4 h-16 w-16 rounded-full bg-[#06b6d4]/20 blur-xl" />
+
       <svg
         viewBox={`0 0 ${SIZE} ${SIZE}`}
-        className="h-[104px] w-[104px]"
+        className="h-[116px] w-[116px]"
         role="img"
-        aria-label="Track map"
+        aria-label="Tactical Track Radar"
       >
-        {/* The road, drawn twice: a wide dark casing under a thin bright line,
-            so it reads as a route rather than a scribble. */}
+        {/* Track Outer Glow Outline */}
         <polyline
           points={projection.points}
           fill="none"
-          stroke="rgba(255,255,255,0.14)"
-          strokeWidth={6}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <polyline
-          points={projection.points}
-          fill="none"
-          stroke="rgba(216,180,255,0.55)"
-          strokeWidth={1.6}
+          stroke="rgba(6, 182, 212, 0.25)"
+          strokeWidth={8}
           strokeLinecap="round"
           strokeLinejoin="round"
         />
 
-        {/* Start and finish. */}
-        <circle cx={projection.start.x} cy={projection.start.y} r={3} fill="#4ade80" />
+        {/* Road Base Surface */}
+        <polyline
+          points={projection.points}
+          fill="none"
+          stroke="#1e293b"
+          strokeWidth={5.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Neon Center Route Line */}
+        <polyline
+          points={projection.points}
+          fill="none"
+          stroke="#38bdf8"
+          strokeWidth={1.8}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* Start / Finish Checkered Gate */}
         <g transform={`translate(${projection.finish.x} ${projection.finish.y})`}>
-          <circle r={4.2} fill="#ffffff" />
-          <circle r={2.2} fill="#1a1030" />
+          <circle r={5} fill="#06b6d4" opacity={0.4} />
+          <circle r={3.2} fill="#ffffff" stroke="#0f172a" strokeWidth={1} />
         </g>
 
-        {/* Everyone on the track. The player is drawn last and larger, so they
-            are never hidden underneath a rival. */}
+        {/* Opponents Blips (Drawn first) */}
         {vehicles
           .filter((v) => !v.isMe)
-          .map((vehicle) => {
+          .map((vehicle, idx) => {
             const at = projection.at(vehicle.distance);
             return (
-              <circle
-                key={vehicle.playerId}
-                cx={at.x}
-                cy={at.y}
-                r={2.6}
-                fill={vehicle.colour}
-                opacity={vehicle.finished ? 0.45 : 1}
-              />
+              <g key={vehicle.playerId}>
+                <circle cx={at.x} cy={at.y} r={3.8} fill={vehicle.colour} stroke="#0f172a" strokeWidth={1.2} />
+                <text
+                  x={at.x}
+                  y={at.y + 2.5}
+                  fontSize="6"
+                  fontWeight="bold"
+                  fill="#ffffff"
+                  textAnchor="middle"
+                >
+                  {idx + 1}
+                </text>
+              </g>
             );
           })}
 
+        {/* Local Player (YOU) - High-Contrast Glowing Pulsing Beacon */}
         {vehicles
           .filter((v) => v.isMe)
           .map((vehicle) => {
             const at = projection.at(vehicle.distance);
             return (
               <g key={vehicle.playerId}>
-                <circle cx={at.x} cy={at.y} r={5.2} fill={vehicle.colour} opacity={0.35} />
+                {/* Radar Halo Rings */}
+                <circle cx={at.x} cy={at.y} r={8.5} fill="#4ade80" opacity={0.3} className="animate-ping" />
+                <circle cx={at.x} cy={at.y} r={5.8} fill="#22c55e" opacity={0.5} />
                 <circle
                   cx={at.x}
                   cy={at.y}
-                  r={3.2}
-                  fill={vehicle.colour}
+                  r={3.8}
+                  fill="#4ade80"
                   stroke="#ffffff"
-                  strokeWidth={1.2}
+                  strokeWidth={1.5}
                 />
               </g>
             );
@@ -126,10 +134,7 @@ export function RaceMiniMap({
 }
 
 /**
- * Fits the whole track into the map box.
- *
- * Scaled by the longer axis and centred, so a track that runs mostly north to
- * south is not stretched sideways to fill the square.
+ * Fits the whole track into the map box with correct aspect ratio.
  */
 function project(track: TrackSpec) {
   const line = trackCenterline(track, 20);
@@ -151,8 +156,6 @@ function project(track: TrackSpec) {
   const offsetX = (SIZE - spanX * scale) / 2;
   const offsetY = (SIZE - spanZ * scale) / 2;
 
-  // The world's x is mirrored on screen (see trackToWorld), and z grows away
-  // from the camera, so the map is flipped to match what the driver sees.
   const toMap = (x: number, z: number) => ({
     x: SIZE - (offsetX + (x - minX) * scale),
     y: SIZE - (offsetY + (z - minZ) * scale),
@@ -164,7 +167,6 @@ function project(track: TrackSpec) {
     points: mapped.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" "),
     start: mapped[0] ?? { x: SIZE / 2, y: SIZE / 2 },
     finish: mapped[mapped.length - 1] ?? { x: SIZE / 2, y: SIZE / 2 },
-    /** Where a vehicle at this distance sits on the map. */
     at(distance: number) {
       const raw = Math.max(0, Math.min(track.length, distance)) / 20;
       const index = Math.min(mapped.length - 1, Math.max(0, Math.floor(raw)));
@@ -184,34 +186,34 @@ export interface StandingRow {
   colour: string;
   isMe: boolean;
   finished: boolean;
-  /** Metres ahead of, or behind, the player. */
   gap: number;
 }
 
-/** The order everyone is in, by name, updated as the race runs. */
 export function RaceStandings({ rows }: { rows: StandingRow[] }) {
   if (rows.length < 2) return null;
 
   return (
-    <ol className="w-[104px] space-y-1 rounded-xl border border-white/15 bg-black/50 p-1.5 backdrop-blur-sm">
+    <ol className="w-[116px] space-y-1 rounded-2xl border border-white/15 bg-[#090b14]/85 p-2 shadow-xl backdrop-blur-md">
       {rows.map((row) => (
         <li
           key={row.playerId}
           className={cn(
-            "flex items-center gap-1.5 rounded-md px-1 py-0.5 text-[10px] leading-tight",
-            row.isMe ? "bg-white/15 font-bold text-white" : "text-white/75",
+            "flex items-center gap-1.5 rounded-lg px-1.5 py-1 text-[11px] leading-tight",
+            row.isMe
+              ? "bg-[#7c3aed]/30 border border-[#7c3aed]/50 font-bold text-white shadow-sm"
+              : "text-white/75",
           )}
         >
-          <span className="numeric w-3 shrink-0 text-right tabular-nums">{row.place}</span>
+          <span className="numeric w-3.5 shrink-0 text-right font-black tabular-nums">{row.place}</span>
           <span
             className="h-2 w-2 shrink-0 rounded-full"
             style={{ backgroundColor: row.colour }}
             aria-hidden
           />
-          <span className="min-w-0 flex-1 truncate">{row.name}</span>
+          <span className="min-w-0 flex-1 truncate font-semibold">{row.name}</span>
           {!row.isMe && (
-            <span className="numeric shrink-0 tabular-nums text-white/50">
-              {row.finished ? "fin" : formatGap(row.gap)}
+            <span className="numeric shrink-0 text-[10px] tabular-nums text-white/50">
+              {row.finished ? "FIN" : formatGap(row.gap)}
             </span>
           )}
         </li>
@@ -220,7 +222,6 @@ export function RaceStandings({ rows }: { rows: StandingRow[] }) {
   );
 }
 
-/** Metres ahead (+) or behind (-), rounded to something readable at a glance. */
 function formatGap(gap: number): string {
   if (Math.abs(gap) < 1) return "0";
   const rounded = Math.round(Math.abs(gap));

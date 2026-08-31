@@ -1,5 +1,6 @@
 import { createRng, seedFromString } from "../lib/rng.js";
 import type {
+  BoostPad,
   TrackObject,
   TrackObstacle,
   TrackPoint,
@@ -55,6 +56,7 @@ export function buildTrack(seedSource: string | number, length: number): TrackSp
   });
 
   const obstacles = placeObstacles(rng, actualLength);
+  const boostPads = placeBoostPads(rng, actualLength, obstacles);
   const coins = placeCoins(rng, actualLength, obstacles);
 
   const checkpoints = Array.from(
@@ -62,7 +64,7 @@ export function buildTrack(seedSource: string | number, length: number): TrackSp
     (_, i) => Math.round((actualLength * (i + 1)) / CHECKPOINT_COUNT),
   );
 
-  return { seed, length: actualLength, points, segments, obstacles, coins, checkpoints };
+  return { seed, length: actualLength, points, segments, obstacles, coins, boostPads, checkpoints };
 }
 
 /**
@@ -170,33 +172,31 @@ function straightestIndex(points: TrackPoint[]): number {
 
 /**
  * Rounds off corners too tight to drive.
- *
- * The harmonics are random, so occasionally they stack into a hairpin no
- * vehicle can hold. Rather than clamping curvature — which would break the
- * closure this whole approach exists to guarantee — the shape is pulled
- * towards its own mean radius until every corner fits. Bounded, because a
- * shape that will not converge must not take the generator down with it.
  */
 function tame(points: TrackPoint[], depth: number): TrackPoint[] {
-  const worst = points.reduce((max, point, i) => {
+  if (depth > 6) return points;
+
+  let maxCurvature = 0;
+  points.forEach((point, i) => {
     const next = points[(i + 1) % points.length]!;
-    return Math.max(max, Math.abs(angleDelta(point.heading, next.heading)) / POINT_STEP);
-  }, 0);
+    const delta = Math.abs(angleDelta(point.heading, next.heading));
+    maxCurvature = Math.max(maxCurvature, delta / POINT_STEP);
+  });
 
-  if (worst <= MAX_CURVATURE || depth >= 12) return points;
+  if (maxCurvature <= MAX_CURVATURE) return points;
 
-  const blend = Math.min(0.7, 1 - MAX_CURVATURE / worst);
-  const cx = points.reduce((sum, p) => sum + p.x, 0) / points.length;
-  const cz = points.reduce((sum, p) => sum + p.z, 0) / points.length;
   const meanRadius =
-    points.reduce((sum, p) => sum + Math.hypot(p.x - cx, p.z - cz), 0) / points.length;
+    points.reduce((sum, p) => sum + Math.hypot(p.x, p.z), 0) / points.length;
 
   const pulled = points.map((point) => {
-    const dx = point.x - cx;
-    const dz = point.z - cz;
-    const radius = Math.hypot(dx, dz) || 1;
-    const factor = 1 + (meanRadius / radius - 1) * blend;
-    return { ...point, x: cx + dx * factor, z: cz + dz * factor };
+    const radius = Math.hypot(point.x, point.z);
+    const theta = Math.atan2(point.z, point.x);
+    const eased = radius + (meanRadius - radius) * 0.25;
+    return {
+      ...point,
+      x: Math.cos(theta) * eased,
+      z: Math.sin(theta) * eased,
+    };
   });
 
   pulled.forEach((point, i) => {
@@ -208,48 +208,79 @@ function tame(points: TrackPoint[], depth: number): TrackPoint[] {
 }
 
 /**
- * Scatters obstacles, leaving a gap that is always driveable.
- *
- * The important rule is the last one: whatever is placed across a stretch of
- * road, at least one lateral corridor stays clear. A track that can be blocked
- * outright is not difficult, it is broken.
+ * Scatters dynamic obstacles (barricades, barrels, spikes, lasers, cones).
  */
 function placeObstacles(rng: () => number, length: number): TrackObstacle[] {
   const obstacles: TrackObstacle[] = [];
-  // Clear either side of the start line: it is crossed once a lap, and the
-  // grid must not begin inside a barrier.
   let distance = 140;
 
   while (distance < length - 140) {
-    distance += 60 + rng() * 110;
+    distance += 65 + rng() * 95;
     if (distance >= length - 140) break;
 
     const roll = rng();
-    const kind: TrackObstacle["kind"] = roll < 0.5 ? "cone" : roll < 0.82 ? "block" : "barrier";
-    const halfWidth = kind === "cone" ? 0.1 : kind === "block" ? 0.18 : 0.3;
+    const kind: TrackObstacle["kind"] =
+      roll < 0.28
+        ? "barrier"
+        : roll < 0.52
+        ? "barrel"
+        : roll < 0.74
+        ? "spikes"
+        : roll < 0.88
+        ? "laser"
+        : "cone";
+
+    const halfWidth =
+      kind === "laser" ? 0.38 : kind === "barrier" ? 0.32 : kind === "spikes" ? 0.26 : kind === "barrel" ? 0.22 : 0.12;
 
     const lateral =
-      kind === "barrier"
+      kind === "barrier" || kind === "laser"
         ? (rng() < 0.5 ? -1 : 1) * (0.35 + rng() * 0.35)
-        : (rng() - 0.5) * 1.6;
+        : (rng() - 0.5) * 1.5;
 
     obstacles.push({ distance: Math.round(distance), lateral: round2(lateral), kind, halfWidth });
 
-    if (rng() < 0.35) {
+    if (rng() < 0.3) {
       const otherSide = -Math.sign(lateral || 1) * (0.4 + rng() * 0.4);
-      const gap = Math.abs(otherSide - lateral) - halfWidth - 0.18;
+      const gap = Math.abs(otherSide - lateral) - halfWidth - 0.2;
       if (gap > 0.45) {
         obstacles.push({
           distance: Math.round(distance),
           lateral: round2(otherSide),
           kind: "cone",
-          halfWidth: 0.1,
+          halfWidth: 0.12,
         });
       }
     }
   }
 
   return obstacles;
+}
+
+/** Places ground speed booster pads that give instant acceleration. */
+function placeBoostPads(
+  rng: () => number,
+  length: number,
+  obstacles: TrackObstacle[],
+): BoostPad[] {
+  const pads: BoostPad[] = [];
+  let distance = 180;
+
+  while (distance < length - 160) {
+    distance += 120 + rng() * 140;
+    if (distance >= length - 160) break;
+
+    const lateral = round2((rng() - 0.5) * 1.2);
+    // Don't place on top of obstacles
+    const blocked = obstacles.some(
+      (o) => Math.abs(o.distance - distance) < 18 && Math.abs(o.lateral - lateral) < 0.45,
+    );
+    if (!blocked) {
+      pads.push({ distance: Math.round(distance), lateral, halfWidth: 0.35 });
+    }
+  }
+
+  return pads;
 }
 
 /** Coins run in short lines, and never inside an obstacle. */

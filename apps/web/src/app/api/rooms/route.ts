@@ -20,11 +20,23 @@ export async function GET(request: NextRequest) {
 
   const supabase = await createSupabaseServerClient();
 
+  // Only consider rooms created in the last 1 hour as live waiting rooms.
+  // Old rooms created in previous sessions or days ago are dead/played out.
+  const liveCutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+  // Asynchronously clean up dead waiting rooms older than 1 hour
+  void supabase
+    .from("rooms")
+    .update({ status: "abandoned" })
+    .eq("status", "waiting")
+    .lt("created_at", liveCutoff);
+
   let query = supabase
     .from("rooms")
     .select("id, code, name, status, is_private, max_players, created_at, games(slug, name)")
     .eq("is_private", false)
     .eq("status", "waiting")
+    .gte("created_at", liveCutoff)
     .order("created_at", { ascending: false })
     .limit(parsed.data.limit);
 

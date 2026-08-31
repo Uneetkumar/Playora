@@ -18,7 +18,7 @@ import { gearFor } from "../../games/racing/gears";
 
 export const LOCAL_DRIVER_ID = "local-you";
 
-export type LocalRaceMode = "time-trial" | "vs-ai";
+export type LocalRaceMode = "time-trial" | "vs-ai" | "career";
 
 export interface LocalRaceOptions {
   gameId?: GameId;

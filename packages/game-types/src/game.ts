@@ -1,6 +1,29 @@
-export type GameId = "chess" | "uno" | "uno-no-mercy" | "car-race" | "bike-race";
+export type GameId =
+  | "chess"
+  | "uno"
+  | "uno-no-mercy"
+  | "car-race"
+  | "bike-race"
+  | "rope-rescue"
+  | "ant-attack"
+  | "bomb-pass"
+  | "color-rush"
+  | "falling-floor"
+  | "pin-puzzle"
+  | "target-rush"
+  | "hot-potato"
+  | "bridge-builder"
+  | "ice-breaker";
 
-export type GameCategory = "board" | "card" | "racing" | "casual";
+export type GameCategory =
+  | "board"
+  | "card"
+  | "racing"
+  | "casual"
+  | "puzzle"
+  | "action"
+  | "party"
+  | "physics";
 
 export type GameMode = "casual" | "ranked" | "custom";
 

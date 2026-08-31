@@ -415,21 +415,32 @@ function RoomDetailsContent() {
                           </Badge>
                         )
                       ) : (
-                        <div className="flex items-center gap-3">
-                          <div className="hidden sm:flex items-center space-x-2 text-xs text-primary font-medium">
-                            <Sparkles className="h-3.5 w-3.5" />
+                        <div className="flex items-center gap-2">
+                          <div className="hidden sm:flex items-center space-x-1.5 text-xs text-white/50 font-medium">
+                            <Sparkles className="h-3.5 w-3.5 text-[#A855F7]" />
                             <span>Slot Open</span>
                           </div>
                           {isHost && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-1.5"
-                              onClick={() => addBot(3)}
-                            >
-                              <Bot className="h-3.5 w-3.5" />
-                              <span>Play vs AI</span>
-                            </Button>
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1.5 border-[#7C3AED]/40 bg-[#7C3AED]/15 hover:bg-[#7C3AED]/25 text-[#C084FC] h-8 text-xs font-bold shadow-sm"
+                                onClick={() => addBot(3)}
+                              >
+                                <Bot className="h-3.5 w-3.5" />
+                                <span>+ Add AI Bot (Lvl 3)</span>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border-white/10 bg-white/5 hover:bg-white/10 text-white/80 h-8 text-xs font-semibold px-2"
+                                onClick={() => addBot(5)}
+                                title="Add Expert AI (Level 5)"
+                              >
+                                <span>Lvl 5</span>
+                              </Button>
+                            </div>
                           )}
                         </div>
                       )}

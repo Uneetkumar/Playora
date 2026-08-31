@@ -153,13 +153,15 @@ export default function AchievementsPage() {
             </ul>
           )}
 
-          <p className="mt-6 text-xs text-muted-foreground">
-            <Badge variant="outline" className="mr-2 text-[10px]">
+          <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
+            <Badge variant="outline" className="shrink-0 text-[10px]">
               How they work
             </Badge>
-            Achievements are awarded by the server after a match, from the result it decided.
-            Nothing a client sends can unlock one.
-          </p>
+            <span>
+              Achievements are awarded by the server after a match, from the result it decided.
+              Nothing a client sends can unlock one.
+            </span>
+          </div>
         </>
       )}
     </div>

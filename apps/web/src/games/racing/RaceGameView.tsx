@@ -38,12 +38,8 @@ export function RaceGameView({ gameId, mode, aiLevel, onExit }: RaceGameViewProp
   // useRacingRenderer for why both exist at once.
   const renderer = useRacingRenderer(gameId);
 
-  if (mode === "vs-ai" && !level) {
-    return (
-      <div className="space-y-4">
-        <LevelSelect gameId={gameId} onStart={setLevel} />
-      </div>
-    );
+  if (mode === "career" && !level) {
+    return <LevelSelect gameId={gameId} onStart={setLevel} />;
   }
 
   if (renderer === "unity" && level) {
@@ -154,7 +150,7 @@ function RaceRun({
   const passed = level && place > 0 ? isPass(level, place) : false;
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col flex-1 h-full w-full items-center justify-between gap-2 overflow-hidden py-1">
       {level && (
         <div className="flex items-center justify-between gap-3">
           {onBackToLevels && (
@@ -175,46 +171,50 @@ function RaceRun({
         </div>
       )}
 
-      <RaceStage
-        track={race.track}
-        isBike={race.isBike}
-        followId={LOCAL_DRIVER_ID}
-        hud={race.hud}
-        started={race.running}
-        onReady={onReady}
-        setInput={race.setInput}
-        onRestart={race.restart}
-        players={race.players}
-        currentUserId={race.currentUserId}
-        onPauseChange={race.setPaused}
-        onLeave={onBackToLevels ?? onExit}
-      />
-
-      {race.result && (
-        <RaceResult
-          place={place || race.hud.place}
-          total={race.hud.total}
-          raceTicks={race.hud.raceTicks}
-          bestLapTicks={race.hud.bestLapTicks}
-          coins={race.hud.coins}
-          {...(level
-            ? {
-                stars: starsFor(level, place),
-                passed,
-                levelName: `Level ${level.index} · ${level.name}`,
-                requirement: passed
-                  ? undefined
-                  : `You needed ${level.targetPlace === 1 ? "1st" : `${level.targetPlace}nd or better`} to unlock the next level.`,
-              }
-            : {})}
-          onPlayAgain={race.restart}
-          onNext={passed ? onNextLevel : null}
-          onExit={onBackToLevels ?? onExit}
-          exitLabel={onBackToLevels ? "All levels" : "Back"}
+      <div className="relative w-full max-w-[1400px] flex-1 min-h-0 sm:aspect-video flex flex-col items-center justify-center">
+        <RaceStage
+          track={race.track}
+          isBike={race.isBike}
+          followId={LOCAL_DRIVER_ID}
+          hud={race.hud}
+          started={race.running}
+          onReady={onReady}
+          setInput={race.setInput}
+          onRestart={race.restart}
+          players={race.players}
+          currentUserId={race.currentUserId}
+          onPauseChange={race.setPaused}
+          onLeave={onBackToLevels ?? onExit}
         />
-      )}
 
-      {RACE_CONTROLS_HINT}
+        {race.result && (
+          <RaceResult
+            place={place || race.hud.place}
+            total={race.hud.total}
+            raceTicks={race.hud.raceTicks}
+            bestLapTicks={race.hud.bestLapTicks}
+            coins={race.hud.coins}
+            {...(level
+              ? {
+                  stars: starsFor(level, place),
+                  passed,
+                  levelName: `Level ${level.index} · ${level.name}`,
+                  requirement: passed
+                    ? undefined
+                    : `You needed ${level.targetPlace === 1 ? "1st" : `${level.targetPlace}nd or better`} to unlock the next level.`,
+                }
+              : {})}
+            onPlayAgain={race.restart}
+            onNext={passed ? onNextLevel : null}
+            onExit={onBackToLevels ?? onExit}
+            exitLabel={onBackToLevels ? "All levels" : "Back"}
+          />
+        )}
+      </div>
+
+      <div className="hidden sm:block">
+        {RACE_CONTROLS_HINT}
+      </div>
     </div>
   );
 }

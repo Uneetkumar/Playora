@@ -303,6 +303,9 @@ export abstract class RacingEngine extends AbstractGameEngine<
       if (vehicles[playerId]!.finishedAtTick !== null) finishedCount += 1;
     }
 
+    // Vehicle-to-Vehicle Physical Collision & Contact Response
+    this.resolveVehicleCollisions(vehicles, tick, events);
+
     // Places are assigned in finish order, and re-derived every tick so a
     // vehicle that finishes on the same tick as another still gets a distinct
     // place rather than sharing one.
@@ -313,9 +316,10 @@ export abstract class RacingEngine extends AbstractGameEngine<
       vehicles[v.playerId] = { ...v, place: i + 1 };
     });
 
+    const localHumanFinished = Boolean(vehicles["local-you"] && vehicles["local-you"].finishedAtTick !== null);
     const everyoneHome = finishedCount >= state.playerOrder.length;
     const outOfTime = tick >= state.hardStopTick;
-    const raceOver = everyoneHome || outOfTime;
+    const raceOver = everyoneHome || localHumanFinished || outOfTime;
 
     if (raceOver) {
       // Anyone still driving is placed by distance behind those who finished.
@@ -375,11 +379,24 @@ export abstract class RacingEngine extends AbstractGameEngine<
     const boosting = nitroUntilTick > tick;
 
     const offRoad = Math.abs(lateral) > 1;
-    const ceiling = boosting
+    const baseCeiling = boosting
       ? t.maxSpeed * t.nitroMultiplier
       : offRoad
         ? t.offRoadMaxSpeed
         : t.maxSpeed;
+
+    // Aerodynamic Slipstream / Drafting
+    let isDrafting = false;
+    for (const other of Object.values(state.vehicles)) {
+      if (other.playerId === vehicle.playerId || other.finishedAtTick !== null) continue;
+      const gap = other.distance - vehicle.distance;
+      if (gap > 1.5 && gap < 28 && Math.abs(other.lateral - lateral) < 0.5) {
+        isDrafting = true;
+        break;
+      }
+    }
+
+    const effectiveCeiling = isDrafting && !offRoad ? baseCeiling * 1.06 : baseCeiling;
 
     if (stunned) {
       speed -= t.brakePower * 0.6 * TICK_SECONDS;
@@ -388,42 +405,40 @@ export abstract class RacingEngine extends AbstractGameEngine<
     } else if (input.throttle) {
       // Acceleration tails off near the ceiling instead of stopping dead, which
       // is what makes a top-speed run feel like effort rather than a wall.
-      const headroom = Math.max(0, 1 - speed / Math.max(1, ceiling));
-      speed += t.acceleration * (0.35 + 0.65 * headroom) * TICK_SECONDS * (boosting ? 1.6 : 1);
+      const headroom = Math.max(0, 1 - speed / Math.max(1, effectiveCeiling));
+      const draftBonus = isDrafting ? 0.35 : 0;
+      speed += t.acceleration * (0.42 + 0.58 * headroom + draftBonus) * TICK_SECONDS * (boosting ? 1.65 : 1);
     } else {
       speed -= t.engineBrake * TICK_SECONDS;
     }
 
     if (offRoad) {
-      // Drag scales with speed rather than being a flat subtraction. A constant
-      // was a trap: with offRoadDrag equal to acceleration, a vehicle that
-      // stopped on the runoff had exactly as much drag as thrust and could
-      // never move again. Proportional drag always loses to the engine at low
-      // speed, so there is a way back onto the road from anywhere.
       speed -= t.offRoadDrag * (0.25 + (0.75 * speed) / t.maxSpeed) * TICK_SECONDS;
     }
-    speed = clamp(speed, 0, ceiling);
+    speed = clamp(speed, 0, effectiveCeiling);
 
-    // Steering authority scales with speed: a stationary vehicle cannot change
-    // lane, which is both true and what stops a stopped car sliding sideways.
+    // High-Speed Aerodynamic Downforce & Grip
+    const speedRatio = speed / Math.max(1, t.maxSpeed);
     const speedFactor = Math.min(1, speed / (t.maxSpeed * 0.35));
+    const downforceGrip = 1.0 + Math.min(0.55, speedRatio * speedRatio * 0.55);
     const { curvature } = sampleTrack(state.track, vehicle.distance);
 
-    lateral += input.steer * t.steerRate * speedFactor * TICK_SECONDS;
-    // A corner throws the vehicle towards its outside edge, harder the faster
-    // it is going. This is what makes braking for a bend matter.
-    lateral -= curvature * speed * t.centrifugal * TICK_SECONDS;
+    // Dynamic Lateral Drift & Steering
+    const isDrifting = Math.abs(input.steer) > 0.45 && speed > t.maxSpeed * 0.45 && !offRoad;
+    const effectiveSteerRate = isDrifting ? t.steerRate * 1.25 : t.steerRate;
+    lateral += input.steer * effectiveSteerRate * speedFactor * TICK_SECONDS;
+    lateral -= (curvature * speed * t.centrifugal * TICK_SECONDS) / downforceGrip;
 
-    lean += (input.steer - lean) * t.leanRate * TICK_SECONDS;
-    lean = clamp(lean, -1, 1);
+    // Leaning with dynamic suspension roll response
+    const targetLean = isDrifting ? input.steer * 1.35 : input.steer;
+    lean += (targetLean - lean) * t.leanRate * TICK_SECONDS;
+    lean = clamp(lean, -1.2, 1.2);
 
     let crashTicks = Math.max(0, vehicle.crashTicks - 1);
 
     // The wall. Scrape it and you lose speed and are pushed back onto the road.
     const wallLimit = 1.25;
     if (Math.abs(lateral) > wallLimit) {
-      // Nudged back inside the wall, not parked exactly on it: a vehicle left
-      // touching the limit grinds along it, re-triggering the hit every tick.
       lateral = Math.sign(lateral) * (wallLimit - 0.02);
       speed *= t.wallPenalty;
       if (crashTicks === 0) events.push({ type: "CRASHED", playerId: vehicle.playerId });
@@ -433,19 +448,55 @@ export abstract class RacingEngine extends AbstractGameEngine<
     const previousDistance = vehicle.distance;
     const distance = previousDistance + speed * TICK_SECONDS;
 
-    // Collisions are tested against the span travelled this tick, not against
-    // the end position. At 90 m/s a vehicle covers 1.5 m per tick and would
-    // otherwise drive straight through anything narrower than that.
+    // 1. Ground Boost Pads Interaction
+    if (state.track.boostPads) {
+      for (const pad of state.track.boostPads) {
+        if (pad.distance <= previousDistance || pad.distance > distance) continue;
+        if (Math.abs(pad.lateral - lateral) <= (pad.halfWidth || 0.35) + t.halfWidth) {
+          // Instant high-speed booster push
+          speed = Math.max(speed * 1.32, t.maxSpeed * 1.25);
+          nitroUntilTick = Math.max(nitroUntilTick, tick + 42);
+          events.push({ type: "NITRO_USED", playerId: vehicle.playerId, value: nitroCharges });
+          break;
+        }
+      }
+    }
+
+    // 2. Obstacles & Hazards Collision
     for (const obstacle of state.track.obstacles) {
       if (obstacle.distance <= previousDistance || obstacle.distance > distance) continue;
       if (Math.abs(obstacle.lateral - lateral) > obstacle.halfWidth + t.halfWidth) continue;
 
-      speed *= t.crashPenalty;
-      crashTicks = t.crashStunTicks;
+      switch (obstacle.kind) {
+        case "barrel":
+          speed *= 0.38;
+          crashTicks = Math.floor(t.crashStunTicks * 1.2);
+          break;
+        case "spikes":
+          speed *= 0.32;
+          crashTicks = t.crashStunTicks;
+          break;
+        case "laser":
+          speed *= 0.48;
+          crashTicks = Math.floor(t.crashStunTicks * 0.75);
+          break;
+        case "cone":
+          speed *= 0.82;
+          crashTicks = Math.floor(t.crashStunTicks * 0.3);
+          break;
+        case "barrier":
+        case "block":
+        default:
+          speed *= t.crashPenalty;
+          crashTicks = t.crashStunTicks;
+          break;
+      }
+
       events.push({ type: "CRASHED", playerId: vehicle.playerId });
       break;
     }
 
+    // 3. Coin Pickups
     for (const coin of state.track.coins) {
       if (coin.distance <= previousDistance || coin.distance > distance) continue;
       if (Math.abs(coin.lateral - lateral) > 0.28) continue;
@@ -513,6 +564,85 @@ export abstract class RacingEngine extends AbstractGameEngine<
       // Nitro is edge-triggered, so the request is consumed once it is read.
       input: { ...vehicle.input, nitro: false },
     };
+  }
+
+  /**
+   * Resolves physical bumping, lateral deflection, and tactile contact between vehicles.
+   */
+  private resolveVehicleCollisions(
+    vehicles: Record<string, VehicleState>,
+    _tick: number,
+    events: RacingEvent[],
+  ): void {
+    const list = Object.values(vehicles);
+    const count = list.length;
+    if (count < 2) return;
+
+    for (let i = 0; i < count; i++) {
+      const vA = list[i]!;
+      if (vA.finishedAtTick !== null) continue;
+      const tA = this.vehicleTuningFor(vA.vehicleId);
+
+      for (let j = i + 1; j < count; j++) {
+        const vB = list[j]!;
+        if (vB.finishedAtTick !== null) continue;
+        const tB = this.vehicleTuningFor(vB.vehicleId);
+
+        // Check longitudinal distance overlap (along track)
+        const distDiff = Math.abs(vA.distance - vB.distance);
+        const contactLength = 4.0; // Bumper-to-bumper collision threshold in meters
+
+        if (distDiff < contactLength) {
+          // Check lateral overlap across track width
+          const latDiff = vA.lateral - vB.lateral; // positive if A is to the right of B
+          const minLatGap = tA.halfWidth + tB.halfWidth + 0.12; // Total collision width
+
+          if (Math.abs(latDiff) < minLatGap) {
+            // VEHICLES ARE PHYSICALLY TOUCHING / COLLIDING!
+            const overlap = minLatGap - Math.abs(latDiff);
+            const pushDir = latDiff === 0 ? (i % 2 === 0 ? 1 : -1) : Math.sign(latDiff);
+
+            // 1. Lateral Repulsion (Push bodies apart so they bump & touch without phasing through)
+            const pushAmount = Math.max(0.045, overlap * 0.55);
+            vA.lateral = clamp(vA.lateral + pushDir * pushAmount, -1.22, 1.22);
+            vB.lateral = clamp(vB.lateral - pushDir * pushAmount, -1.22, 1.22);
+
+            // 2. Physical chassis contact tilt / Body shock
+            vA.lean = clamp(vA.lean - pushDir * 0.45, -1, 1);
+            vB.lean = clamp(vB.lean + pushDir * 0.45, -1, 1);
+
+            // 3. Longitudinal Momentum / Drafting Bumper Bump
+            if (distDiff < 2.8) {
+              const speedDiff = vA.speed - vB.speed;
+              if (Math.abs(speedDiff) > 1.5) {
+                if (vA.distance < vB.distance) {
+                  // A bumped B from behind
+                  vA.speed = Math.max(0, vA.speed - 3.8);
+                  vB.speed = Math.min(tB.maxSpeed * 1.12, vB.speed + 2.4);
+                } else {
+                  // B bumped A from behind
+                  vB.speed = Math.max(0, vB.speed - 3.8);
+                  vA.speed = Math.min(tA.maxSpeed * 1.12, vA.speed + 2.4);
+                }
+              }
+            }
+
+            // 4. Contact friction sparks & tactile feedback
+            vA.crashTicks = Math.max(vA.crashTicks, 3);
+            vB.crashTicks = Math.max(vB.crashTicks, 3);
+
+            events.push({
+              type: "CRASHED",
+              playerId: vA.playerId,
+            });
+            events.push({
+              type: "CRASHED",
+              playerId: vB.playerId,
+            });
+          }
+        }
+      }
+    }
   }
 
   getPlayerView(state: RacingGameState, playerId: string | null): RacingPlayerView {
