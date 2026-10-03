@@ -11,22 +11,22 @@ import {
   VolumeX,
   ArrowLeft,
 } from "lucide-react";
-
-type BugType = "worker" | "fire" | "beetle" | "queen" | "golden";
-
-interface Bug {
-  id: number;
-  x: number;
-  y: number;
-  angle: number;
-  speed: number;
-  type: BugType;
-  hp: number;
-  maxHp: number;
-  size: number;
-  legPhase: number;
-  color: string;
-}
+import { useArcadeRun } from "./use-arcade-run";
+import { ArcadeHud } from "./ArcadeHud";
+import { useJuice } from "./use-juice";
+import { waveAt } from "./juice";
+import { GameLoop } from "@playora/game-runtime";
+import {
+  createAntState,
+  stepAnts,
+  swat,
+  fireSpray,
+  SPRAY_COOLDOWN,
+  START_HEALTH,
+  BUG_KINDS,
+  type Bug,
+} from "./ant-attack";
+import { formatScore, pointsFor } from "./scoring";
 
 interface Splatter {
   x: number;
@@ -49,19 +49,34 @@ interface FloatingText {
 
 export function AntAttackView({ onExit }: { onExit?: () => void }) {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
-  const [score, setScore] = React.useState(0);
-  const [combo, setCombo] = React.useState(0);
+  /*
+   * Score, chain and the personal best come from the shared run. The local
+   * versions applied a linear `1 + combo * 0.15` with no cap and no
+   * persistence — a long streak was worth arbitrarily much, and the total
+   * vanished the moment the cake fell.
+   */
+  const run = useArcadeRun("ant-attack");
+  const juice = useJuice();
+  // Held in a ref so the game loops can reach it without becoming a dependency.
+  const juiceRef = React.useRef(juice);
+  juiceRef.current = juice;
+  const runRef = React.useRef(run);
+  runRef.current = run;
   const [cakeHealth, setCakeHealth] = React.useState(100);
+  // The authoritative value for the game loop; state is the render mirror.
   const [gameOver, setGameOver] = React.useState(false);
   const [sprayCooldown, setSprayCooldown] = React.useState(0);
   const [soundEnabled, setSoundEnabled] = React.useState(true);
   const [screenShake, setScreenShake] = React.useState(0);
 
+  /** The simulation. The canvas reads from it; nothing else writes to it. */
+  const simRef = React.useRef(createAntState());
+  const sprayCooldownRef = React.useRef(0);
+  /** Held so a restart can start it again — it stops when the cake falls. */
+  const loopRef = React.useRef<GameLoop | null>(null);
   const bugsRef = React.useRef<Bug[]>([]);
   const splattersRef = React.useRef<Splatter[]>([]);
   const floatingTextsRef = React.useRef<FloatingText[]>([]);
-  const comboTimerRef = React.useRef<NodeJS.Timeout | null>(null);
-  const nextBugId = React.useRef(1);
   const nextTextId = React.useRef(1);
 
   const playSquishSound = React.useCallback((pitch = 1) => {
@@ -88,71 +103,63 @@ export function AntAttackView({ onExit }: { onExit?: () => void }) {
     }
   }, [soundEnabled]);
 
+  /*
+   * One clock for the whole game.
+   *
+   * This ran on three: a 550ms `setInterval` spawning bugs, the rAF loop below
+   * moving them, and a third `setInterval` counting the spray cooldown. rAF
+   * stops in a background tab and `setInterval` does not, so switching away and
+   * back returned the player to a screen full of bugs that had spawned but
+   * never moved.
+   *
+   * The spawn interval was also hardcoded, so despite the wave badge the swarm
+   * never actually thickened. It now comes from the shared difficulty ramp.
+   */
   React.useEffect(() => {
-    if (gameOver) return;
+    const loop = new GameLoop({
+      update: (dt) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const sim = simRef.current;
 
-    const interval = setInterval(() => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
+        stepAnts(sim, dt, {
+          width: canvas.width,
+          height: canvas.height,
+          spawnIntervalMs: runRef.current.spawnInterval(550),
+          wave: waveAt(runRef.current.elapsed),
+          rng: Math.random,
+        });
 
-      const width = canvas.width;
-      const spawnX = Math.random() * (width - 120) + 60;
-      const spawnY = -30;
+        // The render loop reads this array directly.
+        bugsRef.current = sim.bugs;
 
-      const rand = Math.random();
-      let type: BugType = "worker";
-      let hp = 1;
-      let size = 18;
-      let speed = 1.6 + Math.random() * 0.8;
-      let color = "#18181b"; 
+        if (sim.events.reachedCake > 0) {
+          setCakeHealth(sim.cakeHealth);
+          for (let i = 0; i < sim.events.reachedCake; i++) runRef.current.miss();
+          // A bug reaching the cake is the mistake that matters here.
+          juiceRef.current.impact("heavy");
+        }
+        if (sim.sprayCooldown !== sprayCooldownRef.current) {
+          sprayCooldownRef.current = sim.sprayCooldown;
+          setSprayCooldown(Math.ceil(sim.sprayCooldown));
+        }
+        if (sim.events.chainBroken) runRef.current.miss();
+        if (sim.events.died) {
+          setGameOver(true);
+          runRef.current.end();
+          juiceRef.current.impact("fatal");
+          loop.stop();
+        }
+      },
+    });
+    loopRef.current = loop;
+    loop.start();
+    return () => {
+      loop.stop();
+      loopRef.current = null;
+    };
+  }, []);
 
-      if (rand < 0.08) {
-        type = "golden";
-        hp = 1;
-        size = 20;
-        speed = 3.4;
-        color = "#eab308";
-      } else if (rand < 0.22) {
-        type = "queen";
-        hp = 4;
-        size = 34;
-        speed = 1.1;
-        color = "#831843";
-      } else if (rand < 0.45) {
-        type = "beetle";
-        hp = 2;
-        size = 26;
-        speed = 1.2;
-        color = "#15803d";
-      } else if (rand < 0.70) {
-        type = "fire";
-        hp = 1;
-        size = 20;
-        speed = 2.4;
-        color = "#dc2626";
-      }
-
-      const targetX = width * 0.5 + (Math.random() - 0.5) * (width * 0.6);
-      const targetY = canvas.height - 40;
-      const angle = Math.atan2(targetY - spawnY, targetX - spawnX);
-
-      bugsRef.current.push({
-        id: nextBugId.current++,
-        x: spawnX,
-        y: spawnY,
-        angle,
-        speed,
-        type,
-        hp,
-        maxHp: hp,
-        size,
-        legPhase: Math.random() * Math.PI * 2,
-        color,
-      });
-    }, 550);
-
-    return () => clearInterval(interval);
-  }, [gameOver]);
 
   React.useEffect(() => {
     let animationId: number;
@@ -253,25 +260,11 @@ export function AntAttackView({ onExit }: { onExit?: () => void }) {
       ctx.fillText("🎂 SWEET STRAWBERRY CAKE · DEFEND AT ALL COSTS 🎂", width / 2, cakeY + 26);
 
       if (!gameOver) {
+        // Draw only. Movement, spawning and cake damage all happen in the
+        // simulation step above — this loop used to do all four at once, on a
+        // clock that was not the same one the spawner used.
         for (let i = bugsRef.current.length - 1; i >= 0; i--) {
           const bug = bugsRef.current[i]!;
-          bug.legPhase += delta * 18 * (bug.speed / 1.5);
-          bug.angle += (Math.random() - 0.5) * 0.08;
-          bug.x += Math.cos(bug.angle) * bug.speed * (delta * 60);
-          bug.y += Math.sin(bug.angle) * bug.speed * (delta * 60);
-
-          if (bug.y >= cakeY - 10) {
-            bugsRef.current.splice(i, 1);
-            setCakeHealth((h) => {
-              const damage = bug.type === "queen" ? 25 : bug.type === "beetle" ? 15 : 8;
-              const next = Math.max(0, h - damage);
-              if (next <= 0) setGameOver(true);
-              return next;
-            });
-            setCombo(0);
-            setScreenShake(3);
-            continue;
-          }
 
           ctx.save();
           ctx.translate(bug.x, bug.y);
@@ -386,60 +379,59 @@ export function AntAttackView({ onExit }: { onExit?: () => void }) {
     const x = clientX - rect.left;
     const y = clientY - rect.top;
 
-    let hit = false;
-    for (let i = bugsRef.current.length - 1; i >= 0; i--) {
-      const bug = bugsRef.current[i]!;
-      const dist = Math.hypot(bug.x - x, bug.y - y);
-      const hitRadius = Math.max(48, bug.size * 2.2);
+    // The hit test, the hp bookkeeping and the removal all live in the
+    // simulation now; this handler is only responsible for the feedback.
+    const { hit, killed } = swat(simRef.current, x, y);
+    bugsRef.current = simRef.current.bugs;
 
-      if (dist < hitRadius) {
-        hit = true;
-        bug.hp -= 1;
-        if (bug.hp <= 0) {
-          bugsRef.current.splice(i, 1);
-          splattersRef.current.push({
-            x: bug.x,
-            y: bug.y,
-            color: bug.type === "fire" ? "#f43f5e" : bug.type === "golden" ? "#facc15" : bug.type === "beetle" ? "#84cc16" : "#0284c7",
-            radius: bug.size * 0.9,
-            opacity: 0.9,
-            createdAt: Date.now(),
-          });
-          const basePts = bug.type === "golden" ? 150 : bug.type === "queen" ? 200 : bug.type === "beetle" ? 80 : bug.type === "fire" ? 40 : 20;
-          const comboMult = 1 + combo * 0.15;
-          const awarded = Math.round(basePts * comboMult);
-          setScore((s) => s + awarded);
-          setCombo((c) => c + 1);
-          floatingTextsRef.current.push({
-            id: nextTextId.current++,
-            x: bug.x,
-            y: bug.y,
-            text: `+${awarded}${combo > 2 ? ` 🔥x${combo}` : ""}`,
-            color: bug.type === "golden" ? "#facc15" : "#38bdf8",
-            opacity: 1,
-            yOffset: 0,
-          });
-          playSquishSound(1 + Math.min(1, combo * 0.1));
-          setScreenShake(bug.type === "queen" ? 4 : 1.5);
-        } else {
-          floatingTextsRef.current.push({
-            id: nextTextId.current++,
-            x: bug.x,
-            y: bug.y,
-            text: "HIT!",
-            color: "#f97316",
-            opacity: 1,
-            yOffset: 0,
-          });
-          playSquishSound(0.7);
-        }
-        break;
-      }
+    if (killed) {
+      splattersRef.current.push({
+        x: killed.x,
+        y: killed.y,
+        color:
+          killed.type === "fire"
+            ? "#f43f5e"
+            : killed.type === "golden"
+              ? "#facc15"
+              : killed.type === "beetle"
+                ? "#84cc16"
+                : "#0284c7",
+        radius: killed.size * 0.9,
+        opacity: 0.9,
+        createdAt: Date.now(),
+      });
+      const basePts = BUG_KINDS[killed.type].points;
+      const combo = runRef.current.combo;
+      const awarded = pointsFor(basePts, combo + 1);
+      runRef.current.hit(basePts);
+      // A queen is worth noticing; a worker ant is not.
+      juiceRef.current.impact(
+        killed.type === "queen" || killed.type === "golden" ? "solid" : "tap",
+      );
+      floatingTextsRef.current.push({
+        id: nextTextId.current++,
+        x: killed.x,
+        y: killed.y,
+        text: `+${awarded}${combo > 2 ? ` 🔥x${combo}` : ""}`,
+        color: killed.type === "golden" ? "#facc15" : "#38bdf8",
+        opacity: 1,
+        yOffset: 0,
+      });
+      playSquishSound(1 + Math.min(1, combo * 0.1));
+      setScreenShake(killed.type === "queen" ? 4 : 1.5);
+    } else if (hit) {
+      floatingTextsRef.current.push({
+        id: nextTextId.current++,
+        x,
+        y,
+        text: "HIT!",
+        color: "#f97316",
+        opacity: 1,
+        yOffset: 0,
+      });
+      playSquishSound(0.7);
     }
-    if (!hit) {
-      if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
-      comboTimerRef.current = setTimeout(() => setCombo(0), 1200);
-    }
+
   };
 
   React.useEffect(() => {
@@ -455,8 +447,9 @@ export function AntAttackView({ onExit }: { onExit?: () => void }) {
   }, []);
 
   const triggerBugSpray = () => {
-    if (sprayCooldown > 0 || gameOver) return;
-    setSprayCooldown(12);
+    const cleared = fireSpray(simRef.current);
+    if (cleared === null) return;
+    setSprayCooldown(SPRAY_COOLDOWN);
     for (const bug of bugsRef.current) {
       splattersRef.current.push({
         x: bug.x,
@@ -469,7 +462,9 @@ export function AntAttackView({ onExit }: { onExit?: () => void }) {
     }
     const clearedCount = bugsRef.current.length;
     bugsRef.current = [];
-    setScore((s) => s + clearedCount * 30 + 100);
+    // The spray clears the screen; it should not also build a chain the player
+    // did not earn one bug at a time.
+    for (let i = 0; i < clearedCount; i++) runRef.current.hit(30);
     setScreenShake(5);
     playSquishSound(1.8);
     floatingTextsRef.current.push({
@@ -483,24 +478,25 @@ export function AntAttackView({ onExit }: { onExit?: () => void }) {
     });
   };
 
-  React.useEffect(() => {
-    if (sprayCooldown <= 0) return;
-    const t = setInterval(() => setSprayCooldown((c) => Math.max(0, c - 1)), 1000);
-    return () => clearInterval(t);
-  }, [sprayCooldown]);
-
   const restartGame = () => {
-    setScore(0);
-    setCombo(0);
-    setCakeHealth(100);
+    run.reset();
+    // A fresh simulation, and the loop started again — it stops itself when
+    // the cake falls, so without this a restart would leave a dead game.
+    simRef.current = createAntState();
+    sprayCooldownRef.current = 0;
+    setSprayCooldown(0);
+    setCakeHealth(START_HEALTH);
     setGameOver(false);
     bugsRef.current = [];
     splattersRef.current = [];
     floatingTextsRef.current = [];
+    loopRef.current?.start();
   };
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden bg-[#0A0B14] select-none">
+    <div
+          {...juice.shakeProps}
+          className="relative flex h-full w-full flex-col overflow-hidden bg-[#0A0B14] select-none">
       <div className="absolute top-4 inset-x-4 sm:inset-x-8 z-30 flex items-center justify-between pointer-events-none">
         <div className="flex items-center gap-3 pointer-events-auto">
           {onExit && (
@@ -514,26 +510,20 @@ export function AntAttackView({ onExit }: { onExit?: () => void }) {
               <span className="hidden sm:inline">Exit</span>
             </Button>
           )}
-          <div className="flex items-center gap-3 rounded-2xl border border-white/15 bg-black/60 backdrop-blur-xl px-4 py-2 shadow-2xl">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground block">
-                SCORE
-              </span>
-              <span className="font-mono text-xl sm:text-2xl font-black text-amber-300">
-                {score.toLocaleString()}
-              </span>
+          {/*
+            * The wave, shown.
+            *
+            * The difficulty ramp already existed but was invisible, and
+            * escalation a player cannot see reads as the game quietly becoming
+            * unfair rather than as something they are surviving.
+            */}
+          <div className="rounded-xl border border-white/15 bg-black/55 px-3 py-1.5 backdrop-blur-md">
+            <div className="text-[9px] font-bold uppercase tracking-widest text-white/50">Wave</div>
+            <div className="numeric text-lg font-black leading-none text-white tabular-nums sm:text-xl">
+              {waveAt(run.elapsed)}
             </div>
-            {combo > 1 && (
-              <div className="border-l border-white/10 pl-3">
-                <span className="text-[10px] font-black uppercase tracking-wider text-cyan-400 block animate-pulse">
-                  COMBO
-                </span>
-                <span className="font-mono text-lg font-black text-cyan-300">
-                  x{combo}
-                </span>
-              </div>
-            )}
           </div>
+          <ArcadeHud run={run} />
         </div>
 
         <div className="hidden md:flex flex-col items-center rounded-2xl border border-white/15 bg-black/60 backdrop-blur-xl px-5 py-2 shadow-2xl pointer-events-auto">
@@ -613,8 +603,17 @@ export function AntAttackView({ onExit }: { onExit?: () => void }) {
                 FINAL SQUISH SCORE
               </span>
               <span className="font-mono text-4xl font-black text-amber-400">
-                {score.toLocaleString()}
+                {formatScore(run.score)}
               </span>
+              {run.isNewBest ? (
+                <span className="mt-1 block text-xs font-black uppercase tracking-widest text-amber-300">
+                  New best!
+                </span>
+              ) : run.best > 0 ? (
+                <span className="mt-1 block text-xs text-white/60">
+                  Best {formatScore(run.best)}
+                </span>
+              ) : null}
             </div>
 
             <div className="flex gap-3">

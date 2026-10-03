@@ -25,7 +25,7 @@ export function Tabs({ tabs, activeTab, onTabChange, className }: TabsProps) {
             className={cn(
               "flex items-center space-x-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all",
               isActive
-                ? "bg-primary/20 text-primary border border-primary/30"
+                ? "bg-primary/20 text-primary-accent border border-primary/30"
                 : "text-muted-foreground hover:bg-border hover:text-foreground"
             )}
           >
@@ -34,7 +34,7 @@ export function Tabs({ tabs, activeTab, onTabChange, className }: TabsProps) {
               <span
                 className={cn(
                   "rounded-full px-1.5 py-0.2 text-xs",
-                  isActive ? "bg-primary/40 text-white" : "bg-border text-muted-foreground"
+                  isActive ? "bg-primary text-primary-foreground" : "bg-border text-muted-foreground"
                 )}
               >
                 {tab.count}

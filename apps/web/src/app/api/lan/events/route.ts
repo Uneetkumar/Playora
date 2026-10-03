@@ -31,7 +31,7 @@ interface LanRoom {
     id: string;
     type: string;
     senderId: string;
-    payload?: any;
+    payload?: unknown;
     timestamp: number;
   }>;
   createdAt: number;
@@ -229,7 +229,8 @@ export async function POST(request: NextRequest) {
       lastResult: room.lastResult,
       version: room.version,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || "Failed to process event" }, { status: 500 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to process event";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -31,7 +31,7 @@ export function MobileNav() {
       aria-label="Primary"
       className={cn(
         "fixed inset-x-0 bottom-0 z-40 md:hidden",
-        "border-t border-white/10 bg-[#0B0D19]/95 backdrop-blur-xl",
+        "border-t border-foreground/10 bg-surface/95 backdrop-blur-xl",
         "pb-[env(safe-area-inset-bottom)]",
       )}
     >
@@ -48,8 +48,8 @@ export function MobileNav() {
                   isCenter
                     ? "-mt-5 flex h-12 w-12 items-center justify-center rounded-full border-2 border-cyan-400 bg-gradient-to-tr from-cyan-600 to-blue-600 shadow-[0_0_20px_rgba(6,182,212,0.6)] text-white active:scale-95"
                     : isActive
-                    ? "px-2 py-1 text-[#A855F7]"
-                    : "px-2 py-1 text-white/50 hover:text-white"
+                    ? "px-2 py-1 text-primary-accent"
+                    : "px-2 py-1 text-muted-foreground hover:text-foreground"
                 )}
               >
                 <Icon className={cn("shrink-0", isCenter ? "h-6 w-6" : "h-5 w-5")} aria-hidden />

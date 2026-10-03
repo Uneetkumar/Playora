@@ -90,18 +90,18 @@ export function QrScanner({ onScan, onCancel }: QrScannerProps) {
   return (
     <div className="relative flex flex-col items-center justify-center p-4">
       {/* Viewfinder Card */}
-      <div className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-white/20 bg-[#0F111E] shadow-2xl">
+      <div className="relative w-full max-w-sm overflow-hidden rounded-3xl border border-foreground/20 bg-card shadow-2xl">
         {/* Top Header */}
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 bg-[#16192E]">
+        <div className="flex items-center justify-between border-b border-foreground/10 px-4 py-3 bg-[#16192E]">
           <div className="flex items-center gap-2">
             <Camera className="h-4 w-4 text-cyan-400" />
-            <span className="text-xs font-bold text-white">Scan LAN QR Code</span>
+            <span className="text-xs font-bold text-foreground">Scan LAN QR Code</span>
           </div>
           {onCancel && (
             <button
               type="button"
               onClick={onCancel}
-              className="rounded-lg p-1 text-white/50 hover:bg-white/10 hover:text-white"
+              className="rounded-lg p-1 text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
               aria-label="Close scanner"
             >
               <X className="h-4 w-4" />
@@ -135,16 +135,16 @@ export function QrScanner({ onScan, onCancel }: QrScannerProps) {
 
           {/* Camera Error / Denied Fallback */}
           {cameraError && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-[#0F111E]/95">
-              <CameraOff className="h-10 w-10 text-white/40 mb-2" />
-              <p className="text-xs font-semibold text-white/80">{cameraError}</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-card/95">
+              <CameraOff className="h-10 w-10 text-muted-foreground mb-2" />
+              <p className="text-xs font-semibold text-foreground/80">{cameraError}</p>
             </div>
           )}
         </div>
 
         {/* Bottom Manual Entry Section */}
-        <div className="p-4 bg-[#121526] border-t border-white/10 space-y-3">
-          <div className="flex items-center gap-1.5 text-[11px] font-bold text-white/50 uppercase tracking-wider">
+        <div className="p-4 bg-[#121526] border-t border-foreground/10 space-y-3">
+          <div className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
             <Hash className="h-3.5 w-3.5" />
             <span>Or Enter 4-Letter Code</span>
           </div>
@@ -155,7 +155,7 @@ export function QrScanner({ onScan, onCancel }: QrScannerProps) {
               onChange={(e) => setManualCode(e.target.value.toUpperCase())}
               placeholder="e.g. WI7F"
               maxLength={8}
-              className="h-10 rounded-xl bg-white/5 border-white/10 text-center font-mono text-sm font-bold uppercase tracking-widest text-white placeholder:text-white/30 focus:border-cyan-400"
+              className="h-10 rounded-xl bg-foreground/5 border-border text-center font-mono text-sm font-bold uppercase tracking-widest text-foreground placeholder:text-muted-foreground focus:border-cyan-400"
             />
             <Button
               type="submit"

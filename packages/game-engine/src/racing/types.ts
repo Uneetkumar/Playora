@@ -71,6 +71,26 @@ export interface VehicleState {
   coins: number;
   /** Ticks left of the crash stun, during which input is ignored. */
   crashTicks: number;
+  /**
+   * The zone the vehicle is currently inside, or null.
+   *
+   * Server-derived and sent to clients for display only. A client claiming to
+   * be in a nitro zone must never be believed (spec v2 section 58), so this is
+   * recomputed from position every tick rather than being remembered.
+   */
+  zone: ZoneKind | null;
+  /** Absorbs the next obstacle hit. Server-granted only. */
+  shielded: boolean;
+  /** Tick at which coin magnetism ends; 0 when inactive. */
+  magnetUntilTick: number;
+  /**
+   * Consecutive ticks spent off the racing surface.
+   *
+   * Drives a staged penalty rather than an instant one: clipping a kerb on the
+   * exit of a hairpin is part of racing, and punishing it identically to
+   * driving across a field makes tight corners miserable.
+   */
+  offTrackTicks: number;
   /** Laps completed. The lap being driven is this plus one. */
   lapsDone: number;
   /** Tick the current lap started on. */
@@ -119,6 +139,63 @@ export interface BoostPad extends TrackObject {
   halfWidth: number;
 }
 
+/**
+ * Painted areas of track that change how a vehicle behaves while it is on them.
+ *
+ * Distinct from an obstacle: an obstacle is an event that happens once, at the
+ * instant of contact, and costs you speed and control. A zone is a condition
+ * that holds for as long as you are inside it, and leaving it restores you.
+ * Modelling the two the same way is how you end up with an oil slick that
+ * "hits" you once and is then harmless for the rest of the puddle.
+ */
+export type ZoneKind =
+  /** Increases speed while driving on it. */
+  | "boost"
+  /** Reduces speed — mud, gravel, standing water. */
+  | "slow"
+  /** More grip: the vehicle holds a tighter line. */
+  | "grip"
+  /** Less grip. Oil and ice: easy to skid, no stun. */
+  | "slick"
+  /** Refills the nitro bar while you stay on it. */
+  | "nitro";
+
+export interface TrackZone extends TrackObject {
+  kind: ZoneKind;
+  /** Half-width across the road, in lateral units. */
+  halfWidth: number;
+  /** How far along the track the zone extends, in metres. */
+  length: number;
+}
+
+/**
+ * Collectables that grant an advantage when driven over.
+ *
+ * Separate from coins, which are score. A pickup changes what the vehicle can
+ * do; a coin changes a number at the end.
+ */
+export type PickupKind =
+  /** One nitro charge. */
+  | "nitro"
+  /** Fills the nitro bar to the vehicle's capacity. */
+  | "perfectNitro"
+  /** Absorbs the next obstacle hit entirely. */
+  | "shield"
+  /** Widens coin collection for a while. */
+  | "magnet"
+  /** Clears crash stun and recovers some speed. */
+  | "repair";
+
+export interface TrackPickup extends TrackObject {
+  /**
+   * `null` means a mystery box: the kind is decided by the server when it is
+   * driven over. Deciding at generation time would let anyone who can read the
+   * track seed — which every client can, because it rebuilds the track from it
+   * — know the contents of every box on the circuit.
+   */
+  kind: PickupKind | null;
+}
+
 /** One sample of the centreline, in world space. */
 export interface TrackPoint {
   x: number;
@@ -146,6 +223,10 @@ export interface TrackSpec {
   obstacles: TrackObstacle[];
   coins: TrackObject[];
   boostPads: BoostPad[];
+  /** Painted surface zones: mud, oil, grip, nitro strips. */
+  zones: TrackZone[];
+  /** Power-ups and mystery boxes. */
+  pickups: TrackPickup[];
   /** Distances at which progress is recorded. */
   checkpoints: number[];
 }
@@ -162,6 +243,15 @@ export interface RacingGameState extends BaseGameState {
   playerOrder: string[];
   /** Coin ids already taken, as `${distance}:${lateral}` keys. */
   collectedCoins: string[];
+  /**
+   * Power-ups already taken.
+   *
+   * Kept apart from `collectedCoins` rather than sharing it. They were sharing
+   * one set, which quietly broke the invariant that the coin tally reconciles
+   * with the record of coins gone — and would have let a pickup lying on the
+   * same spot as a coin swallow the coin.
+   */
+  collectedPickups: string[];
   winnerId: string | null;
   /** Tick after which the race ends regardless, so one stuck car cannot hang it. */
   hardStopTick: number;
@@ -250,6 +340,8 @@ export type RacingEventType =
   | "COIN_COLLECTED"
   | "CRASHED"
   | "NITRO_USED"
+  | "PICKUP_COLLECTED"
+  | "SHIELD_BROKEN"
   | "CHECKPOINT"
   | "LAP_COMPLETED"
   | "VEHICLE_FINISHED"

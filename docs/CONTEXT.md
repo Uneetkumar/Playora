@@ -698,6 +698,754 @@ Nothing below exists yet. Ordered by what unblocks the most.
 | ~~**GSAP**~~ | ✅ `packages/animation/src/cinematic.ts` — GSAP for the one thing Motion handles badly: a sequence of eight or ten elements timed relative to each other. **Motion stays the default and nothing built with it was replaced.** Loaded on demand (three lazy chunks, nothing in the 106 kB shared bundle), so a player who never reaches a cinematic never downloads it. Applied to the race result. 10 tests, all about the same property: the content ends up visible on every path — reduced motion, load failure, a builder that throws, a timeout, unmount, and a backgrounded tab. |
 | ~~**Seasons**~~ | ✅ Migration `00009`. The decision that was blocking it: **a season does not reset `game_ratings`.** Season standings live in their own `season_ratings` rows seeded from a soft reset, so "how good is this player" and "how are they doing now" stay two answerable questions — overwriting the first to express the second destroys the only long-run skill record we hold, and it is not recoverable. `close_season()` is idempotent and revoked from `anon`/`authenticated`. Season One runs to 2026-11-28. Verified by `scripts/verify-seasons.mjs`, 20/20. |
 
+### Racing visuals and surface zones (this session)
+
+**Vehicle geometry.** Bodies were stacked `BoxGeometry`, so every silhouette was
+a staircase of rectangles. All five cars and the bike fairing are now single
+side-profile extrusions — one continuous line from bumper to bumper. Four bugs
+were found and fixed while doing it, each caught by a headless geometry check
+rather than by looking:
+
+1. **The "rounded" curve was a straight line.** `quadraticCurveTo` with the
+   control point equal to the start point *is* a line, so every shell was a
+   faceted polyline wearing the word curve. The control point must be the
+   vertex being rounded, spanning midpoint to midpoint.
+2. **The shell was built facing backwards** (`rotateY(+PI/2)` maps the nose to
+   -z) and sat entirely off-centre.
+3. **Fender arches were 20cm behind their wheels** — authored at invented
+   coordinates. Both now derive from shared `WHEEL_ANCHORS`/`WHEEL_RADIUS`.
+4. **Wheels stuck 22cm proud of the bodywork.** A 0.32-wide wheel centred at
+   x=1.02 against a body half-width of 0.96. That single number was most of why
+   the cars read as go-karts.
+
+**Suspension.** There was none: the body was welded to its wheels. The first
+implementation moved the wheels vertically, which is backwards — wheels are
+siblings of the chassis, so their y is height above the *road*, and a tyre in
+contact with the ground stays at its radius. Load belongs on the body. Because
+the arches are part of the chassis, the arch-to-tyre gap closes as the body
+dips, which is what compressing suspension looks like from outside. Verified
+numerically: braking pitches +0.045 rad nose-down and drops 3cm, acceleration
+pitches -0.030 nose-up, cornering rolls +0.024 onto the outside springs, and
+full steer while parked transfers nothing. Wheel rotation was `speed / 0.6`, a
+constant unrelated to the wheel; it is now `distance / radius` and matches
+ground truth exactly (26.53 rev/s at 60 m/s, r=0.36).
+
+**Themes: 4 to 12.** The eight missing pack environments, each a full palette.
+Daylight themes carry much lighter fog than the night ones — reusing the
+near-black `cityNight` fog under a blue sky reads as smog, not distance.
+
+**Surface zones (`ZoneKind`).** Painted tarmac that changes behaviour *while*
+you are on it, as distinct from an obstacle, which is a one-off event at the
+instant of contact. `boost`, `slow`, `grip`, `slick`, `nitro`. Server-authored
+and recomputed from position every tick — a remembered flag is exactly the sort
+of state that survives a rewind and hands out free speed. 11 tests, including
+that a boost strip cannot exceed a vehicle's ceiling, that a nitro strip grants
+at most one charge however long you park on it, and that a client cannot forge
+a zone.
+
+One measured bug worth remembering: zones that clashed with an obstacle were
+**dropped**, and because hazards are placed nearer the racing line — where the
+obstacles are — they were rejected far more often than rewards. Over five
+tracks that turned an intended 30% slow / 25% slick into a field that was 54%
+grip: tracks that were, on balance, helping the driver. Nudging the zone along
+the track instead of dropping it restores the mix (measured 28/19/28/14/12 over
+ten tracks). **A rejection filter that correlates with the thing being filtered
+is a bias, not a safeguard.**
+
+**Pickups (`PickupKind`).** `nitro`, `perfectNitro`, `shield`, `magnet`,
+`repair`, plus mystery boxes. Placed off the ideal line on purpose: a pickup on
+the fastest route is not a choice, it is a passive bonus everyone takes every
+lap. Verified `|lateral| >= 0.4` on every generated pickup.
+
+**Mystery boxes are rolled at pickup time, not at generation.** Every client
+rebuilds the track from the seed, so anything decided in `buildTrack` is
+readable in advance from the client's own memory. `rollMysteryBox` hashes the
+tick and the box position instead: deterministic enough that a replay and two
+simulating clients agree, but not knowable before the box is opened.
+
+A shield absorbs a hit by restoring the pre-impact speed rather than by
+skipping the collision, so the obstacle still counts as struck — otherwise a
+barrel would be hit again on the following tick. 8 tests, including a guard
+test proving the same barrier *does* stun an unshielded driver (without it, the
+shield test would pass if the barrier were simply never reached) and that a
+client cannot grant itself `shielded` or `magnetUntilTick`.
+
+Distribution measured over 120 tracks: mystery 30%, nitro 19%, magnet 16%,
+repair 14%, shield 14%, perfectNitro 8% — against an intended 32/18/16/14/12/8.
+An earlier 8-seed sample showed zero nitro and looked like a bug; it was
+sampling noise. Worth measuring before fixing.
+
+### State audit (full project)
+
+A sweep for state-management defects, prompted by the two rules-of-hooks
+crashes found earlier. Findings, in severity order:
+
+1. **11 impure state updaters across 8 arcade games.** A `setX(v => ...)`
+   updater must be a pure function of its input. These called four or five
+   *other* setters from inside — `setTimerSeconds(t => { setPlayers(...);
+   setGameOver(...); setWinner(...); setCurrentIndex(...) })`. React re-invokes
+   updaters when it re-bases a queued update, and `reactStrictMode: true`
+   (explicit in `next.config.mjs`) double-invokes them in development on
+   purpose. Demonstrated: one logical tick of Hot Potato **eliminated two
+   players and moved the potato twice**. All 11 rewritten to decide inside the
+   updater and act outside it; a re-scan reports zero remaining.
+
+   Worth noting: the first rewrite of Hot Potato and Bomb Pass moved the *reads*
+   into a ref but left the *writes* inside the updater — the same bug in new
+   clothes. The re-scan caught it. Fixing this class by eye does not work; run
+   the scan afterwards.
+
+2. **`IceBreakerView` had an infinite update loop.** The physics effect depends
+   on `racers` and called `setRacers(curr.map(...))` unconditionally — `map`
+   returns a new array whether or not anything changed, a new reference is
+   never `Object.is`-equal, so the effect re-fired forever and ended in
+   "Maximum update depth exceeded". Now it only writes when a racer actually
+   sank.
+
+3. **`FallingFloorView` leaked an 800ms collapse timer.** No cleanup, so it
+   outlived a restart: `restart()` sets every tile back to intact and a pending
+   collapse from the *previous* game then drops the floor out from under a
+   player who has done nothing.
+
+Checked and clean: no module-scope mutable state reachable from SSR, no
+`useState` initialised from `localStorage`/`window` (hydration mismatch), no
+direct mutation of state arrays (the `*Ref.current.push/splice` in
+`AntAttackView` are refs, which is correct), no timers without cleanup beyond
+the one above, no mutation of incoming state in the game engines, and no
+module-level state in the realtime Worker.
+
+Booleans that set what they depend on (`setGameOver` inside an effect keyed on
+`gameOver`) were flagged by the scan and are **not** bugs: setting a boolean to
+the value it already holds bails out on `Object.is`, and setting it to a new
+value terminates against the effect's own guard. Only array/object state
+recreated each run loops, which is why (2) was real and the other 22 hits were
+not.
+
+### Play modes now follow what a game can actually do
+
+`lib/play/modes.ts` used to hand every implemented game all six modes. Ten of
+the fifteen games are local React views with **no server engine and no bot** —
+yet they advertised Quick Match, private rooms, LAN and an AI opponent.
+Choosing Quick Match for Ant Attack queued a player for a match no server knows
+how to run.
+
+Replaced with an explicit `GameCapabilities` table (`online` / `ai` /
+`passAndPlay` / `career`). A mode appears only when something can service it, so
+a solo title gets exactly one honest button: **Play**. Deliberately a table
+rather than something derived from the catalogue's `maxPlayers`, which is a
+marketing number — Bomb Pass advertises "2-8 players" with no networked engine
+at all. A table can be checked against reality; a derived guess re-introduces
+the bug quietly.
+
+Two knock-on fixes from the same "advertising what does not exist" family:
+- **Player count** said "1-4 Players" for solo games; now "1 Player".
+- **Rating card and match history** were shown for solo games, where the number
+  can never move off 1200 and no match is ever written. Both hidden.
+
+`ARCADE_GAMES` was hardcoded in `app/play/page.tsx` *and* `app/lan/page.tsx`,
+making three disagreeing sources of truth. Both now call `isSoloGame()`.
+
+**`apps/web` had no test runner at all** — which is why the whole web app sat
+outside `pnpm test`. Added vitest (unit tests only; Playwright keeps `test:e2e`)
+and 10 tests pinning the mode rules, including that no solo game is ever
+offered an online mode and that no mode is advertised then refused.
+
+Also fixed: every arcade game's hero banner was a 404. The detail page
+hardcoded `/games/${id}-hero.jpg` and only five games ship that file; the ten
+arcade titles ship `-thumb.jpg`. It now resolves through `artFor`, which knows
+the real filename. Ten pages that rendered an empty gradient now show their art.
+
+The build was failing on pre-existing lint errors in the LAN code (`any`, empty
+blocks, an unused binding). Cleared — including replacing `engineRef.current as
+any` with a named `LanHostEngine` surface, so a renamed engine method now fails
+the build instead of failing at runtime.
+
+### Arcade progression, and a bug my own state fix introduced
+
+**Not one of the ten arcade games persisted anything.** Seven tracked no score
+at all; the three that did threw it away when the round ended. Every run
+started and finished in the same place with nothing to beat — which is why they
+do not hold anyone for a second round, far more than the visuals.
+
+Added a shared layer: `games/arcade/scoring.ts` (pure: combo curve, difficulty
+ramp, spawn interval, persisted best), `use-arcade-run.ts` (the hook), and
+`ArcadeHud` / `ArcadeResult` (one score readout and one result panel instead of
+ten). The best sits next to the live score deliberately — a score with nothing
+beside it is a number; a score beside the one to beat is a goal. 17 tests
+covering the combo cap, the reaction-time floor on spawn rate, and storage that
+throws or holds garbage. Wired into **all ten**: Target Rush and Ant Attack
+score per hit with a chain; Color Rush scores per match and ends on a wrong
+colour; Falling Floor and Ice Breaker score for surviving (per second, per
+iceberg shrink); Bomb Pass and Hot Potato score per round or pass the *human*
+survives — a bot passing the potato on is not the player's doing and does not
+build their chain; Rope Rescue scores per survivor across and breaks the chain
+on one lost, so a clean run beats a scrappy one with the same total; Bridge
+Builder and Pin Puzzle score the solution, with Bridge Builder scaling the
+reward down for a heavier bridge so the safe answer is not the best one, and
+Pin Puzzle paying only for banked gold — see *Pulling a pin used to pay*.
+
+**The important finding.** Verifying it end-to-end caught a regression I had
+introduced in the earlier state audit. Fixing the impure updaters, I used:
+
+```ts
+let expired = false;
+setTimeLeft((t) => { expired = t <= 1; return expired ? 0 : t - 1; });
+if (expired) endTheGame();          // always false
+```
+
+`setState(fn)` **queues** `fn`; React runs it during the next render. The flag
+is therefore always still `false` on the line after. Target Rush's clock reached
+zero and the game never ended — no result screen, no score committed.
+
+The pattern was in four files (Target Rush, Color Rush, Ant Attack, Rope
+Rescue). All four now hold the value in a ref, decide from the ref, and set
+state from the ref, so no decision depends on an updater having run.
+
+**Neither half of this was catchable by reading the code.** The original impure
+updaters needed a StrictMode double-invoke to show themselves; the replacement
+needed the game actually played to the end. Run arcade changes; do not review
+them.
+
+**Sprites.** `games/arcade/ArcadeSprites.tsx` replaces the emoji that stood in
+for game entities — 🎯 for a target, 💣 for a bomb, 😎 for a player. Emoji are
+the wrong tool three times over: the operating system draws them, so the game
+looks different on a Mac, a Pixel and a Windows laptop and none of those looks
+are ours; they cannot be styled, so a target cannot flash when hit and an
+eliminated player looked exactly like a live one; and they carry a text
+baseline, so they never sit where you place them. Now authored SVG that scales,
+takes a size, and is driven by state — the bomb's fuse animates only for
+whoever is actually holding it, and a knocked-out token greys out and crosses
+through. Applied to Target Rush, Bomb Pass and Hot Potato; the remaining games
+draw shapes rather than glyphs and did not need it.
+
+### Racing fixes from play-testing (nine issues)
+
+1. **The barrier was two metres outside the painted line.** `wallLimit` was
+   1.25 against a road half-width of 1 — a quarter of the track's width of
+   drivable space *outside* the edge, which is why a car could sit on the kerb
+   and keep driving. Now `1 - VEHICLE_HALF_WIDTH_LATERAL`, so the bodywork
+   stops against the barrier. Tested at full lock both ways.
+2. **The race waited for the whole field.** Ends once the podium is settled,
+   capped at the field size so a two-player race still runs properly.
+3. **The city "blinked".** Not a light effect — texture aliasing. The facade is
+   a grid of small bright windows repeated 2x4 over a 40m tower, so each window
+   fell below a pixel and every frame sampled a different one. Fixed with
+   mipmaps, max anisotropy, a halved repeat, varied window alpha, and glass
+   (roughness 0.55 / metalness 0.35) instead of chrome, which had been throwing
+   a moving specular highlight off every pane.
+4. **Every building was identical.** `i % 4` archetypes at hard-coded sizes:
+   four shapes repeated forty-five times in strict rotation, in four dead-straight
+   rows. Now a deterministic hash of the index drives archetype, width, height,
+   rotation and distance from the road.
+5. **Three of five cars had no headlights**, and only one had mirrors — the
+   omissions were per model. Both now come from `addStandardFittings` in the
+   shared build path, as mirrored pairs, so no car can ship without them.
+6. **The speedometer was calibrated for a car you might not be driving.** `78`
+   — the *base* car speed, before the vehicle's modifier — was hardcoded in
+   three separate files. `topSpeedFor(gameId, vehicleId)` now supplies the real
+   figure.
+7. **The circuit list buried the play buttons.** Twelve circuits above "Ways to
+   play" is two screens before a button that starts a game, and the car matters
+   less than whether you are racing AI or a friend. Moved below and collapsed
+   behind a summary row naming the current car and circuit.
+8. **Circuit maps were a single stroke and a dot.** Now run-off, kerb, asphalt
+   and a dashed racing line, with a chequered start bar, a direction arrow and
+   a corner count.
+
+### Racing line and AI corner braking (spec v3, sections 13, 27-31)
+
+Unity is not installed on this machine, so the 117-section Unity spec cannot be
+compiled, run, profiled or tuned here. Its *portable* ideas were implemented in
+the Three.js game instead, starting with the one with the most effect on how a
+race feels: an AI that brakes for corners.
+
+`packages/game-engine/src/racing/racing-line.ts` — `cornerSpeedFor`,
+`brakingDistance`, `planCorner`. 14 tests.
+
+**Two measured findings, both of which changed the work:**
+
+1. **A physically correct model can still be the wrong model.** The first
+   version used the friction-circle relation `v = sqrt(a_lat / k)`, which is
+   right for a tyre-grip simulation and wrong for this engine. It told the AI a
+   123m corner had to be taken at 44 m/s when the engine holds it at 78, so the
+   bots braked hard for corners needing no braking and **lost 27% of their lap
+   time** against the version it replaced. Replaced with the engine's own
+   lateral equation, `v = steerRate * downforce / (k * centrifugal)`. Every
+   difficulty is now faster than before: level 1 by 38%, level 7 by 12%.
+
+2. **These tracks have no corners.** Measured: the tightest curvature a
+   generated track produces is a 123m radius, and anything above about 30m is
+   flat out for this car. That is why the AI never needed to brake, and it is
+   the root cause of racing feeling flat — spec section 27 wants
+   STRAIGHT/FAST/MEDIUM/SLOW/HAIRPIN and this game has only STRAIGHT.
+
+Correcting the model also removed the difficulty ladder, because the old
+separation had been coming from *incorrect* over-braking. Restored with an
+explicit `pace` fraction — the AI's own target speed, which spec section 65
+permits, as opposed to touching the player's physics.
+
+Measured over 24 races per level: levels 3-7 are cleanly monotonic (4292 ->
+3561 ticks). **Levels 1 and 2 invert** and stayed inverted when pace and
+steering correction were varied; that needs per-lap telemetry rather than more
+guessing, and is recorded in the profile table.
+
+**Tracks now have corners (the open problem, closed).**
+
+Two approaches were tried. The planned-corner generator — a sequence of
+corners and straights, like a real circuit — produced beautiful layouts in
+isolation (hairpins at 27m, closure under 0.3m) but **could not be made to
+close reliably** once ported. Four bugs deep, the blocker was that a
+two-parameter Newton solve for position closure does not converge for every
+layout; on one seed it left a **1209m gap**. Solving for the straight lengths
+instead got the worst case to 232m, still not closed. Abandoned.
+
+What worked was going back to the harmonic generator and using the property
+that made it worth keeping: **a closed radial curve is closed at any
+amplitude.** Six harmonics instead of four and roughly double the amplitude
+brings the tightest bend from a 103m radius down to 20-24m. `MAX_CURVATURE`
+went from 0.028 to 0.05, the threshold having been *measured* rather than
+guessed — this car holds anything above about 28m flat, so 0.033 still
+produced zero braking points on a lap.
+
+The old `tame` pass is gone. It pulled every point toward the mean radius when
+a bend was too tight, which does not preserve closure — on one seed it left the
+lap 3.4m short of joining itself, a visible kink in a 16m road. Corners are now
+tamed by **turning the amplitude down and re-tracing**, which is exact.
+
+Measured over twelve seeds: closure **0.00m on every one**, tightest corners
+20-39m, and the braking model calls for brakes at 12-30 points per lap on ten
+of twelve. Two circuits stay fast, which is fine — a fast circuit is a real
+circuit.
+
+**The AI ladder fixed itself.** The levels 1-and-2 inversion that resisted
+tuning is gone: measured over 24 races per level the times are now **monotonic
+at every level** (5339 -> 3686 ticks, 31% spread), with the bots braking on
+about 5% of decisions and finishing 24/24. The inversion had been a symptom of
+tracks with nothing to brake for, not of the difficulty constants.
+
+**A bug this surfaced:** the coin-conservation test started failing, and it was
+right to. The pickups I added were filing their collected ids into
+`collectedCoins`, so that record grew without any coin being credited — and a
+pickup lying on the same spot as a coin would have swallowed it. Pickups now
+have their own `collectedPickups` set.
+
+### Arcade game feel — researched, then applied
+
+Two findings from the game-feel and casual-retention literature drove this:
+
+1. **Juice is exaggeration and feedback**, distinct from "game feel" which is
+   responsiveness and readability. The three techniques carrying most of it are
+   screen shake (force), hit-stop (weight, 3-5 frames), and squash-and-stretch
+   (life). The critical caveat: **juice must echo the core gameplay** — shaking
+   for a routine tap teaches the player to ignore the shake.
+2. **Casual games with no skill curve go monotonous fast.** Retention needs
+   escalation the player can perceive, and a reward-to-effort ratio that sits
+   between about 1:1 and 5:1.
+
+`games/arcade/juice.ts` implements the first as pure functions — shake decays
+quadratically (linear reads as the camera being dragged back rather than energy
+dissipating), hit-stop is capped at 120ms (beyond that it reads as a dropped
+frame, not impact), and squash conserves volume so it reads as a physical
+object rather than a resized sprite. Magnitude is a parameter, not a constant,
+so a gold target and a routine bullseye do not shake the same. 19 tests.
+
+`use-juice.ts` wires it to a container. Reduced motion drops the shake and
+**keeps the hit-stop**: a freeze is a pause, not movement, so it still
+communicates the impact to someone who asked not to be moved around.
+
+For the second finding: the difficulty ramp already existed but was invisible,
+and escalation a player cannot see does not read as escalation — it reads as
+the game quietly becoming unfair. `waveAt` names it, and Target Rush now shows
+WAVE beside SCORE and BEST.
+
+Applied to **all ten**. Impact magnitude is chosen per event rather than
+uniformly, which is the whole point of the caveat above: a queen ant or a gold
+target gets `solid`, a worker ant or a routine bullseye gets `tap`, a bug
+reaching the cake or a snapped bridge gets `heavy`, and only a run ending gets
+`fatal`. Ant Attack shakes its full-bleed canvas; the rest shake the arena
+rather than the chrome, so the score stays readable through a hit.
+
+The wave badge went to the seven survival games, where difficulty escalates with
+time. Bridge Builder and Pin Puzzle advance by level instead and already show
+one, so adding a wave there would have been a second progress number competing
+with the real one.
+
+### Two arcade cores rebuilt around a decision
+
+Polish does not fix a loop with nothing to decide. Both of these were one verb
+deep, which the retention research identifies as the fastest route to
+monotony, so the loops themselves changed.
+
+**Hot Potato — hold for points, hidden fuse.** The game was: the potato reaches
+you, you tap "toss". Tapping instantly was strictly optimal, so there was no
+choice attached to the input at all. Now a pass banks `holdBonus(heldSeconds)`,
+growing with the square of hold time and capped so one lucky long hold cannot
+outweigh a careful run. The fuse is hidden and shortens by wave, with a 1.5s
+floor — below that there is no decision left, only a coin flip. The only
+tension signal is the button itself: it shows what tossing right now banks, and
+heats from amber to deep red as you hold. Showing the fuse would turn the
+gamble back into a countdown.
+
+**Color Rush — lives, and a chain you can bank.** One wrong tap ended the run.
+Three lives make a mistake a cost rather than an ending, so pushing is
+survivable; banking makes the chain a *choice*, since it multiplies every match
+and is lost entirely on a miss. The Bank button only appears at a chain of two
+or more: a button that does nothing most of the time teaches players to ignore
+it.
+
+**A bug caught while verifying:** banking called `run.hit(combo * 15)`, and
+`hit` multiplies its argument by the chain — so a value already derived from
+the chain was counted twice. Added `run.bank()`, which adds a flat number and
+resets the chain, with a test pinning the difference.
+
+### The repeated reconnects
+
+`use-room-socket.ts` scheduled a reconnect from `onclose` — which fires for
+*every* close, including the ones the hook performs itself. The cleanup did:
+
+```
+clearTimeout(pending)      // clears the old timer
+socket.close()             // -> onclose -> schedules a NEW timer
+```
+
+in that order, so the timer it cleared was never the one that mattered. Every
+unmount, and every dependency change in `connect`, left a phantom socket
+opening two seconds later — to a room the player may already have left.
+Navigating between rooms a few times stacks them up.
+
+Fixed with an `intentionalCloseRef` set *before* any close the hook performs,
+with the timer cleared after. Also added, because the old handler had neither:
+a normal-closure (code 1000) check — retrying a goodbye is arguing, not
+reconnecting — exponential backoff from 1s to a 15s cap, and a six-attempt
+limit that tells the player to reload rather than showing "reconnecting" for
+ever.
+
+Verified in a live room: eleven seconds connected, zero additional sockets
+constructed. The unmount path is verified by reasoning rather than in the
+browser — the room page has no `<a href>` links to trigger client-side routing
+from the console.
+
+`use-lan-socket.ts` polls rather than holding a socket, so it does not share
+the bug.
+
+### Bomb Pass rebuilt
+
+Same skeleton as Hot Potato, deliberately different feel. Holding the bomb pays
+per second and the fuse **does not reset on a pass**, so the strategy is to
+hold long enough to be worth something and then hand on a bomb nobody can
+survive. Its reward curve is near-linear where Hot Potato's accelerates,
+because Bomb Pass shows its fuse: the decision is reading a visible clock, not
+gambling blind. An "At risk" readout shows what the current hold would lose.
+
+### Rope Rescue: a control that did nothing
+
+The game had a rope-height slider, a saw blade drawn on screen, and a hazard
+roll of `Math.random() < 0.15` that ignored both — the comment above it even
+claimed to be a "collision check based on anchor position". Pressing start and
+waiting was the entire game, and a player who used the slider and saw no effect
+learned, correctly, that it was decoration.
+
+The blade now patrols (faster each wave) and `sawRisk(ropeY, sawY)` decides the
+outcome, on a steep curve so threading close feels dangerous rather than mildly
+unwise. The slider shows the risk it is buying — measured live at 4% clear of
+the blade rising to 54% through it. 8 tests.
+
+### Pin Puzzle: a chain is not a puzzle
+
+The game shipped as one puzzle — pull the water pin, then the gold pin — with a
+third pin that did nothing and a `level` that never advanced. Solving it once
+solved it for ever.
+
+The first replacement generated levels as a *chain*, each pin requiring the one
+before it. Playing it exposed why that was worse than it looked: a strict chain
+has exactly one safe pin at any moment, and the requirement was never drawn, so
+from the third level on the player picked between identical-looking pins with
+instant death for a wrong guess. Drawing the requirement would have solved the
+puzzle for them; hiding it made it a coin flip. Both directions are bad, which
+means the structure was wrong, not the presentation.
+
+Order is no longer the puzzle. Three rules are, and every piece of state they
+act on is on screen: **water** cools the lava, **rock** cools it too but only
+while it is hot, **gold** melts unless the lava is cool and re-opens the vault
+when banked. So each gold must be paid for with its own coolant, the budget is
+printed above the board (`COOLANT LEFT` / `GOLD TO DROP` / `LAVA: HOT|COOL`),
+and a level is a counting problem rather than a memory one. Several orders
+solve each level, so there is a decision at every pin. Difficulty tightens the
+budget — a spare coolant through level 3, exactly enough after — rather than
+adding rules. 17 tests.
+
+Two smaller things the rewrite killed. The `success` branch of the overlay was
+dead code: nothing ever set it, and its button incremented the level and then
+called `restart()`, which resets the level to 1 — so the increment was
+discarded even in the unreachable path. And `isDeadEnd` now names the state
+where the coolant budget cannot cover the gold still held, offering a chamber
+reset, because being quietly stranded at a board that cannot be solved is not
+a difficulty.
+
+### Pulling a pin used to pay
+
+Found by playing the rewrite rather than reading it. Every non-gold pull
+scored, so burning all the coolant, taking the stranded overlay, resetting the
+chamber and repeating farmed score for ever: measured **4,740 → 6,520 over five
+cycles with the gold count flat at 150** and the chamber never advancing.
+
+Coolant pulls now pay nothing — you are paid for the gold you get out, not for
+touching pins. Re-measured: the same five-cycle farm holds the score at 3,580,
+while honest play over the same span runs 3,580 → 12,520 across chambers 4–7.
+
+### The light theme was a palette nothing applied
+
+Backlog #21 said the tokens existed but the light palette had never been looked
+at. It was worse than unreviewed — it was unreachable.
+
+Three things had to be true before any of it could be judged:
+
+1. **The switcher only worked on the page that owned it.** `applyTheme` lived
+   inside `settings/page.tsx`, and `layout.tsx` hardcoded `class="dark"`.
+   Choosing Light worked until you reloaded any other page, at which point the
+   saved preference was silently ignored. Now `lib/theme.ts` holds one copy of
+   the logic and `THEME_BOOTSTRAP` runs in `<head>` before first paint, so the
+   choice survives a reload with no flash of the wrong theme.
+2. **A fixed sheet of near-black covered the viewport.** `AnimatedBackground`
+   painted `bg-[#07080E]` at `-z-10` across the whole page, so the light body
+   background was behind an opaque layer. That alone is why choosing Light
+   appeared to change nothing.
+3. **Components bypassed the tokens.** 248 `white/N` literals and about a
+   hundred bare `text-white` outside the games, plus hardcoded chrome
+   (`#0B0D19` sidebar, `#0F111E` popovers) and brand purple (`#7C3AED`,
+   `#A855F7`). `tokens.ts` already says colours are never literals; this was
+   that rule going unenforced.
+
+The mechanical part was safe by construction: `white/N` → `foreground/N`
+renders *identically* in dark, because foreground is white there, and correctly
+in light. `text-white` is the part that needed judgement — on a purple button
+or a gradient it is right in both themes, so only strings without a solid brand
+fill were converted.
+
+**Verified by measurement, not by eye.** A contrast audit walks every text node,
+composites the real background through its ancestors, and checks WCAG AA. Both
+themes now report **zero failures** across home, rooms, history, leaderboard,
+achievements, friends, settings, profile and lan.
+
+What that found, which looking would not have:
+
+- `CardTitle`, the dialog title and the friends/notification popover headings
+  were `text-white` on surfaces that become white — invisible, not merely low
+  contrast.
+- The outline and ghost buttons used `hover:text-white` over `hover:bg-border`,
+  which is light grey in light mode.
+- Every tinted badge (`success`, `destructive`, `warning`) paired a `/15` tint
+  with `-300` text: about 1.3:1 once the tint composites to near-white. Amber
+  needed `-800` where the others took `-700`, being the lightest hue.
+- The locked-achievement points used `text-muted-foreground/60` — the dimmest
+  passing colour with another 40% taken off it, at 2.59:1.
+
+### Two bugs the light pass exposed that were not about light
+
+**`text-primary` is a fill colour being used as a label.** Converting the brand
+purple to the token made dark *worse*: `--primary` at 57% lightness measures
+3.92:1 as nav text on the near-black page, where the literal `#A855F7` it
+replaced managed 5.0:1. Primary-as-fill and primary-as-text are genuinely
+different jobs, so there is now a `--primary-accent` token — 270 91% 65% in
+dark, 248 52% 45% in light — and every `text-primary` moved to it.
+
+**`pink-300` and `pink-950` were dead classes.** The Tailwind config defines
+`pink` as a flat `hsl(var(--pink))`, which shadows Tailwind's own pink scale, so
+those class names generate nothing at all. The hero chip using them had no
+background, no border and no text colour, and simply inherited — which was
+white in dark, so it looked deliberate for as long as only dark existed. Same
+for `to-pink-500` in the notification badge gradient.
+
+### A dark panel stays dark in both themes
+
+The trap in the accent pass, and the one the contrast audit cannot see. The
+audit skips anything over a gradient, because it composites `backgroundColor`
+only — so the hero, which is a dark brand panel in *both* themes, was invisible
+to it. Giving its chips a light-mode treatment put `text-cyan-700` on a
+near-black panel and nothing flagged it.
+
+A second check covers that blind spot: find dark text whose nearest gradient
+ancestor is dark. It caught the three hero chips and the dead pink one; the
+hero's chips are back to fixed bright shades, which is correct because that
+panel never changes. Games are excluded from the whole pass for the same
+reason — an arcade view is its own dark visual world, not a themed surface.
+
+### A game runtime, and why it had to be testable without a browser
+
+The platform transformation brief asked for a professional game loop. The audit
+in `PLAYORA_ARCHITECTURE.md` found the real state: nine of eleven arcade games
+drove gameplay from `setInterval` into `useState`, so every simulation step was
+a React render, the tick rate followed timer drift, and background tabs
+throttled different games by different amounts.
+
+`@playora/game-runtime` is the fix — a fixed-timestep loop and an input
+abstraction, 21 tests. Three decisions worth keeping:
+
+**The loop takes an injectable clock.** Not for purity: the Browser pane fires
+**zero** `requestAnimationFrame` callbacks and reports `document.hidden`
+permanently, so an rAF-driven loop cannot be observed here at all. A runtime
+that could only be verified by looking at it would have shipped unverified. The
+first migrated game's simulation was extracted to `target-rush.ts` for the same
+reason.
+
+**Catch-up is capped.** A stall — a background tab, a GC pause, a closed lid —
+hands the loop a huge accumulated delta. Without a cap it simulates every
+missed step at once, freezing the page and then teleporting everything.
+Dropping the excess is the honest behaviour: the game resumes from now rather
+than pretending it was played while hidden. Resuming from a pause resets the
+accumulator for the same reason.
+
+**`mutate()` exists to prevent one specific silent bug.** I wrote it myself
+first: `rt.state` is the published snapshot, so `rt.state.targets = ...` from a
+click handler changes what was drawn and leaves the simulation holding the
+target. It type-checks, it looks right, and nothing happens. The API now makes
+the wrong thing unavailable rather than merely documented.
+
+**Phaser was removed.** It was declared in `apps/web/package.json`, never
+imported anywhere (verified by grep), and 34 MB in `node_modules`. The brief
+prefers Phaser for 2D, but these are DOM/SVG scenes with a handful of entities
+and racing already uses Three.js — pulling in a 34 MB engine to move eight
+elements is the "unnecessary heavy technology" the same brief warns about two
+sections later. The renderer boundary is what actually matters, and a game that
+outgrows DOM can adopt Canvas or Phaser without the platform noticing.
+
+### Nine arcade games onto one clock
+
+Every arcade game with a timer now runs on `@playora/game-runtime`, with its
+simulation extracted to a pure module and tested against a controlled clock.
+Pin Puzzle is deliberately left alone — it is turn-based and owns no timer, so
+a game loop there would be machinery for its own sake.
+
+The migration was worth doing for the loop. It turned out to be worth more for
+what extracting each simulation *exposed* — in every case a gameplay defect
+that had been invisible because it was tangled in a timer:
+
+- **Three games advertised difficulty they never applied.** Colour Rush spawned
+  at a hardcoded 1100 ms with constant fall speed, Ant Attack spawned at a
+  hardcoded 550 ms, and Bomb Pass reset its fuse to a flat 7.0 — all three
+  displaying a wave badge the whole time. The escalation existed in the HUD and
+  nowhere else.
+- **Ice Breaker's bots did not play.** The comment said "random nudge towards
+  center or player"; the code was a pure random walk with no term for either.
+  Bots fell off the iceberg by accident, so outlasting them meant waiting.
+- **Target Rush's targets never expired**, so the board saturated at six
+  standing targets and the "rush" was a stationary click test you could walk
+  away from.
+- **Rope Rescue's `level` was cosmetic** — a button incremented it, `restart()`
+  never reset it, and nothing read it.
+- **Ant Attack's combo timer was cancelled by the wrong event.** A whiff
+  scheduled the chain break and only *another whiff* cancelled it, so killing a
+  bug immediately after a near-miss did not save the streak the player had just
+  fought for.
+
+The pattern is consistent enough to be worth naming: **when game logic lives
+inside a timer callback, nobody reads it again.** The tuning constants stop
+being tuning and become furniture. Extracting the simulation to a module with
+tests is what made all nine legible at once.
+
+**Three clocks in one game.** Ant Attack was the worst: a `setInterval`
+spawning bugs, a `requestAnimationFrame` loop moving them, a second
+`setInterval` counting the spray cooldown, and a `setTimeout` for the combo.
+rAF stops in a background tab and `setInterval` does not, so switching away and
+back returned the player to a screen full of bugs that had spawned but never
+moved. It keeps rAF — it draws to a canvas, which is what rAF is for — but only
+for drawing.
+
+**What the lint rule caught.** `useSpray` was a plain function named like a
+React hook, and `rules-of-hooks` refused it inside `triggerBugSpray`. Renamed
+to `fireSpray`. The rule was right: in a React codebase a `use*` name is a
+claim about call-site constraints.
+
+### The site had no metadata at all
+
+Not thin metadata — none. No `generateMetadata` anywhere, no sitemap, no
+`robots.txt`, no Open Graph, no canonicals, no structured data. Every page in
+the app shared the same `<title>`, so a shared game link previewed as a bare
+URL and a search engine had nothing to index.
+
+The cause was structural rather than an oversight: **every page in the app is a
+client component**, and a client component cannot export `generateMetadata`.
+`/games/[slug]` is now a server shell around `game-detail-client.tsx`, which
+also makes it SSG — a crawler sees the tags without running JavaScript.
+
+Three things worth keeping:
+
+**The description was written for the wrong reader.** It said *"Scalable
+realtime multiplayer gaming platform powered by Next.js, Cloudflare Durable
+Objects, and Supabase"*. That is what a search result would have shown to
+someone looking for a game to play.
+
+**`noindex` and `robots.txt` fail differently, so the private routes get
+both.** Disallow stops a crawl; it does not stop a URL someone shares being
+indexed without its content.
+
+**Client boundaries are load-bearing for data, not just components.** The build
+failed with "Attempted to call `artFor()` from the server" — cover art lives in
+a `"use client"` module because it exports React components, so the server
+could not read the image *paths* either. Paths are data; they moved to
+`game-images.ts` and both sides import them. A test now asserts every catalog
+game has one, because a game with no share image posts as a blank card, which
+is worse than not sharing it.
+
+### Two more tables had RLS enabled and no policies
+
+Migration 00007 exists because `friendships` shipped with
+`ENABLE ROW LEVEL SECURITY` and no policies — which denies every read and every
+write, silently, because an empty result reads as "no data yet" rather than
+"permission denied".
+
+Adding favourites was the occasion to write a test for that: read the
+migrations as text, find every `ENABLE ROW LEVEL SECURITY`, assert each has a
+matching `CREATE POLICY`. It found **`game_sessions` and `game_invites`**
+immediately — both unprotected since migration 00001.
+
+The observable consequence was one the admin dashboard had been showing all
+along: it counts sessions with
+`from("game_sessions").select("id", { count: "exact", head: true })`, and that
+count has always returned zero for every viewer including admins. Nobody
+noticed because zero is a plausible number. `game_invites` had no browser
+reader at all, so its damage was purely latent. The Worker was unaffected
+throughout — service-role bypasses RLS — which is precisely why every write
+path kept working and nothing ever failed loudly enough to investigate.
+
+The test runs against files, needs no credentials, and takes 80ms. That is the
+whole argument for it: the bug it catches is invisible at runtime.
+
+### A test that checks structure is not a test that checks validity
+
+Immediately after writing that test, I wrote migration 00011 with policies
+referencing `inviter_id` and `invitee_id`. The columns are `sender_id` and
+`recipient_id`. The policy-presence test passed, because a policy *was*
+present — it just would have failed on apply.
+
+There is no database in this session to reject invalid SQL, so a second test
+now parses `CREATE TABLE` bodies and asserts policy predicates only name
+columns that exist. It is scoped to the top-level predicate and skips
+alias-qualified references, because three real policies legitimately name
+another table's columns inside an `EXISTS` subquery.
+
+I verified it by mutation rather than by assuming: putting `inviter_id` back
+fails the suite and names the column. My first attempt at that check reported
+"not caught" — because it only read stdout and vitest wrote the diff to stderr.
+Worth remembering when a mutation test says a test is useless.
+
+### The Browser pane is permanently `document.hidden`
+
+Worth recording because it invalidated several verification attempts across
+this session. Measured: **0 requestAnimationFrame callbacks in 1500ms**, with
+`setInterval` throttled to about 3 ticks where 30 were due, and
+`document.visibilityState` reporting `"hidden"` even with the tab fronted.
+
+That is why the race countdown, the GSAP result cinematic and the saw all
+appeared frozen in screenshots. rAF-driven visuals cannot be verified in this
+pane at all; interval-driven ones can, slowly.
+
+It also surfaced a real bug rather than only a testing limit. The saw was on
+rAF while the survivors zip on `setInterval`, so in any backgrounded tab the
+game keeps running against a **frozen blade** and the risk is computed from a
+position the player can no longer see. Both are now on the same clock: two
+clocks for one interaction is a bug waiting for someone to switch tabs.
+
 ## 12. Next Action
 
 Work is tracked in **`docs/BACKLOG.md`** — one ordered list, worked top-down.

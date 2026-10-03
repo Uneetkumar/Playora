@@ -105,7 +105,7 @@ export default function AchievementsPage() {
                 className={cn(
                   "rounded-full border px-3 py-1.5 text-xs font-semibold capitalize transition-colors",
                   filter === id
-                    ? "border-primary bg-primary/15 text-primary"
+                    ? "border-primary bg-primary/15 text-primary-accent"
                     : "border-border text-muted-foreground hover:text-foreground",
                 )}
               >

@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <radialGradient id="bsBg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#083344" />
+      <stop offset="60%" stop-color="#041f2a" />
+      <stop offset="100%" stop-color="#010c12" />
+    </radialGradient>
+    <filter id="radarGlow">
+      <feDropShadow dx="0" dy="0" stdDeviation="12" flood-color="#06b6d4" flood-opacity="0.8" />
+    </filter>
+  </defs>
+  <rect width="800" height="600" fill="url(#bsBg)" />
+  <!-- Glowing Radar Rings -->
+  <g stroke="#06b6d4" fill="none" opacity="0.4" filter="url(#radarGlow)">
+    <circle cx="400" cy="270" r="220" stroke-width="2" />
+    <circle cx="400" cy="270" r="160" stroke-width="1.5" />
+    <circle cx="400" cy="270" r="100" stroke-width="1.5" />
+    <circle cx="400" cy="270" r="40" stroke-width="1.5" />
+    <line x1="400" y1="50" x2="400" y2="490" stroke-width="1" />
+    <line x1="180" y1="270" x2="620" y2="270" stroke-width="1" />
+  </g>
+  <!-- Rotating Radar Sweep Cone -->
+  <path d="M400,270 L580,140 A220,220 0 0,0 400,50 Z" fill="#06b6d4" opacity="0.15" />
+  <!-- Naval Warship Destroyer Silhouette -->
+  <g transform="translate(400, 270)" filter="url(#radarGlow)">
+    <path d="M-180,20 L-100,-25 L80,-25 L160,0 L200,20 L150,40 L-120,40 Z" fill="#1e293b" stroke="#38bdf8" stroke-width="3" />
+    <!-- Turrets -->
+    <rect x="-80" y="-45" width="40" height="20" rx="4" fill="#334155" stroke="#38bdf8" stroke-width="1.5" />
+    <line x1="-80" y1="-35" x2="-120" y2="-45" stroke="#38bdf8" stroke-width="4" stroke-linecap="round" />
+    <rect x="20" y="-45" width="40" height="20" rx="4" fill="#334155" stroke="#38bdf8" stroke-width="1.5" />
+    <line x1="60" y1="-35" x2="100" y2="-45" stroke="#38bdf8" stroke-width="4" stroke-linecap="round" />
+  </g>
+  <!-- Fiery Torpedo Explosion -->
+  <g transform="translate(490, 250)">
+    <circle cx="0" cy="0" r="28" fill="#f97316" opacity="0.9" filter="blur(6px)" />
+    <circle cx="0" cy="0" r="16" fill="#fde047" />
+    <circle cx="0" cy="0" r="8" fill="#ffffff" />
+  </g>
+  <text x="400" y="550" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="900" font-size="32" fill="#ffffff" letter-spacing="4" opacity="0.95">BATTLESHIP</text>
+</svg>

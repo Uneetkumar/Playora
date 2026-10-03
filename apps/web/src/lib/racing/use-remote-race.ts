@@ -4,6 +4,8 @@ import * as React from "react";
 import type { RacingPlayerView, VehicleInput, VehicleState } from "@playora/game-engine";
 import type { RaceHudState } from "../../games/racing/RaceHud";
 import { gearFor } from "../../games/racing/gears";
+import { topSpeedFor, CAR_BASE_TOP_SPEED } from "@playora/game-engine";
+import type { GameId } from "@playora/game-types";
 
 /** How often driving input is sent to the server. */
 const INPUT_HZ = 20;
@@ -44,6 +46,8 @@ export function useRemoteRace(
   latest: RacingPlayerView | null,
   sendInput: (input: Partial<VehicleInput> & { seq: number }) => void,
   currentUserId: string,
+  /** Which racing game this is, so the speedometer can be scaled to the car. */
+  gameId: GameId = "car-race",
 ) {
   const bufferRef = React.useRef<Snapshot[]>([]);
   const inputRef = React.useRef<VehicleInput>({
@@ -79,6 +83,7 @@ export function useRemoteRace(
     bestLapTicks: null,
     lastLapTicks: null,
     gear: 1,
+    topSpeed: CAR_BASE_TOP_SPEED,
     standings: [],
   });
 
@@ -157,7 +162,8 @@ export function useRemoteRace(
           currentLapTicks: Math.max(0, view.tick - (me?.lapStartTick ?? 0)),
           bestLapTicks: me?.bestLapTicks ?? null,
           lastLapTicks: me?.lapTicks.at(-1) ?? null,
-          gear: gearFor(me?.speed ?? 0, 78),
+          gear: gearFor(me?.speed ?? 0, topSpeedFor(gameId, me?.vehicleId)),
+          topSpeed: topSpeedFor(gameId, me?.vehicleId),
           distance: me?.distance ?? 0,
           standings: view.standings.map((row) => ({
             playerId: row.playerId,
@@ -177,7 +183,7 @@ export function useRemoteRace(
       cancelled = true;
       cancelAnimationFrame(raf);
     };
-  }, [currentUserId]);
+  }, [currentUserId, gameId]);
 
   return { hud, onReady, setInput };
 }

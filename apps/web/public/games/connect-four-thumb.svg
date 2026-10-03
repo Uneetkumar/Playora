@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <radialGradient id="cfBg" cx="50%" cy="30%" r="75%">
+      <stop offset="0%" stop-color="#1e1b4b" />
+      <stop offset="60%" stop-color="#0a0a1f" />
+      <stop offset="100%" stop-color="#03030d" />
+    </radialGradient>
+    <linearGradient id="boardGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#1d4ed8" />
+    </linearGradient>
+    <radialGradient id="redDisc" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#ff7b72" />
+      <stop offset="60%" stop-color="#ef4444" />
+      <stop offset="100%" stop-color="#991b1b" />
+    </radialGradient>
+    <radialGradient id="yellowDisc" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="60%" stop-color="#eab308" />
+      <stop offset="100%" stop-color="#854d0e" />
+    </radialGradient>
+    <filter id="shadow3d">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000" flood-opacity="0.7" />
+    </filter>
+  </defs>
+  <rect width="800" height="600" fill="url(#cfBg)" />
+  <circle cx="400" cy="280" r="300" fill="#3b82f6" opacity="0.12" filter="blur(60px)" />
+  <!-- Main Grid Board -->
+  <g filter="url(#shadow3d)">
+    <rect x="140" y="100" width="520" height="380" rx="28" fill="url(#boardGrad)" stroke="#60a5fa" stroke-width="4" />
+    <!-- Row slots -->
+    <g fill="#0b1120">
+      <!-- 7 columns, 5 rows -->
+      <circle cx="200" cy="160" r="28" />
+      <circle cx="265" cy="160" r="28" fill="url(#yellowDisc)" />
+      <circle cx="330" cy="160" r="28" />
+      <circle cx="400" cy="160" r="28" fill="url(#redDisc)" />
+      <circle cx="470" cy="160" r="28" />
+      <circle cx="535" cy="160" r="28" />
+      <circle cx="600" cy="160" r="28" />
+
+      <circle cx="200" cy="230" r="28" fill="url(#redDisc)" />
+      <circle cx="265" cy="230" r="28" fill="url(#yellowDisc)" />
+      <circle cx="330" cy="230" r="28" fill="url(#redDisc)" />
+      <circle cx="400" cy="230" r="28" fill="url(#yellowDisc)" />
+      <circle cx="470" cy="230" r="28" fill="url(#yellowDisc)" />
+      <circle cx="535" cy="230" r="28" />
+      <circle cx="600" cy="230" r="28" />
+
+      <circle cx="200" cy="300" r="28" fill="url(#yellowDisc)" />
+      <circle cx="265" cy="300" r="28" fill="url(#redDisc)" />
+      <circle cx="330" cy="300" r="28" fill="url(#yellowDisc)" />
+      <circle cx="400" cy="300" r="28" fill="url(#redDisc)" />
+      <circle cx="470" cy="300" r="28" fill="url(#redDisc)" />
+      <circle cx="535" cy="300" r="28" fill="url(#yellowDisc)" />
+      <circle cx="600" cy="300" r="28" />
+
+      <circle cx="200" cy="370" r="28" fill="url(#redDisc)" />
+      <circle cx="265" cy="370" r="28" fill="url(#redDisc)" />
+      <circle cx="330" cy="370" r="28" fill="url(#yellowDisc)" />
+      <circle cx="400" cy="370" r="28" fill="url(#redDisc)" />
+      <circle cx="470" cy="370" r="28" fill="url(#yellowDisc)" />
+      <circle cx="535" cy="370" r="28" fill="url(#redDisc)" />
+      <circle cx="600" cy="370" r="28" fill="url(#yellowDisc)" />
+
+      <circle cx="200" cy="440" r="28" fill="url(#yellowDisc)" />
+      <circle cx="265" cy="440" r="28" fill="url(#yellowDisc)" />
+      <circle cx="330" cy="440" r="28" fill="url(#redDisc)" />
+      <circle cx="400" cy="440" r="28" fill="url(#yellowDisc)" />
+      <circle cx="470" cy="440" r="28" fill="url(#redDisc)" />
+      <circle cx="535" cy="440" r="28" fill="url(#yellowDisc)" />
+      <circle cx="600" cy="440" r="28" fill="url(#redDisc)" />
+    </g>
+  </g>
+  <!-- Falling Disc with Motion Blur -->
+  <g transform="translate(400, 50)" filter="url(#shadow3d)">
+    <circle cx="0" cy="0" r="28" fill="url(#yellowDisc)" stroke="#fde047" stroke-width="2" />
+  </g>
+  <text x="400" y="550" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="900" font-size="32" fill="#ffffff" letter-spacing="4" opacity="0.95">CONNECT FOUR</text>
+</svg>

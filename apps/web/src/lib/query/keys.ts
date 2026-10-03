@@ -31,4 +31,8 @@ export const queryKeys = {
 
   season: (gameSlug: string | null, userId: string | null | undefined) =>
     ["season", gameSlug, userId] as const,
+
+  favorites: (userId: string | null | undefined) => ["favorites", userId] as const,
+
+  recentlyPlayed: (userId: string | null | undefined) => ["recently-played", userId] as const,
 } as const;

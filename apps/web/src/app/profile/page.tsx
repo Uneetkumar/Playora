@@ -129,7 +129,7 @@ export default function ProfilePage() {
               <div className="mt-5">
                 <div className="flex items-baseline justify-between">
                   <span className="font-display text-sm font-bold text-foreground">
-                    Level <span className="numeric text-primary">{level.level}</span>
+                    Level <span className="numeric text-primary-accent">{level.level}</span>
                   </span>
                   <span className="numeric text-xs text-muted-foreground">
                     {level.xpIntoLevel} / {level.xpForNextLevel} XP

@@ -7,7 +7,7 @@ export interface LocalMatchRecord {
   id: string;
   gameId: GameId;
   gameName: string;
-  mode: "vs-ai" | "local" | "career" | "lan";
+  mode: "vs-ai" | "local" | "career" | "lan" | "solo" | "pass-and-play";
   outcome: "win" | "loss" | "draw";
   durationSeconds: number;
   playedAt: string;
@@ -47,12 +47,23 @@ function saveHistory(records: LocalMatchRecord[]): void {
  * Call this when a local game ends (win, loss, draw), passing the result
  * details. The record will appear on the History page alongside online games.
  */
-export function saveLocalMatch(record: Omit<LocalMatchRecord, "id" | "source">): LocalMatchRecord {
+export function saveLocalMatch(
+  record: Omit<LocalMatchRecord, "id" | "source" | "playedAt"> & {
+    playedAt?: string | number;
+  }
+): LocalMatchRecord {
+  const playedAtStr =
+    typeof record.playedAt === "number"
+      ? new Date(record.playedAt).toISOString()
+      : record.playedAt || new Date().toISOString();
+
   const entry: LocalMatchRecord = {
     ...record,
+    playedAt: playedAtStr,
     id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     source: "local",
   };
+
   const history = loadHistory();
   saveHistory([entry, ...history]);
   // Notify other tabs/hooks

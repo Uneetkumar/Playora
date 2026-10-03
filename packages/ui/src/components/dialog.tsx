@@ -31,12 +31,12 @@ export function Dialog({ isOpen, onClose, title, description, children, classNam
       >
         <div className="flex items-center justify-between pb-3">
           <div>
-            <h2 className="text-lg font-bold text-white">{title}</h2>
+            <h2 className="text-lg font-bold text-popover-foreground">{title}</h2>
             {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-muted-foreground hover:bg-border hover:text-white transition-colors"
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-border hover:text-foreground transition-colors"
           >
             <X className="h-5 w-5" />
           </button>

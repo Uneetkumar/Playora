@@ -18,6 +18,28 @@ import * as THREE from "three";
  * - TEMPEST EVO: Extreme electric hyperbike with hubless centerless glowing wheels and stator coils.
  */
 
+/**
+ * Where the wheels are, and how big they are.
+ *
+ * Shared so the fender arches and the wheels themselves cannot drift apart:
+ * they were authored separately once, and the arches ended up 20cm behind the
+ * tyres they were supposed to be wrapping.
+ */
+export const WHEEL_RADIUS = 0.36;
+/**
+ * [z along the car, x from the centre line] for the front and rear axles.
+ *
+ * Chosen so the outer face of the tyre sits just inside the bodywork. The
+ * bodies are 1.92-2.10 wide, i.e. +-0.96 to +-1.05, and a 0.32-wide wheel
+ * centred at 1.02 puts its outer edge at 1.18 — sticking 22cm proud of the
+ * car on each side. That single number was most of why the models read as
+ * go-karts rather than cars: real wheels tuck under the arches.
+ */
+export const WHEEL_ANCHORS: ReadonlyArray<readonly [number, number]> = [
+  [1.35, 0.82],
+  [-1.25, 0.84],
+];
+
 export interface VehicleRig {
   group: THREE.Group;
   /** The part that leans and pitches. */
@@ -25,6 +47,17 @@ export interface VehicleRig {
   wheels: THREE.Group[];
   /** Front wheels that steer. */
   steeringWheels: THREE.Group[];
+  /**
+   * Rolling radius, so wheels turn at the rate the ground is passing under
+   * them. A fixed divisor makes big wheels visibly slip and small ones spin
+   * like a cartoon.
+   */
+  wheelRadius: number;
+  /**
+   * Each wheel's resting height and which corner it is on, so suspension can
+   * push it up and down relative to the body. Index-matched to `wheels`.
+   */
+  wheelRest: Array<{ y: number; front: boolean; side: number }>;
   /** Where nitro flame and exhaust smoke originate. */
   exhausts: THREE.Object3D[];
   brakeLights: THREE.MeshStandardMaterial;
@@ -130,6 +163,108 @@ const SHADOW_MAT = new THREE.MeshBasicMaterial({
 /**
  * Builds extruded & tapered polygon parts for aerodynamic automotive styling.
  */
+/**
+ * A car body built from its side profile, rather than from stacked boxes.
+ *
+ * This is the difference between "a vehicle" and "a car". Every panel here used
+ * to be a `BoxGeometry`, which means every silhouette was a staircase of
+ * rectangles: flat slab, flat roof, hard step down to the boot. A real car is
+ * one continuous line from bumper to bumper — the hood rises over the front
+ * axle, rakes into the windscreen, peaks at the roof and falls away to the
+ * tail, and the eye reads that curve as "car" long before it registers any
+ * detail.
+ *
+ * So the shell is a single extrusion of that outline across the car's width,
+ * with a bevel doing the work of the soft edges a real body has. Points run
+ * nose-to-tail along +z with y up, which is the same frame the rest of this
+ * file uses.
+ */
+function buildBodyShell(
+  profile: Array<[number, number]>,
+  width: number,
+  material: THREE.Material,
+  bevel = 0.09,
+): THREE.Mesh {
+  /*
+   * Rounds every corner by running a quadratic *through* it.
+   *
+   * The control point has to be the vertex being rounded, with the curve
+   * spanning midpoint-to-midpoint of the two edges that meet there. Passing the
+   * previous point as the control instead — which is what this did at first —
+   * puts the control on top of the curve's own start, and a quadratic whose
+   * control point is its start point is a straight line. The result was a
+   * faceted polyline wearing the word "curve": every body still had a flat top
+   * and hard corners, which is exactly the look this was meant to replace.
+   */
+  const shape = new THREE.Shape();
+  const at = (i: number) => profile[(i + profile.length) % profile.length]!;
+  const mid = (a: [number, number], b: [number, number]): [number, number] => [
+    (a[0] + b[0]) / 2,
+    (a[1] + b[1]) / 2,
+  ];
+
+  const first = mid(at(0), at(1));
+  shape.moveTo(first[0], first[1]);
+  for (let i = 1; i <= profile.length; i++) {
+    const corner = at(i);
+    const next = mid(corner, at(i + 1));
+    shape.quadraticCurveTo(corner[0], corner[1], next[0], next[1]);
+  }
+  shape.closePath();
+
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: width - bevel * 2,
+    bevelEnabled: true,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelSegments: 4,
+    curveSegments: 12,
+  });
+
+  /*
+   * Shape space is (x = along the car, y = up), extruded along +z. The car
+   * wants (z = along the car, y = up, x = across), so the solid is turned a
+   * quarter turn and re-centred.
+   *
+   * The turn is -90 and not +90: (x,y,z) -> (-z, y, x) puts the nose at +z,
+   * where the rest of this file expects it. Turning the other way builds the
+   * same shell facing backwards, which is subtle enough on a symmetrical mesh
+   * to miss and obvious the moment the headlights point at the camera behind.
+   *
+   * The extrusion then spans x from -depth to 0, so it shifts back by half its
+   * depth to straddle the centre line rather than sit entirely on one side.
+   */
+  const depth = width - bevel * 2;
+  geometry.rotateY(-Math.PI / 2);
+  geometry.translate(depth / 2, 0, 0);
+  geometry.computeVertexNormals();
+
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.castShadow = true;
+  return mesh;
+}
+
+/**
+ * The arch over a wheel.
+ *
+ * Without one the body is a slab floating above four cylinders. A real fender
+ * wraps the tyre, and the shadowed gap between arch and tread is most of what
+ * sells the wheel as being *in* the car rather than beside it.
+ */
+function buildFenderArch(
+  radius: number,
+  width: number,
+  material: THREE.Material,
+): THREE.Mesh {
+  const geometry = new THREE.TorusGeometry(radius, radius * 0.17, 8, 16, Math.PI);
+  geometry.rotateY(Math.PI / 2);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.scale.z = 1.05;
+  mesh.scale.x = width;
+  mesh.castShadow = true;
+  return mesh;
+}
+
 function taperedBox(
   width: number,
   height: number,
@@ -251,70 +386,157 @@ function buildForgedPerformanceWheel(
 /**
  * 1. ECLIPSE GT: Sleek Gran Turismo sports coupe with dual hood scoops, fastback roof, BBS rims, ducktail spoiler.
  */
+/**
+ * Fittings every car has, added once in the shared build path.
+ *
+ * These were left to each model to remember, and three of the five forgot:
+ * Phantom RS, Velocity X and Inferno ZX had no headlights at all, and only
+ * Eclipse GT had mirrors. From behind that reads as a car with one light in
+ * the wrong place rather than a car with none, which is why it looked like the
+ * lamps were mispositioned.
+ *
+ * Symmetry is the whole point. Headlights are placed as a mirrored pair about
+ * the centre line, so no car can end up with one lamp on one corner.
+ */
+function addStandardFittings(
+  chassis: THREE.Group,
+  BODY: THREE.MeshStandardMaterial,
+  options: { noseZ: number; noseY: number; mirrorZ: number; mirrorY: number },
+): void {
+  // Headlights: a mirrored pair, always.
+  for (const side of [-1, 1]) {
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.09, 0.26), HEADLIGHT_LENS);
+    lamp.position.set(side * 0.62, options.noseY, options.noseZ);
+    lamp.rotation.x = -0.1;
+    chassis.add(lamp);
+  }
+
+  // Wing mirrors, on stalks so they read as mirrors rather than lumps.
+  for (const side of [-1, 1]) {
+    const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.16, 8), CARBON_FIBER);
+    stalk.rotation.z = Math.PI / 2;
+    stalk.position.set(side * 0.92, options.mirrorY, options.mirrorZ);
+    chassis.add(stalk);
+
+    const housing = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.09, 0.1), BODY);
+    housing.position.set(side * 1.03, options.mirrorY + 0.01, options.mirrorZ);
+    housing.rotation.y = side * 0.28;
+    chassis.add(housing);
+
+    // The glass, angled back towards the driver.
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.07, 0.08), TINTED_GLASS);
+    glass.position.set(side * 1.1, options.mirrorY + 0.01, options.mirrorZ - 0.01);
+    glass.rotation.y = side * 0.28;
+    chassis.add(glass);
+  }
+}
+
 function buildEclipseGTModel(BODY: THREE.MeshStandardMaterial, BRAKE_LIGHT_MAT: THREE.MeshStandardMaterial, chassis: THREE.Group, exhausts: THREE.Object3D[]) {
-  // Lower Floor & Widebody Chassis
-  const mainBody = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.4, 4.3), BODY);
-  mainBody.position.y = 0.34;
-  chassis.add(mainBody);
+  /*
+   * The side profile, nose (+z) to tail (-z).
+   *
+   * Read it as a line drawing: the splitter sits low at the front, the nose
+   * lifts over the front axle, the hood runs long and slightly domed, the
+   * windscreen rakes hard into a low roof, and the fastback falls away in one
+   * unbroken sweep to the ducktail. That single curve is what reads as a
+   * grand tourer; the vents and lights below are only detail on top of it.
+   */
+  const shell = buildBodyShell(
+    [
+      [2.55, 0.16],   // splitter lip
+      [2.52, 0.40],   // nose
+      [2.20, 0.52],   // over the front axle
+      [1.30, 0.56],   // hood, gently domed
+      [0.55, 0.60],   // cowl
+      [0.10, 0.98],   // base of the windscreen
+      [-0.45, 1.14],  // roof leading edge
+      [-1.05, 1.10],  // roof trailing edge
+      [-1.85, 0.78],  // fastback
+      [-2.20, 0.62],  // ducktail
+      [-2.30, 0.34],  // tail panel
+      [-2.24, 0.16],  // diffuser lip
+      [-1.60, 0.12],  // floor
+      [1.60, 0.12],
+    ],
+    1.92,
+    BODY,
+  );
+  shell.position.set(0, 0, 0);
+  chassis.add(shell);
 
-  // Sculpted Hood with twin air vents
-  const nose = taperedBox(1.86, 0.32, 1.8, 0.74, 0.65, BODY);
-  nose.position.set(0, 0.34, 1.8);
-  chassis.add(nose);
+  // Fender arches, so the wheels sit in the body rather than beside it.
+  // Arches sit over the wheels, at the wheel positions and scaled to the
+  // tyre. Authoring them at invented coordinates leaves the arch hovering
+  // beside the wheel, which reads worse than having no arch at all.
+  for (const [z, x] of WHEEL_ANCHORS) {
+    for (const side of [-1, 1]) {
+      const arch = buildFenderArch(WHEEL_RADIUS * 1.22, 0.3, BODY);
+      arch.position.set(side * x, 0.42, z);
+      chassis.add(arch);
+    }
+  }
 
+  // Greenhouse: glass follows the same rake as the shell, inset so the pillars
+  // read as body colour either side of it.
+  const glass = buildBodyShell(
+    [
+      [0.12, 0.96],
+      [-0.45, 1.12],
+      [-1.05, 1.08],
+      [-1.70, 0.80],
+      [-1.70, 0.66],
+      [0.12, 0.62],
+    ],
+    1.34,
+    TINTED_GLASS,
+    0.04,
+  );
+  chassis.add(glass);
+
+  // Twin hood vents.
   for (const x of [-0.35, 0.35]) {
     const vent = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.04, 0.5), CARBON_FIBER);
-    vent.position.set(x, 0.47, 1.55);
+    vent.position.set(x, 0.6, 1.55);
     chassis.add(vent);
   }
 
-  // Front GT Splitter with Fog Lights
-  const splitter = new THREE.Mesh(new THREE.BoxGeometry(1.98, 0.06, 0.55), CARBON_FIBER);
-  splitter.position.set(0, 0.14, 2.46);
+  // Front splitter.
+  const splitter = new THREE.Mesh(new THREE.BoxGeometry(1.98, 0.05, 0.5), CARBON_FIBER);
+  splitter.position.set(0, 0.13, 2.42);
   chassis.add(splitter);
 
-  // Cockpit Glass Canopy (Fastback)
-  const cabin = taperedBox(1.36, 0.54, 2.1, 0.7, 0.78, TINTED_GLASS);
-  cabin.position.set(0, 0.78, -0.15);
-  chassis.add(cabin);
-
-  // Fastback Roof
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(1.12, 0.05, 1.35), BODY);
-  roof.position.set(0, 1.06, -0.22);
-  chassis.add(roof);
-
-  // Integrated Ducktail Rear Lip Spoiler
-  const ducktail = new THREE.Mesh(new THREE.BoxGeometry(1.68, 0.14, 0.28), BODY);
-  ducktail.position.set(0, 0.62, -2.12);
-  ducktail.rotation.x = -0.32;
-  chassis.add(ducktail);
-
-  // Rear Diffuser
-  const diffuser = new THREE.Mesh(new THREE.BoxGeometry(1.88, 0.14, 0.45), CARBON_FIBER);
-  diffuser.position.set(0, 0.16, -2.14);
-  chassis.add(diffuser);
-
-  // Headlights
-  for (const x of [-0.66, 0.66]) {
-    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.12), HEADLIGHT_LENS);
-    hl.position.set(x, 0.38, 2.5);
-    chassis.add(hl);
+  // Side sills, which give the flank a shadow line instead of a flat wall.
+  for (const side of [-1, 1]) {
+    const sill = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 2.2), CARBON_FIBER);
+    sill.position.set(side * 0.95, 0.2, 0);
+    chassis.add(sill);
   }
 
-  // Taillight Bar
-  const lightBar = new THREE.Mesh(new THREE.BoxGeometry(1.68, 0.08, 0.08), BRAKE_LIGHT_MAT);
-  lightBar.position.set(0, 0.5, -2.16);
+  // Ducktail lip.
+  const ducktail = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.08, 0.26), BODY);
+  ducktail.position.set(0, 0.68, -2.1);
+  ducktail.rotation.x = -0.3;
+  chassis.add(ducktail);
+
+  // Rear diffuser.
+  const diffuser = new THREE.Mesh(new THREE.BoxGeometry(1.84, 0.13, 0.42), CARBON_FIBER);
+  diffuser.position.set(0, 0.15, -2.1);
+  chassis.add(diffuser);
+
+  // Full-width taillight bar.
+  const lightBar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.07, 0.06), BRAKE_LIGHT_MAT);
+  lightBar.position.set(0, 0.54, -2.3);
   chassis.add(lightBar);
 
-  // Twin Polished Chrome Exhausts
+  // Twin polished exhausts.
   for (const x of [-0.38, 0.38]) {
     const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.085, 0.28, 14), CHROME_EXHAUST);
     pipe.rotation.x = Math.PI / 2;
-    pipe.position.set(x, 0.26, -2.22);
+    pipe.position.set(x, 0.25, -2.2);
     chassis.add(pipe);
 
     const nozzle = new THREE.Object3D();
-    nozzle.position.set(x, 0.26, -2.35);
+    nozzle.position.set(x, 0.25, -2.35);
     chassis.add(nozzle);
     exhausts.push(nozzle);
   }
@@ -324,15 +546,38 @@ function buildEclipseGTModel(BODY: THREE.MeshStandardMaterial, BRAKE_LIGHT_MAT: 
  * 2. THUNDER V10: Mid-engine Italian wedge supercar with side radiator air scoops, glass rear engine cover, V10 engine block.
  */
 function buildThunderV10Model(BODY: THREE.MeshStandardMaterial, BRAKE_LIGHT_MAT: THREE.MeshStandardMaterial, chassis: THREE.Group, exhausts: THREE.Object3D[]) {
-  // Low-slung sharp wedge body
-  const mainBody = new THREE.Mesh(new THREE.BoxGeometry(1.98, 0.38, 4.4), BODY);
-  mainBody.position.y = 0.32;
-  chassis.add(mainBody);
+  /*
+   * A mid-engine wedge: the defining line is a single unbroken rise from a nose
+   * almost touching the road to a cabin set unusually far forward, then a flat
+   * engine deck and a tail chopped off vertically. Nothing here is a stack of
+   * slabs, because a wedge with a step in it stops being a wedge.
+   */
+  const shell = buildBodyShell(
+    [
+      [2.60, 0.14], [2.56, 0.30],   // knife-edge nose
+      [1.70, 0.42], [0.90, 0.58],   // the long rise
+      [0.62, 0.94],                 // windscreen base, set forward
+      [0.05, 1.08], [-0.75, 1.02],  // low cabin roof
+      [-1.15, 0.76],                // drop onto the engine deck
+      [-2.10, 0.70],                // flat deck over the V10
+      [-2.24, 0.34], [-2.20, 0.14], // Kamm tail, cut vertically
+      [-1.60, 0.16], [1.60, 0.16],
+    ],
+    1.98,
+    BODY,
+  );
+  chassis.add(shell);
 
-  // Sharp Low Wedge Nose
-  const nose = taperedBox(1.92, 0.28, 1.85, 0.65, 0.5, BODY);
-  nose.position.set(0, 0.32, 1.85);
-  chassis.add(nose);
+  // Arches sit over the wheels, at the wheel positions and scaled to the
+  // tyre. Authoring them at invented coordinates leaves the arch hovering
+  // beside the wheel, which reads worse than having no arch at all.
+  for (const [z, x] of WHEEL_ANCHORS) {
+    for (const side of [-1, 1]) {
+      const arch = buildFenderArch(WHEEL_RADIUS * 1.22, 0.3, BODY);
+      arch.position.set(side * x, 0.38, z);
+      chassis.add(arch);
+    }
+  }
 
   // Angular Radiator Air Scoops
   for (const x of [-1.02, 1.02]) {
@@ -341,9 +586,13 @@ function buildThunderV10Model(BODY: THREE.MeshStandardMaterial, BRAKE_LIGHT_MAT:
     chassis.add(scoop);
   }
 
-  // Low Cockpit
-  const cabin = taperedBox(1.32, 0.5, 1.8, 0.68, 0.85, TINTED_GLASS);
-  cabin.position.set(0, 0.74, 0.1);
+  // Glazing follows the same rake as the shell, inset so the pillars read as body.
+  const cabin = buildBodyShell(
+    [[0.64, 0.92], [0.05, 1.06], [-0.75, 1.00], [-0.95, 0.74], [0.64, 0.66]],
+    1.3,
+    TINTED_GLASS,
+    0.04,
+  );
   chassis.add(cabin);
 
   // Transparent Glass Engine Deck
@@ -375,14 +624,6 @@ function buildThunderV10Model(BODY: THREE.MeshStandardMaterial, BRAKE_LIGHT_MAT:
     exhausts.push(nozzle);
   }
 
-  // Headlights
-  for (const x of [-0.72, 0.72]) {
-    const hl = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.08, 0.14), HEADLIGHT_LENS);
-    hl.position.set(x, 0.34, 2.52);
-    hl.rotation.y = x > 0 ? -0.25 : 0.25;
-    chassis.add(hl);
-  }
-
   // Angular Taillights
   for (const x of [-0.65, 0.65]) {
     const tl = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.08, 0.08), BRAKE_LIGHT_MAT);
@@ -395,10 +636,37 @@ function buildThunderV10Model(BODY: THREE.MeshStandardMaterial, BRAKE_LIGHT_MAT:
  * 3. PHANTOM RS: Track hypercar with high swan-neck carbon GT3 wing, roof snorkel, carbon dive planes, ceramic brakes.
  */
 function buildPhantomRSModel(BODY: THREE.MeshStandardMaterial, BRAKE_LIGHT_MAT: THREE.MeshStandardMaterial, chassis: THREE.Group, exhausts: THREE.Object3D[]) {
-  // Widebody track chassis
-  const mainBody = new THREE.Mesh(new THREE.BoxGeometry(2.02, 0.38, 4.4), BODY);
-  mainBody.position.y = 0.32;
-  chassis.add(mainBody);
+  /*
+   * Track car, so the silhouette is deliberately blunter than a road car: a
+   * flat floor, a short hard rise at the screen and a long flat roof. Homologated
+   * racers look like this because the cabin is a safety cell, not styling.
+   */
+  const shell = buildBodyShell(
+    [
+      [2.58, 0.14], [2.54, 0.34],
+      [2.10, 0.48], [1.00, 0.50],   // flat, low hood
+      [0.55, 0.56],
+      [0.20, 1.00],                 // steep screen
+      [-0.40, 1.14], [-1.10, 1.12], // long flat roof
+      [-1.80, 0.86],
+      [-2.20, 0.66], [-2.28, 0.32], [-2.22, 0.14],
+      [-1.60, 0.16], [1.60, 0.16],
+    ],
+    2.02,
+    BODY,
+  );
+  chassis.add(shell);
+
+  // Arches sit over the wheels, at the wheel positions and scaled to the
+  // tyre. Authoring them at invented coordinates leaves the arch hovering
+  // beside the wheel, which reads worse than having no arch at all.
+  for (const [z, x] of WHEEL_ANCHORS) {
+    for (const side of [-1, 1]) {
+      const arch = buildFenderArch(WHEEL_RADIUS * 1.22, 0.32, BODY);
+      arch.position.set(side * x, 0.4, z);
+      chassis.add(arch);
+    }
+  }
 
   // Extended Splitter & Dive Planes
   const splitter = new THREE.Mesh(new THREE.BoxGeometry(2.14, 0.07, 0.7), CARBON_FIBER);
@@ -411,9 +679,12 @@ function buildPhantomRSModel(BODY: THREE.MeshStandardMaterial, BRAKE_LIGHT_MAT: 
     chassis.add(canard1);
   }
 
-  // Cockpit
-  const cabin = taperedBox(1.34, 0.52, 1.9, 0.65, 0.82, TINTED_GLASS);
-  cabin.position.set(0, 0.76, -0.05);
+  const cabin = buildBodyShell(
+    [[0.22, 0.98], [-0.40, 1.12], [-1.10, 1.10], [-1.60, 0.86], [-1.60, 0.70], [0.22, 0.66]],
+    1.34,
+    TINTED_GLASS,
+    0.04,
+  );
   chassis.add(cabin);
 
   // Roof Snorkel Air Intake
@@ -464,10 +735,38 @@ function buildPhantomRSModel(BODY: THREE.MeshStandardMaterial, BRAKE_LIGHT_MAT: 
  * 4. VELOCITY X: Le Mans LMP Prototype racer with bubble canopy, central aerodynamic shark fin, enclosed wheel arches.
  */
 function buildVelocityXModel(BODY: THREE.MeshStandardMaterial, BRAKE_LIGHT_MAT: THREE.MeshStandardMaterial, chassis: THREE.Group, exhausts: THREE.Object3D[]) {
-  // Ultra-low LMP Prototype Chassis
-  const mainBody = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.3, 4.6), BODY);
-  mainBody.position.y = 0.26;
-  chassis.add(mainBody);
+  /*
+   * Prototype proportions: an unusually long flat nose, a canopy that sits
+   * proud of the bodywork rather than being blended into it, and rear haunches
+   * standing taller than the nose over the drivetrain. Those three facts are
+   * what separate an LMP silhouette from a road car's.
+   */
+  const shell = buildBodyShell(
+    [
+      [2.70, 0.12], [2.66, 0.26],
+      [2.00, 0.34], [0.80, 0.36],   // the long flat nose
+      [0.30, 0.44],
+      [-0.60, 0.56],
+      [-1.30, 0.82],                // haunches rise over the drivetrain
+      [-2.10, 0.86],
+      [-2.34, 0.44], [-2.28, 0.18],
+      [-1.70, 0.16], [1.70, 0.16],
+    ],
+    2.10,
+    BODY,
+  );
+  chassis.add(shell);
+
+  // Arches sit over the wheels, at the wheel positions and scaled to the
+  // tyre. Authoring them at invented coordinates leaves the arch hovering
+  // beside the wheel, which reads worse than having no arch at all.
+  for (const [z, x] of WHEEL_ANCHORS) {
+    for (const side of [-1, 1]) {
+      const arch = buildFenderArch(WHEEL_RADIUS * 1.22, 0.34, BODY);
+      arch.position.set(side * x, 0.34, z);
+      chassis.add(arch);
+    }
+  }
 
   // Bubble Fighter-Jet Canopy
   const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.7, 24, 16), TINTED_GLASS);
@@ -515,10 +814,39 @@ function buildVelocityXModel(BODY: THREE.MeshStandardMaterial, BRAKE_LIGHT_MAT: 
  * 5. INFERNO ZX: Extreme hypercar with stealth angles, multi-tier active aero flaps, glowing underglow, hexagonal afterburners.
  */
 function buildInfernoZXModel(BODY: THREE.MeshStandardMaterial, BRAKE_LIGHT_MAT: THREE.MeshStandardMaterial, chassis: THREE.Group, exhausts: THREE.Object3D[]) {
-  // Stealth Angular Widebody
-  const mainBody = new THREE.Mesh(new THREE.BoxGeometry(2.08, 0.36, 4.5), BODY);
-  mainBody.position.y = 0.3;
-  chassis.add(mainBody);
+  /*
+   * Stealth car, so this one gets a much tighter bevel than the others. The
+   * rounding that makes a GT look expensive is exactly what would destroy a
+   * faceted shape — here the edges should stay sharp enough to catch a hard
+   * highlight.
+   */
+  const shell = buildBodyShell(
+    [
+      [2.62, 0.12], [2.58, 0.28],
+      [2.20, 0.40], [1.20, 0.44],
+      [0.70, 0.52],
+      [0.25, 0.96],
+      [-0.35, 1.06], [-1.00, 0.98],
+      [-1.70, 0.72],
+      [-2.20, 0.60], [-2.32, 0.30], [-2.26, 0.12],
+      [-1.65, 0.08], [1.65, 0.08],
+    ],
+    2.08,
+    BODY,
+    0.04,
+  );
+  chassis.add(shell);
+
+  // Arches sit over the wheels, at the wheel positions and scaled to the
+  // tyre. Authoring them at invented coordinates leaves the arch hovering
+  // beside the wheel, which reads worse than having no arch at all.
+  for (const [z, x] of WHEEL_ANCHORS) {
+    for (const side of [-1, 1]) {
+      const arch = buildFenderArch(WHEEL_RADIUS * 1.22, 0.32, BODY);
+      arch.position.set(side * x, 0.38, z);
+      chassis.add(arch);
+    }
+  }
 
   // Multi-tier Active Aero Flaps on Nose
   for (let i = 0; i < 3; i++) {
@@ -528,9 +856,12 @@ function buildInfernoZXModel(BODY: THREE.MeshStandardMaterial, BRAKE_LIGHT_MAT: 
     chassis.add(flap);
   }
 
-  // Fighter Jet Cockpit
-  const cabin = taperedBox(1.3, 0.48, 1.9, 0.58, 0.8, TINTED_GLASS);
-  cabin.position.set(0, 0.72, 0.0);
+  const cabin = buildBodyShell(
+    [[0.27, 0.94], [-0.35, 1.04], [-1.00, 0.96], [-1.45, 0.72], [-1.45, 0.62], [0.27, 0.60]],
+    1.3,
+    TINTED_GLASS,
+    0.03,
+  );
   chassis.add(cabin);
 
   // Active Hydraulic Dual-Element Rear Wing
@@ -609,7 +940,7 @@ export function buildCar(colorHex: number, modelId?: string): VehicleRig {
   const exhausts: THREE.Object3D[] = [];
 
   const normId = (modelId || "").toLowerCase();
-  let wheelStyle: "bbs" | "star" | "aerodisc" | "gold" = "star";
+  let wheelStyle: "bbs" | "star" | "aerodisc" | "gold";
   let caliperMat = BRAKE_CALIPER_RED;
 
   if (normId.includes("eclipse") || normId.includes("gt")) {
@@ -634,6 +965,10 @@ export function buildCar(colorHex: number, modelId?: string): VehicleRig {
     wheelStyle = "bbs";
   }
 
+  // Lamps and mirrors, for whichever model was just built. Applied here rather
+  // than per model so no car can ship without them again.
+  addStandardFittings(chassis, BODY, { noseZ: 2.34, noseY: 0.46, mirrorZ: 0.32, mirrorY: 0.84 });
+
   // Real-time Headlight Point Light
   const headlight = new THREE.PointLight(0xd6f4ff, 4.0, 48, 1.2);
   headlight.position.set(0, 0.45, 3.2);
@@ -649,22 +984,22 @@ export function buildCar(colorHex: number, modelId?: string): VehicleRig {
   // 4 Forged Alloy Performance Wheels
   const wheels: THREE.Group[] = [];
   const steeringWheels: THREE.Group[] = [];
-  const radius = 0.36;
+  const radius = WHEEL_RADIUS;
   const width = 0.32;
+  const wheelRest: Array<{ y: number; front: boolean; side: number }> = [];
 
-  const positions: Array<{ x: number; z: number; steers: boolean }> = [
-    { x: -1.02, z: 1.35, steers: true },
-    { x: 1.02, z: 1.35, steers: true },
-    { x: -1.05, z: -1.25, steers: false },
-    { x: 1.05, z: -1.25, steers: false },
-  ];
-
-  for (const p of positions) {
-    const w = buildForgedPerformanceWheel(radius, width, wheelStyle, caliperMat);
-    w.position.set(p.x, radius, p.z);
-    group.add(w);
-    wheels.push(w);
-    if (p.steers) steeringWheels.push(w);
+  // Built from the same anchors the fender arches use, so the two cannot
+  // disagree about where a wheel is.
+  for (const [z, x] of WHEEL_ANCHORS) {
+    const front = z > 0;
+    for (const side of [-1, 1]) {
+      const w = buildForgedPerformanceWheel(radius, width, wheelStyle, caliperMat);
+      w.position.set(side * x, radius, z);
+      group.add(w);
+      wheels.push(w);
+      wheelRest.push({ y: radius, front, side });
+      if (front) steeringWheels.push(w);
+    }
   }
 
   return {
@@ -672,6 +1007,8 @@ export function buildCar(colorHex: number, modelId?: string): VehicleRig {
     chassis,
     wheels,
     steeringWheels,
+    wheelRadius: radius,
+    wheelRest,
     exhausts,
     brakeLights: BRAKE_LIGHT_MAT,
     headlight,
@@ -735,15 +1072,39 @@ export function buildBike(colorHex: number, modelId?: string): VehicleRig {
     roughness: 0.1,
   });
 
-  // 1. Sleek Main Aerodynamic Fairing & Fuel Tank
-  const tank = taperedBox(0.5, 0.5, 1.45, 0.65, 0.7, FAIRING);
-  tank.position.set(0, 0.84, 0.1);
-  chassis.add(tank);
-
-  // Aerodynamic Front Nose Cone
-  const nose = taperedBox(0.46, 0.42, 0.88, 0.38, 0.45, FAIRING);
-  nose.position.set(0, 0.94, 0.86);
-  chassis.add(nose);
+  /*
+   * Fairing, tank and tail as one shell.
+   *
+   * A sportbike's bodywork is a single line: a pointed nose fairing lifting to
+   * the screen, falling into the tank, scooping down at the seat and kicking up
+   * into the tail hump. It was three tapered boxes stacked at different heights,
+   * which gives a stepped outline no motorcycle has.
+   *
+   * Narrow on purpose — 0.44 across. A bike is a blade seen from the front, and
+   * widening the fairing to car-like proportions is the fastest way to make one
+   * look like a toy.
+   */
+  const fairing = buildBodyShell(
+    [
+      [1.32, 0.74],   // nose tip, low and forward of the front wheel
+      [1.26, 1.00],   // fairing front
+      [1.02, 1.18],   // screen base
+      [0.68, 1.12],   // over the top
+      [0.28, 0.98],   // tank front
+      [-0.12, 1.04],  // tank crown
+      [-0.46, 0.90],  // seat scoop
+      [-0.78, 1.00],  // tail hump
+      [-1.06, 1.02],
+      [-1.22, 0.84],  // tail cut, sharp
+      [-1.02, 0.68],
+      [0.40, 0.62],   // belly pan
+      [1.12, 0.66],
+    ],
+    0.44,
+    FAIRING,
+    0.05,
+  );
+  chassis.add(fairing);
 
   const screen = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.28, 0.4), TINTED_GLASS);
   screen.position.set(0, 1.15, 0.8);
@@ -892,11 +1253,23 @@ export function buildBike(colorHex: number, modelId?: string): VehicleRig {
   group.add(rearWheel);
   wheels.push(rearWheel);
 
+  /*
+   * A bike's two wheels are different sizes and both sit on the centre line, so
+   * `side` is 0: there is no left or right for roll to push against. Its lean
+   * comes from the whole machine banking, not from one corner compressing.
+   */
+  const wheelRest = [
+    { y: 0.32, front: true, side: 0 },
+    { y: 0.34, front: false, side: 0 },
+  ];
+
   return {
     group,
     chassis,
     wheels,
     steeringWheels,
+    wheelRadius: 0.33,
+    wheelRest,
     exhausts,
     brakeLights: BRAKE_LIGHT_MAT,
     headlight,

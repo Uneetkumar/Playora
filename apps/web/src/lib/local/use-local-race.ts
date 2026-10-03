@@ -15,6 +15,8 @@ import {
 } from "@playora/game-engine";
 import type { GameId, GameResult, Player } from "@playora/game-types";
 import { gearFor } from "../../games/racing/gears";
+import { topSpeedFor } from "@playora/game-engine";
+import { CAR_BASE_TOP_SPEED } from "@playora/game-engine";
 
 export const LOCAL_DRIVER_ID = "local-you";
 
@@ -37,7 +39,13 @@ export interface LocalRaceOptions {
 const HUD_HZ = 12;
 
 /** Only used to spread the gear display across the rev range. */
-const MAX_SPEED_FOR_GEARS = 78;
+/*
+ * Removed: a hardcoded 78 is the *base* car speed, before the chosen vehicle's
+ * modifier. The gauge and the gear were therefore calibrated for a car the
+ * player might not be driving — a Thunder V10 tops out at 89 and pegged the
+ * needle, a bike at 72 and never reached the end of its dial. The real figure
+ * now comes from the vehicle itself.
+ */
 
 /**
  * A race running locally, on the same engine the server runs.
@@ -135,6 +143,7 @@ export function useLocalRace({
     bestLapTicks: null as number | null,
     lastLapTicks: null as number | null,
     gear: 1,
+    topSpeed: CAR_BASE_TOP_SPEED,
     standings: [] as Array<{
       playerId: string;
       place: number;
@@ -274,7 +283,8 @@ export function useLocalRace({
           currentLapTicks: Math.max(0, current.tick - (me?.lapStartTick ?? 0)),
           bestLapTicks: me?.bestLapTicks ?? null,
           lastLapTicks: me?.lapTicks.at(-1) ?? null,
-          gear: gearFor(me?.speed ?? 0, MAX_SPEED_FOR_GEARS),
+          gear: gearFor(me?.speed ?? 0, topSpeedFor(gameId, me?.vehicleId)),
+          topSpeed: topSpeedFor(gameId, me?.vehicleId),
           distance: me?.distance ?? 0,
           standings: view.standings.map((row) => ({
             playerId: row.playerId,

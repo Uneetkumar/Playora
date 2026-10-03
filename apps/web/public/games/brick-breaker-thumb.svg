@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <radialGradient id="bbBg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#31102b" />
+      <stop offset="60%" stop-color="#140612" />
+      <stop offset="100%" stop-color="#070206" />
+    </radialGradient>
+    <filter id="bbGlow">
+      <feDropShadow dx="0" dy="0" stdDeviation="12" flood-color="#f43f5e" flood-opacity="0.8" />
+    </filter>
+  </defs>
+  <rect width="800" height="600" fill="url(#bbBg)" />
+  <!-- Multicolored Glowing Bricks -->
+  <g filter="url(#bbGlow)">
+    <!-- Row 1: Ruby Red -->
+    <rect x="150" y="100" width="110" height="32" rx="6" fill="#f43f5e" />
+    <rect x="270" y="100" width="110" height="32" rx="6" fill="#f43f5e" />
+    <rect x="390" y="100" width="110" height="32" rx="6" fill="#f43f5e" />
+    <rect x="510" y="100" width="110" height="32" rx="6" fill="#f43f5e" />
+    <!-- Row 2: Amber Gold -->
+    <rect x="150" y="140" width="110" height="32" rx="6" fill="#f59e0b" />
+    <rect x="270" y="140" width="110" height="32" rx="6" fill="#f59e0b" />
+    <rect x="390" y="140" width="110" height="32" rx="6" fill="#f59e0b" />
+    <rect x="510" y="140" width="110" height="32" rx="6" fill="#f59e0b" />
+    <!-- Row 3: Emerald Cyan -->
+    <rect x="150" y="180" width="110" height="32" rx="6" fill="#06b6d4" />
+    <rect x="390" y="180" width="110" height="32" rx="6" fill="#06b6d4" />
+    <rect x="510" y="180" width="110" height="32" rx="6" fill="#06b6d4" />
+  </g>
+  <!-- Energetic Ball bouncing -->
+  <circle cx="330" cy="240" r="16" fill="#ffffff" filter="url(#bbGlow)" />
+  <!-- Bottom Paddle -->
+  <rect x="320" y="440" width="160" height="22" rx="11" fill="#38bdf8" filter="url(#bbGlow)" />
+  <text x="400" y="550" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="900" font-size="32" fill="#ffffff" letter-spacing="4" opacity="0.95">BRICK BREAKER</text>
+</svg>

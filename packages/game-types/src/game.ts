@@ -13,7 +13,23 @@ export type GameId =
   | "target-rush"
   | "hot-potato"
   | "bridge-builder"
-  | "ice-breaker";
+  | "ice-breaker"
+  | "tic-tac-toe"
+  | "connect-four"
+  | "ludo"
+  | "snake-ladder"
+  | "checkers"
+  | "battleship"
+  | "memory-match"
+  | "game-2048"
+  | "minesweeper"
+  | "word-guess"
+  | "flappy-bird"
+  | "retro-snake"
+  | "pong"
+  | "brick-breaker"
+  | "whack-a-mole"
+  | "simon-says";
 
 export type GameCategory =
   | "board"

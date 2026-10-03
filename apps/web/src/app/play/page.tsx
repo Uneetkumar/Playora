@@ -31,26 +31,31 @@ const RaceGameView = dynamic(
 );
 import { UnoGameView } from "../../games/uno/UnoGameView";
 import { ArcadeGameView } from "../../games/arcade/ArcadeGameView";
+import { TicTacToeView } from "../../games/board/TicTacToeView";
+import { ConnectFourView } from "../../games/board/ConnectFourView";
+import { LudoView } from "../../games/board/LudoView";
+import { SnakeLadderView } from "../../games/board/SnakeLadderView";
+import { CheckersView } from "../../games/board/CheckersView";
+import { BattleshipView } from "../../games/board/BattleshipView";
+import { PongView } from "../../games/board/PongView";
+import { MemoryMatchView } from "../../games/board/MemoryMatchView";
 import type { GameId } from "@playora/game-types";
 import { QuickMatch } from "../../components/play/quick-match";
 import { ExitConfirmationDialog } from "../../components/games/exit-confirmation-dialog";
 import { saveLocalMatch } from "../../hooks/use-local-history";
+import { capabilitiesFor, isSoloGame } from "../../lib/play/modes";
 
-const ARCADE_GAMES = new Set<GameId>([
-  "rope-rescue",
-  "ant-attack",
-  "bomb-pass",
-  "color-rush",
-  "falling-floor",
-  "pin-puzzle",
-  "target-rush",
-  "hot-potato",
-  "bridge-builder",
-  "ice-breaker",
-]);
+type StartedMode = LocalMode | "career" | "solo";
+type Started = { mode: StartedMode; aiLevel: AiLevel; gameId: GameId } | null;
 
-
-type Started = { mode: LocalMode | "career"; aiLevel: AiLevel; gameId: GameId } | null;
+function defaultModeFor(gameId: GameId): StartedMode {
+  if (isSoloGame(gameId)) return "solo";
+  const caps = capabilitiesFor(gameId);
+  if (caps?.ai) return "vs-ai";
+  if (caps?.passAndPlay) return "pass-and-play";
+  if (caps?.career) return "career";
+  return "vs-ai";
+}
 
 /**
  * Playable games, derived from the shared catalog.
@@ -82,66 +87,66 @@ export default function PlayPage() {
 function PlayPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [started, setStarted] = React.useState<Started>(null);
-  const [queueing, setQueueing] = React.useState(false);
 
   const requested = searchParams?.get("game");
   const gameId =
     requested && PLAYABLE_GAMES.some((g) => g.id === requested) ? (requested as GameId) : null;
 
+  const quickRequested = searchParams?.get("quick") === "1";
   const requestedMode = searchParams?.get("mode");
-  const mode: LocalMode | "career" | null =
-    requestedMode === "vs-ai"
-      ? "vs-ai"
-      : requestedMode === "pass-and-play"
-        ? "pass-and-play"
-        : requestedMode === "career"
-          ? "career"
-          : null;
-
   const levelParam = Number(searchParams?.get("level"));
   const aiLevel = (AI_LEVELS as readonly number[]).includes(levelParam)
     ? (levelParam as AiLevel)
     : RECOMMENDED_AI_LEVEL;
 
-  const quickRequested = searchParams?.get("quick") === "1";
+  const resolvedMode: StartedMode | null = React.useMemo(() => {
+    if (!gameId) return null;
+    if (requestedMode === "vs-ai" || requestedMode === "ai" || requestedMode === "bot") return "vs-ai";
+    if (requestedMode === "pass-and-play" || requestedMode === "local" || requestedMode === "pvp") return "pass-and-play";
+    if (requestedMode === "career") return "career";
+    if (requestedMode === "solo" || isSoloGame(gameId)) return "solo";
+    if (quickRequested) return null;
+    return defaultModeFor(gameId);
+  }, [gameId, requestedMode, quickRequested]);
 
-  // Send anything ambiguous to the page that owns the choice.
+  const [started, setStarted] = React.useState<Started>(() => {
+    if (gameId && resolvedMode && !quickRequested) {
+      return { mode: resolvedMode, aiLevel, gameId };
+    }
+    return null;
+  });
+  const [queueing, setQueueing] = React.useState(quickRequested);
+
+  // Synchronize state if URL changes or route updates
   React.useEffect(() => {
-    if (started || queueing) return;
     if (!gameId) {
       router.replace("/games");
-      return;
-    }
-    if (ARCADE_GAMES.has(gameId)) {
-      setStarted({ mode: "vs-ai", aiLevel: 1, gameId });
       return;
     }
     if (quickRequested) {
       setQueueing(true);
       return;
     }
-    if (!mode) router.replace(`/games/${gameId}`);
-  }, [gameId, mode, quickRequested, started, queueing, router]);
-
-  // Start as soon as the URL says what to start.
-  React.useEffect(() => {
-    if (!gameId || started) return;
-    if (ARCADE_GAMES.has(gameId)) {
-      setStarted({ mode: "vs-ai", aiLevel: 1, gameId });
-      return;
+    if (resolvedMode) {
+      setStarted((prev) => {
+        if (
+          prev &&
+          prev.gameId === gameId &&
+          prev.mode === resolvedMode &&
+          prev.aiLevel === aiLevel
+        ) {
+          return prev;
+        }
+        return { mode: resolvedMode, aiLevel, gameId };
+      });
     }
-    if (!mode) return;
-    setStarted({ mode, aiLevel, gameId });
-  }, [gameId, mode, aiLevel, started]);
+  }, [gameId, resolvedMode, quickRequested, aiLevel, router]);
 
   if (started) {
-    // Leaving a game goes back to the page that owns the choice. Clearing
-    // `started` would do nothing: it is derived from the URL, so the effect
-    // below would set it straight back.
+    // Leaving a game goes back to the page that owns the choice.
     const exit = () => router.push(`/games/${started.gameId}`);
 
-    if (ARCADE_GAMES.has(started.gameId)) {
+    if (isSoloGame(started.gameId)) {
       return (
         <div className="relative flex h-full w-full flex-col overflow-hidden bg-[#0A0B14]">
           <ArcadeGameView gameId={started.gameId} onExit={exit} />
@@ -152,13 +157,40 @@ function PlayPageContent() {
       return (
         <LocalRaceMatch
           gameId={started.gameId}
-          mode={started.mode}
+          mode={started.mode === "career" ? "career" : started.mode === "pass-and-play" ? "pass-and-play" : "vs-ai"}
           aiLevel={started.aiLevel}
           onExit={exit}
         />
       );
     }
     const localMode: LocalMode = started.mode === "pass-and-play" ? "pass-and-play" : "vs-ai";
+
+    if (started.gameId === "tic-tac-toe") {
+      return <TicTacToeView mode={localMode} aiLevel={started.aiLevel} onExit={exit} />;
+    }
+    if (started.gameId === "connect-four") {
+      return <ConnectFourView mode={localMode} aiLevel={started.aiLevel} onExit={exit} />;
+    }
+    if (started.gameId === "ludo") {
+      return <LudoView mode={localMode} onExit={exit} />;
+    }
+    if (started.gameId === "snake-ladder") {
+      return <SnakeLadderView mode={localMode} onExit={exit} />;
+    }
+    if (started.gameId === "checkers") {
+      return <CheckersView mode={localMode} onExit={exit} />;
+    }
+    if (started.gameId === "battleship") {
+      return <BattleshipView onExit={exit} />;
+    }
+    if (started.gameId === "pong") {
+      return <PongView mode={localMode} aiLevel={started.aiLevel} onExit={exit} />;
+    }
+    if (started.gameId === "memory-match") {
+      const memMode = started.mode === "pass-and-play" ? "pass-and-play" : started.mode === "solo" ? "solo" : "vs-ai";
+      return <MemoryMatchView mode={memMode} onExit={exit} />;
+    }
+
     return started.gameId === "uno" || started.gameId === "uno-no-mercy" ? (
       <LocalUnoMatch
         gameId={started.gameId}
@@ -254,8 +286,8 @@ function LocalMatch({
       />
 
       {/* Top Floating Control Bar */}
-      <div className="relative z-20 flex shrink-0 items-center justify-between px-3 sm:px-6 py-2 sm:py-2.5 border-b border-white/5 bg-[#090A14]/90 backdrop-blur-md">
-        <Button variant="outline" size="sm" className="gap-1.5 sm:gap-2 border-white/10 text-white hover:bg-white/10 text-xs sm:text-sm" onClick={handleBackClick}>
+      <div className="relative z-20 flex shrink-0 items-center justify-between px-3 sm:px-6 py-2 sm:py-2.5 border-b border-foreground/5 bg-[#090A14]/90 backdrop-blur-md">
+        <Button variant="outline" size="sm" className="gap-1.5 sm:gap-2 border-border text-foreground hover:bg-foreground/10 text-xs sm:text-sm" onClick={handleBackClick}>
           <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           <span className="hidden sm:inline">All modes</span>
           <span className="sm:hidden">Exit</span>
@@ -266,7 +298,7 @@ function LocalMatch({
             <WifiOff className="h-3 w-3" />
             Offline
           </Badge>
-          <Badge variant="secondary" className="gap-1 bg-white/10 text-white border border-white/10 text-[11px]">
+          <Badge variant="secondary" className="gap-1 bg-foreground/10 text-foreground border border-border text-[11px]">
             {started.mode === "vs-ai" ? (
               <>
                 <Bot className="h-3 w-3 text-[#A855F7]" />
@@ -276,7 +308,7 @@ function LocalMatch({
               "Pass & Play"
             )}
           </Badge>
-          <Button variant="outline" size="sm" className="gap-1.5 border-white/10 text-white hover:bg-white/10 text-xs sm:text-sm px-2.5 sm:px-3" onClick={game.restart}>
+          <Button variant="outline" size="sm" className="gap-1.5 border-border text-foreground hover:bg-foreground/10 text-xs sm:text-sm px-2.5 sm:px-3" onClick={game.restart}>
             <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             <span className="hidden sm:inline">Restart</span>
           </Button>
@@ -293,7 +325,7 @@ function LocalMatch({
       )}
 
       {game.isThinking && (
-        <div role="status" className="absolute top-14 right-6 z-50 flex items-center gap-2 rounded-full bg-[#7C3AED]/20 border border-[#7C3AED]/40 px-3 py-1 text-xs font-bold text-[#C084FC] shadow-lg">
+        <div role="status" className="absolute top-14 right-6 z-50 flex items-center gap-2 rounded-full bg-primary/20 border border-[#7C3AED]/40 px-3 py-1 text-xs font-bold text-[#C084FC] shadow-lg">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           <span>AI is thinking…</span>
         </div>
@@ -462,8 +494,8 @@ function LocalRaceMatch({
       />
 
       {/* Top Floating Control Bar */}
-      <div className="relative z-20 flex shrink-0 items-center justify-between px-3 sm:px-6 py-2 sm:py-2.5 border-b border-white/5 bg-[#090A14]/90 backdrop-blur-md">
-        <Button variant="outline" size="sm" className="gap-1.5 sm:gap-2 border-white/10 text-white hover:bg-white/10 text-xs sm:text-sm" onClick={() => setShowExitConfirm(true)}>
+      <div className="relative z-20 flex shrink-0 items-center justify-between px-3 sm:px-6 py-2 sm:py-2.5 border-b border-foreground/5 bg-[#090A14]/90 backdrop-blur-md">
+        <Button variant="outline" size="sm" className="gap-1.5 sm:gap-2 border-border text-foreground hover:bg-foreground/10 text-xs sm:text-sm" onClick={() => setShowExitConfirm(true)}>
           <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           <span className="hidden sm:inline">All modes</span>
           <span className="sm:hidden">Exit</span>
@@ -473,8 +505,8 @@ function LocalRaceMatch({
             <WifiOff className="h-3 w-3" />
             Offline
           </Badge>
-          <Badge variant="secondary" className="bg-white/10 text-white border border-white/10 text-[11px]">{isBike ? "Bike Race" : "Car Race"}</Badge>
-          <Badge variant="secondary" className="hidden sm:inline-flex bg-white/10 text-white border border-white/10 text-[11px]">
+          <Badge variant="secondary" className="bg-foreground/10 text-foreground border border-border text-[11px]">{isBike ? "Bike Race" : "Car Race"}</Badge>
+          <Badge variant="secondary" className="hidden sm:inline-flex bg-foreground/10 text-foreground border border-border text-[11px]">
             {raceMode === "career"
               ? "Career"
               : raceMode === "vs-ai"

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <radialGradient id="simonBg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#1e1b4b" />
+      <stop offset="60%" stop-color="#0d0c24" />
+      <stop offset="100%" stop-color="#04030d" />
+    </radialGradient>
+    <filter id="simonGlow">
+      <feDropShadow dx="0" dy="0" stdDeviation="20" flood-color="#3b82f6" flood-opacity="0.8" />
+    </filter>
+  </defs>
+  <rect width="800" height="600" fill="url(#simonBg)" />
+  <!-- Center Simon Console Wheel -->
+  <g transform="translate(400, 270)" filter="url(#simonGlow)">
+    <!-- Base Outer Shell -->
+    <circle cx="0" cy="0" r="180" fill="#0f172a" stroke="#ffffff" stroke-opacity="0.2" stroke-width="6" />
+    <!-- 4 Quadrants -->
+    <!-- Green (Top-Left) -->
+    <path d="M-10,-10 L-10,-160 A150,150 0 0,0 -160,-10 Z" fill="#22c55e" stroke="#15803d" stroke-width="4" opacity="0.85" />
+    <!-- Red (Top-Right) -->
+    <path d="M10,-10 L160,-10 A150,150 0 0,0 10,-160 Z" fill="#ef4444" stroke="#b91c1c" stroke-width="4" opacity="0.95" filter="drop-shadow(0 0 16px #ef4444)" />
+    <!-- Yellow (Bottom-Left) -->
+    <path d="M-10,10 L-160,10 A150,150 0 0,0 -10,160 Z" fill="#eab308" stroke="#a16207" stroke-width="4" opacity="0.85" />
+    <!-- Blue (Bottom-Right) -->
+    <path d="M10,10 L10,160 A150,150 0 0,0 160,10 Z" fill="#3b82f6" stroke="#1d4ed8" stroke-width="4" opacity="0.85" />
+    <!-- Center Hub -->
+    <circle cx="0" cy="0" r="60" fill="#020617" stroke="#334155" stroke-width="4" />
+    <circle cx="0" cy="0" r="42" fill="#0f172a" />
+    <text x="0" y="8" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="900" font-size="20" fill="#ffffff" letter-spacing="2">SIMON</text>
+  </g>
+  <text x="400" y="550" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="900" font-size="32" fill="#ffffff" letter-spacing="4" opacity="0.95">SIMON SAYS</text>
+</svg>

@@ -43,7 +43,7 @@ function SectionHeading({
       {href && (
         <Link
           href={href}
-          className="flex items-center gap-0.5 text-xs text-primary transition-opacity hover:opacity-80"
+          className="flex items-center gap-0.5 text-xs text-primary-accent transition-opacity hover:opacity-80"
         >
           {action ?? "See all"}
           <ChevronRight className="h-3.5 w-3.5" aria-hidden />
@@ -121,7 +121,7 @@ export function HomeDashboard() {
             <>
               <div className="flex items-baseline justify-between">
                 <span className="font-display text-sm font-bold text-foreground">
-                  Level <span className="numeric text-primary">{progression.level.level}</span>
+                  Level <span className="numeric text-primary-accent">{progression.level.level}</span>
                 </span>
                 <span className="numeric text-xs text-muted-foreground">
                   {progression.level.xpIntoLevel} / {progression.level.xpForNextLevel} XP
@@ -177,7 +177,7 @@ export function HomeDashboard() {
                   <div className="group rounded-lg border border-border bg-muted/20 p-4 transition-colors hover:border-primary">
                     <div className="font-display font-bold text-foreground">{r.gameName}</div>
                     <div className="mt-1 flex items-center gap-2">
-                      <span className="numeric text-lg text-primary">{r.rating}</span>
+                      <span className="numeric text-lg text-primary-accent">{r.rating}</span>
                       <Badge variant="secondary" className="text-[10px]">
                         {r.rank.label}
                       </Badge>
@@ -234,7 +234,7 @@ export function HomeDashboard() {
                     </div>
                   </div>
                   <Play
-                    className="h-5 w-5 shrink-0 fill-current text-muted-foreground transition-colors group-hover:text-primary"
+                    className="h-5 w-5 shrink-0 fill-current text-muted-foreground transition-colors group-hover:text-primary-accent"
                     aria-hidden
                   />
                 </div>

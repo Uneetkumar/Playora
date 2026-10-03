@@ -107,10 +107,10 @@ function RoomsContent() {
               <Swords className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="font-display text-2xl sm:text-3xl font-black text-white tracking-tight">
+              <h1 className="font-display text-2xl sm:text-3xl font-black text-foreground tracking-tight">
                 {gameParam ? `${GAME_NAMES[gameParam] ?? gameParam} Rooms` : "Game Rooms"}
               </h1>
-              <p className="text-xs text-white/50 mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 {liveRooms.length} live {liveRooms.length === 1 ? "room" : "rooms"} right now
               </p>
             </div>
@@ -122,13 +122,13 @@ function RoomsContent() {
             type="button"
             onClick={() => void refresh()}
             title="Refresh rooms"
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/5 border border-white/10 text-white/60 hover:bg-white/10 hover:text-white transition-all"
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-foreground/5 border border-border text-foreground/80 hover:bg-foreground/10 hover:text-foreground transition-all"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
           <Button
             onClick={() => { setIsPrivate(false); setIsCreateOpen(true); }}
-            className="gap-2 bg-[#7C3AED] hover:bg-[#9333EA] text-white font-bold rounded-xl shadow-[0_0_20px_rgba(124,58,237,0.35)] h-9 px-4 text-sm"
+            className="gap-2 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl shadow-[0_0_20px_rgba(124,58,237,0.35)] h-9 px-4 text-sm"
           >
             <Plus className="h-4 w-4" />
             Create Room
@@ -141,7 +141,7 @@ function RoomsContent() {
         {/* Row 1: Filter tabs + Search */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
           {/* Tab pills */}
-          <div className="flex items-center gap-1.5 rounded-2xl bg-white/5 border border-white/8 p-1 shrink-0">
+          <div className="flex items-center gap-1.5 rounded-2xl bg-foreground/5 border border-border p-1 shrink-0">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -150,14 +150,14 @@ function RoomsContent() {
                 className={cn(
                   "flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-bold transition-all",
                   activeTab === tab.id
-                    ? "bg-[#7C3AED] text-white shadow-md"
-                    : "text-white/50 hover:text-white hover:bg-white/5"
+                    ? "bg-primary text-white shadow-md"
+                    : "text-muted-foreground hover:text-foreground hover:bg-foreground/5"
                 )}
               >
                 {tab.label}
                 <span className={cn(
                   "rounded-full px-1.5 py-0.5 text-[10px] font-black",
-                  activeTab === tab.id ? "bg-white/20 text-white" : "bg-white/10 text-white/40"
+                  activeTab === tab.id ? "bg-foreground/20 text-foreground" : "bg-foreground/10 text-muted-foreground"
                 )}>
                   {tab.count}
                 </span>
@@ -167,12 +167,12 @@ function RoomsContent() {
 
           {/* Search */}
           <div className="relative flex-1 min-w-0 max-w-xs">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search rooms..."
-              className="h-9 w-full rounded-xl border border-white/10 bg-white/5 pl-9 pr-3 text-xs text-white placeholder:text-white/30 outline-none focus:border-[#7C3AED]/60 focus:ring-1 focus:ring-[#7C3AED]/30 transition-all"
+              className="h-9 w-full rounded-xl border border-border bg-foreground/5 pl-9 pr-3 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-[#7C3AED]/60 focus:ring-1 focus:ring-[#7C3AED]/30 transition-all"
             />
           </div>
         </div>
@@ -180,19 +180,19 @@ function RoomsContent() {
         {/* Row 2: Join by code */}
         <form onSubmit={handleJoinByCode} className="flex items-center gap-2 max-w-sm">
           <div className="relative flex-1">
-            <Hash className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
+            <Hash className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
               value={joinCodeInput}
               onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
               placeholder="ENTER PRIVATE ROOM CODE..."
               maxLength={8}
-              className="h-9 w-full rounded-xl border border-white/10 bg-white/5 pl-9 pr-3 font-mono text-xs uppercase tracking-widest text-white placeholder:text-white/25 outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
+              className="h-9 w-full rounded-xl border border-border bg-foreground/5 pl-9 pr-3 font-mono text-xs uppercase tracking-widest text-foreground placeholder:text-muted-foreground outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
             />
           </div>
           <button
             type="submit"
             disabled={!joinCodeInput.trim()}
-            className="flex h-9 items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-950/40 px-4 text-xs font-bold text-amber-300 hover:bg-amber-950/60 hover:border-amber-500/60 transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            className="flex h-9 items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 dark:bg-amber-950/40 px-4 text-xs font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 dark:hover:bg-amber-950/60 hover:border-amber-500/60 transition-all disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
           >
             <Lock className="h-3.5 w-3.5" />
             Join
@@ -204,7 +204,7 @@ function RoomsContent() {
       {error && (
         <div
           role="alert"
-          className="flex items-center justify-between gap-4 rounded-2xl border border-red-500/20 bg-red-950/30 px-4 py-3 text-sm text-red-300"
+          className="flex items-center justify-between gap-4 rounded-2xl border border-red-500/20 bg-red-500/10 dark:bg-red-950/30 px-4 py-3 text-sm text-red-700 dark:text-red-300"
         >
           <span>{error}</span>
           <button
@@ -223,7 +223,7 @@ function RoomsContent() {
           {[0, 1, 2].map((i) => (
             <div
               key={i}
-              className="h-44 animate-pulse rounded-2xl border border-white/5 bg-white/3"
+              className="h-44 animate-pulse rounded-2xl border border-border bg-foreground/3"
             />
           ))}
         </div>
@@ -254,17 +254,17 @@ function RoomsContent() {
       >
         <div className="space-y-5">
           <div>
-            <label className="text-xs font-semibold text-white/70">Room Name (optional)</label>
+            <label className="text-xs font-semibold text-foreground/80">Room Name (optional)</label>
             <Input
               value={roomName}
               onChange={(e) => setRoomName(e.target.value)}
               placeholder="e.g. Saturday Night Showdown"
-              className="mt-1.5 bg-white/5 border-white/10 text-white"
+              className="mt-1.5 bg-foreground/5 border-border text-foreground"
             />
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-white/70 mb-2 block">Visibility</label>
+            <label className="text-xs font-semibold text-foreground/80 mb-2 block">Visibility</label>
             <div className="grid grid-cols-2 gap-3">
               {[
                 {
@@ -294,31 +294,31 @@ function RoomsContent() {
                     onClick={() => setIsPrivate(opt.value)}
                     className={cn(
                       "p-3.5 rounded-xl border text-left transition-all",
-                      active ? opt.activeClass : "border-white/10 bg-white/5 hover:bg-white/8"
+                      active ? opt.activeClass : "border-border bg-foreground/5 hover:bg-foreground/8"
                     )}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <div className={cn("p-1.5 rounded-lg", active ? opt.iconClass : "bg-white/10 text-white/40")}>
+                      <div className={cn("p-1.5 rounded-lg", active ? opt.iconClass : "bg-foreground/10 text-muted-foreground")}>
                         <opt.icon className="h-4 w-4" />
                       </div>
                       {active && <CheckCircle2 className={cn("h-4 w-4", opt.checkClass)} />}
                     </div>
-                    <p className="text-sm font-bold text-white">{opt.label}</p>
-                    <p className="text-[11px] text-white/50 mt-0.5 leading-relaxed">{opt.desc}</p>
+                    <p className="text-sm font-bold text-foreground">{opt.label}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{opt.desc}</p>
                   </button>
                 );
               })}
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-3 border-t border-white/10">
-            <Button variant="ghost" onClick={() => setIsCreateOpen(false)} className="text-white/60">
+          <div className="flex justify-end gap-3 pt-3 border-t border-border">
+            <Button variant="ghost" onClick={() => setIsCreateOpen(false)} className="text-foreground/80">
               Cancel
             </Button>
             <Button
               onClick={handleCreateRoom}
               disabled={isCreating}
-              className="bg-[#7C3AED] hover:bg-[#9333EA] text-white font-bold shadow-[0_0_16px_rgba(124,58,237,0.35)]"
+              className="bg-primary hover:bg-primary/90 text-white font-bold shadow-[0_0_16px_rgba(124,58,237,0.35)]"
             >
               {isCreating ? "Creating…" : `Create ${isPrivate ? "Private" : "Public"} Room`}
             </Button>
@@ -357,7 +357,7 @@ function RoomCard({
         "group relative flex flex-col justify-between rounded-2xl border p-4 transition-all duration-200 hover:-translate-y-0.5",
         room.isPrivate
           ? "border-amber-500/20 bg-gradient-to-b from-amber-950/30 to-[#0B0D17]/90 hover:border-amber-500/40 hover:shadow-[0_0_20px_rgba(245,158,11,0.1)]"
-          : "border-white/10 bg-gradient-to-b from-[#1A1B2E]/80 to-[#0B0D17]/90 hover:border-[#7C3AED]/40 hover:shadow-[0_0_20px_rgba(124,58,237,0.1)]"
+          : "border-foreground/10 bg-gradient-to-b from-[#1A1B2E]/80 to-[#0B0D17]/90 hover:border-[#7C3AED]/40 hover:shadow-[0_0_20px_rgba(124,58,237,0.1)]"
       )}
     >
       {/* Top row */}
@@ -365,16 +365,16 @@ function RoomCard({
         <div className="flex items-center gap-2.5">
           <span className="text-2xl">{emoji}</span>
           <div className="min-w-0">
-            <p className="text-sm font-black text-white truncate">{room.name}</p>
-            <p className="text-[11px] text-white/50">{gameName}</p>
+            <p className="text-sm font-black text-foreground truncate">{room.name}</p>
+            <p className="text-[11px] text-muted-foreground">{gameName}</p>
           </div>
         </div>
         {room.isPrivate ? (
-          <span className="flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-950/50 px-2 py-0.5 text-[10px] font-bold text-amber-300 shrink-0">
+          <span className="flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 dark:bg-amber-950/50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300 shrink-0">
             <Lock className="h-2.5 w-2.5" /> Private
           </span>
         ) : (
-          <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-950/50 px-2 py-0.5 text-[10px] font-bold text-emerald-300 shrink-0">
+          <span className="flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 dark:bg-emerald-950/50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-300 shrink-0">
             <Globe2 className="h-2.5 w-2.5" /> Public
           </span>
         )}
@@ -382,7 +382,7 @@ function RoomCard({
 
       {/* Meta */}
       <div className="space-y-1.5 mb-4">
-        <div className="flex items-center justify-between text-[11px] text-white/50">
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <Users className="h-3 w-3" />
             {room.playerCount} / {room.maxPlayers} players
@@ -392,17 +392,17 @@ function RoomCard({
             {age}
           </span>
         </div>
-        <div className="flex items-center justify-between text-[11px] text-white/50">
-          <span>Host: <span className="text-white/70 font-semibold">{room.hostUsername}</span></span>
-          <span className="font-mono text-[10px] text-white/30">{room.code}</span>
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+          <span>Host: <span className="text-foreground/80 font-semibold">{room.hostUsername}</span></span>
+          <span className="font-mono text-[10px] text-muted-foreground">{room.code}</span>
         </div>
 
         {/* Player fill bar */}
-        <div className="mt-1.5 h-1 w-full rounded-full bg-white/5 overflow-hidden">
+        <div className="mt-1.5 h-1 w-full rounded-full bg-foreground/5 overflow-hidden">
           <div
             className={cn(
               "h-full rounded-full transition-all",
-              isFull ? "bg-red-500" : room.isPrivate ? "bg-amber-500" : "bg-[#7C3AED]"
+              isFull ? "bg-red-500" : room.isPrivate ? "bg-amber-500" : "bg-primary"
             )}
             style={{ width: `${(room.playerCount / room.maxPlayers) * 100}%` }}
           />
@@ -417,10 +417,10 @@ function RoomCard({
         className={cn(
           "flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-all",
           isFull
-            ? "bg-white/5 text-white/30 cursor-not-allowed border border-white/10"
+            ? "bg-foreground/5 text-muted-foreground cursor-not-allowed border border-border"
             : room.isPrivate
             ? "bg-amber-500/15 border border-amber-500/30 text-amber-300 hover:bg-amber-500/25"
-            : "bg-[#7C3AED]/80 border border-[#7C3AED]/50 text-white hover:bg-[#9333EA] shadow-[0_0_12px_rgba(124,58,237,0.3)]"
+            : "bg-primary/80 border border-[#7C3AED]/50 text-white hover:bg-primary/90 shadow-[0_0_12px_rgba(124,58,237,0.3)]"
         )}
       >
         <Play className="h-3.5 w-3.5 fill-current" />
@@ -440,7 +440,7 @@ function EmptyState({
   onCreatePrivate: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-5 rounded-3xl border border-dashed border-white/10 bg-[#0F111E]/40 py-20 text-center">
+    <div className="flex flex-col items-center justify-center gap-5 rounded-3xl border border-dashed border-foreground/10 bg-card/40 py-20 text-center">
       <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-[#7C3AED]/20 to-[#4F46E5]/20 border border-[#7C3AED]/20">
         {isPrivateTab ? (
           <Lock className="h-9 w-9 text-amber-400/70" />
@@ -450,10 +450,10 @@ function EmptyState({
       </div>
 
       <div className="max-w-sm space-y-1.5">
-        <h3 className="font-display text-xl font-black text-white">
+        <h3 className="font-display text-xl font-black text-foreground">
           {isPrivateTab ? "Private Rooms are Hidden" : "No Active Rooms"}
         </h3>
-        <p className="text-sm text-white/40 leading-relaxed">
+        <p className="text-sm text-muted-foreground leading-relaxed">
           {isPrivateTab
             ? "Private matches don't appear in the directory. Enter the room code given by your host using the form above."
             : "No public rooms are waiting right now. Be the first — create a room and invite friends!"}
@@ -465,7 +465,7 @@ function EmptyState({
           <button
             type="button"
             onClick={onCreatePublic}
-            className="flex items-center gap-2 rounded-xl bg-[#7C3AED] hover:bg-[#9333EA] px-5 py-2.5 text-sm font-bold text-white shadow-[0_0_20px_rgba(124,58,237,0.35)] transition-all hover:scale-105"
+            className="flex items-center gap-2 rounded-xl bg-primary hover:bg-primary/90 px-5 py-2.5 text-sm font-bold text-white shadow-[0_0_20px_rgba(124,58,237,0.35)] transition-all hover:scale-105"
           >
             <Globe2 className="h-4 w-4" />
             Create Public Room
@@ -474,7 +474,7 @@ function EmptyState({
         <button
           type="button"
           onClick={onCreatePrivate}
-          className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-950/30 hover:bg-amber-950/50 px-5 py-2.5 text-sm font-bold text-amber-300 transition-all hover:scale-105"
+          className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 dark:bg-amber-950/30 hover:bg-amber-500/20 dark:hover:bg-amber-950/50 px-5 py-2.5 text-sm font-bold text-amber-700 dark:text-amber-300 transition-all hover:scale-105"
         >
           <Lock className="h-4 w-4" />
           Create Private Room
@@ -488,10 +488,10 @@ export default function RoomsPage() {
   return (
     <React.Suspense fallback={
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        <div className="h-10 w-48 rounded-xl bg-white/5 animate-pulse mb-6" />
+        <div className="h-10 w-48 rounded-xl bg-foreground/5 animate-pulse mb-6" />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-44 rounded-2xl border border-white/5 bg-white/3 animate-pulse" />
+            <div key={i} className="h-44 rounded-2xl border border-border bg-foreground/3 animate-pulse" />
           ))}
         </div>
       </div>

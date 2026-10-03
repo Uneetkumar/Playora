@@ -387,10 +387,15 @@ export function CurvedPlayerHand({
   noMercy?: boolean;
 }) {
   const total = cards.length;
-  if (total === 0) {
-    return <div className="text-sm font-semibold text-white/40">No cards remaining</div>;
-  }
 
+  /*
+   * Above the empty-hand return, not below it.
+   *
+   * These ran after `if (total === 0) return`, so the render where a player
+   * plays their last card called two fewer hooks than the render before it.
+   * React tracks hooks positionally: that is a crash on the most common event
+   * in the game — going out — not a style problem.
+   */
   const [isMobile, setIsMobile] = React.useState(false);
   React.useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 640);
@@ -398,6 +403,10 @@ export function CurvedPlayerHand({
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
+
+  if (total === 0) {
+    return <div className="text-sm font-semibold text-white/40">No cards remaining</div>;
+  }
 
   const maxHandWidth = isMobile ? Math.min(350, typeof window !== "undefined" ? window.innerWidth - 32 : 350) : 720;
   const cardWidth = isMobile ? 54 : 84;

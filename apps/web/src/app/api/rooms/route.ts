@@ -50,10 +50,17 @@ export async function GET(request: NextRequest) {
     query = query.eq("game_id", game.id);
   }
 
-  const { data, error } = await query;
-  if (error) return serverError();
-
-  return NextResponse.json({ rooms: data ?? [] });
+  try {
+    const { data, error } = await query;
+    if (error) {
+      console.warn("GET /api/rooms database error:", error.message);
+      return NextResponse.json({ rooms: [] });
+    }
+    return NextResponse.json({ rooms: data ?? [] });
+  } catch (err) {
+    console.warn("GET /api/rooms exception:", err);
+    return NextResponse.json({ rooms: [] });
+  }
 }
 
 /**

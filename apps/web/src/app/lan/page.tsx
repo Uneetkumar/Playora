@@ -17,7 +17,9 @@ import {
   Loader2,
 } from "lucide-react";
 import { GAME_CATALOG, isPlayable } from "../../lib/games/catalog";
-import type { GameId } from "@playora/game-types";
+import type { GameId, Player } from "@playora/game-types";
+import type { ChessPlayerView } from "@playora/game-engine";
+import type { UnoPlayerView, RacingPlayerView } from "@playora/game-engine";
 import { useAuthStore } from "../../lib/store/auth-store";
 import { QrDisplay } from "../../components/lan/qr-display";
 import { QrScanner } from "../../components/lan/qr-scanner";
@@ -27,19 +29,9 @@ import { UnoGameView } from "../../games/uno/UnoGameView";
 import { ArcadeGameView } from "../../games/arcade/ArcadeGameView";
 import { ExitConfirmationDialog } from "../../components/games/exit-confirmation-dialog";
 import dynamic from "next/dynamic";
+import { isSoloGame } from "../../lib/play/modes";
 
-const ARCADE_GAMES = new Set<GameId>([
-  "rope-rescue",
-  "ant-attack",
-  "bomb-pass",
-  "color-rush",
-  "falling-floor",
-  "pin-puzzle",
-  "target-rush",
-  "hot-potato",
-  "bridge-builder",
-  "ice-breaker",
-]);
+
 
 const OnlineRaceView = dynamic(
   () => import("../../games/racing/OnlineRaceView").then((m) => m.OnlineRaceView),
@@ -191,7 +183,7 @@ function LanPlayContent() {
     return (
       <div className="mx-auto max-w-[1400px] px-4 py-16 sm:px-8 flex flex-col items-center justify-center min-h-[500px]">
         <Loader2 className="h-8 w-8 animate-spin text-cyan-400 mb-3" />
-        <p className="text-xs font-semibold text-white/50">Initializing Wi-Fi lobby...</p>
+        <p className="text-xs font-semibold text-muted-foreground">Initializing Wi-Fi lobby...</p>
       </div>
     );
   }
@@ -214,11 +206,11 @@ function LanPlayContent() {
         />
 
         {/* Top Control Bar */}
-        <div className="relative z-20 flex shrink-0 items-center justify-between px-4 sm:px-6 py-2.5 border-b border-white/5 bg-[#090A14]/90 backdrop-blur-md">
+        <div className="relative z-20 flex shrink-0 items-center justify-between px-4 sm:px-6 py-2.5 border-b border-foreground/5 bg-[#090A14]/90 backdrop-blur-md">
           <Button
             variant="outline"
             size="sm"
-            className="gap-2 border-white/10 text-white hover:bg-white/10"
+            className="gap-2 border-border text-foreground hover:bg-foreground/10"
             onClick={() => {
               if (lan.lastResult) {
                 router.push(`/games/${selectedGame}`);
@@ -236,10 +228,10 @@ function LanPlayContent() {
               <Zap className="h-3 w-3 fill-current" />
               Direct Wi-Fi (0ms Ping)
             </Badge>
-            <Badge variant="secondary" className="bg-white/10 text-white border border-white/10 text-[11px]">
+            <Badge variant="secondary" className="bg-foreground/10 text-foreground border border-border text-[11px]">
               {lanCode}
             </Badge>
-            <Badge variant="secondary" className="hidden sm:inline-flex bg-white/10 text-white border border-white/10 text-[11px]">
+            <Badge variant="secondary" className="hidden sm:inline-flex bg-foreground/10 text-foreground border border-border text-[11px]">
               {currentGame.name}
             </Badge>
           </div>
@@ -249,8 +241,8 @@ function LanPlayContent() {
         <div className="relative flex flex-1 w-full h-full overflow-hidden">
           {selectedGame === "chess" && (
             <ChessGameView
-              gameState={lan.gameState as any}
-              players={lan.players as any}
+              gameState={lan.gameState as ChessPlayerView}
+              players={lan.players as unknown as Record<string, Player>}
               currentUserId={userId}
               lastResult={lan.lastResult}
               onMakeMove={(from, to, promo) => lan.sendAction("MOVE", { from, to, promotion: promo })}
@@ -264,8 +256,8 @@ function LanPlayContent() {
 
           {(selectedGame === "uno" || selectedGame === "uno-no-mercy") && (
             <UnoGameView
-              gameState={lan.gameState as any}
-              players={lan.players as any}
+              gameState={lan.gameState as UnoPlayerView}
+              players={lan.players as unknown as Record<string, Player>}
               currentUserId={userId}
               isOpponentThinking={false}
               noMercy={selectedGame === "uno-no-mercy"}
@@ -287,8 +279,8 @@ function LanPlayContent() {
           {(selectedGame === "car-race" || selectedGame === "bike-race") && (
             <OnlineRaceView
               gameId={selectedGame}
-              gameState={lan.gameState as any}
-              players={lan.players as any}
+              gameState={lan.gameState as RacingPlayerView}
+              players={lan.players as unknown as Record<string, Player>}
               currentUserId={userId}
               onLeave={() => {
                 if (lan.lastResult) {
@@ -301,7 +293,7 @@ function LanPlayContent() {
             />
           )}
 
-          {ARCADE_GAMES.has(selectedGame) && (
+          {isSoloGame(selectedGame) && (
             <ArcadeGameView
               gameId={selectedGame}
               onExit={() => {
@@ -341,16 +333,16 @@ function LanPlayContent() {
               </span>
             </div>
 
-            <h1 className="font-display text-3xl sm:text-4xl font-black text-white tracking-tight">
+            <h1 className="font-display text-3xl sm:text-4xl font-black text-foreground tracking-tight">
               Play with Friends on Same Wi-Fi
             </h1>
-            <p className="mt-1 text-sm sm:text-base text-white/60 max-w-xl leading-relaxed">
+            <p className="mt-1 text-sm sm:text-base text-foreground/80 max-w-xl leading-relaxed">
               Connect phone to laptop or friends on the same local network instantly. Scan QR code to jump straight into the action with 0 lag.
             </p>
           </div>
 
           <Link href="/games">
-            <Button variant="outline" size="sm" className="gap-2 border-white/10 text-white hover:bg-white/10">
+            <Button variant="outline" size="sm" className="gap-2 border-border text-foreground hover:bg-foreground/10">
               <ArrowLeft className="h-4 w-4" /> All Games
             </Button>
           </Link>
@@ -362,7 +354,7 @@ function LanPlayContent() {
         {/* Left Column: QR Code Display / Scanner */}
         <div className="lg:col-span-7 space-y-5">
           {/* Mode Switch Tabs */}
-          <div className="flex items-center gap-2 border-b border-white/10 pb-3">
+          <div className="flex items-center gap-2 border-b border-border pb-3">
             <button
               type="button"
               onClick={() => {
@@ -372,7 +364,7 @@ function LanPlayContent() {
               className={`flex items-center gap-2 rounded-2xl px-5 py-2.5 text-xs sm:text-sm font-bold transition-all ${
                 activeTab === "host"
                   ? "bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-[0_0_20px_rgba(6,182,212,0.4)] scale-105"
-                  : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10"
+                  : "bg-foreground/5 text-foreground/80 hover:bg-foreground/10 hover:text-foreground border border-border"
               }`}
             >
               <QrCode className="h-4 w-4" />
@@ -388,7 +380,7 @@ function LanPlayContent() {
               className={`flex items-center gap-2 rounded-2xl px-5 py-2.5 text-xs sm:text-sm font-bold transition-all ${
                 activeTab === "join"
                   ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-[0_0_20px_rgba(124,58,237,0.4)] scale-105"
-                  : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10"
+                  : "bg-foreground/5 text-foreground/80 hover:bg-foreground/10 hover:text-foreground border border-border"
               }`}
             >
               <Camera className="h-4 w-4" />
@@ -409,7 +401,7 @@ function LanPlayContent() {
                       </span>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-cyan-400">Hosting</p>
-                        <p className="text-sm font-black text-white">{currentGame.name}</p>
+                        <p className="text-sm font-black text-foreground">{currentGame.name}</p>
                       </div>
                     </div>
                     <button
@@ -423,14 +415,14 @@ function LanPlayContent() {
                 ) : (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-white/50">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                         Select Game
                       </label>
                       {gameParam && (
                         <button
                           type="button"
                           onClick={() => setIsChangingGame(false)}
-                          className="text-[10px] text-white/50 hover:text-white"
+                          className="text-[10px] text-muted-foreground hover:text-foreground"
                         >
                           Cancel
                         </button>
@@ -447,8 +439,8 @@ function LanPlayContent() {
                           }}
                           className={`flex items-center gap-2.5 rounded-xl p-2.5 border text-left transition-all ${
                             selectedGame === g.id
-                              ? "border-cyan-400 bg-cyan-950/40 text-white shadow-[0_0_15px_rgba(6,182,212,0.3)] ring-1 ring-cyan-400/40"
-                              : "border-white/5 bg-[#0F111E]/80 text-white/70 hover:bg-white/5"
+                              ? "border-cyan-400 bg-cyan-950/40 text-foreground shadow-[0_0_15px_rgba(6,182,212,0.3)] ring-1 ring-cyan-400/40"
+                              : "border-foreground/5 bg-card/80 text-white/70 hover:bg-white/5"
                           }`}
                         >
                           <span className="text-base shrink-0">
@@ -456,7 +448,7 @@ function LanPlayContent() {
                           </span>
                           <div className="min-w-0">
                             <p className="text-xs font-black truncate">{g.name}</p>
-                            <p className="text-[10px] text-white/40 truncate">{g.category}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">{g.category}</p>
                           </div>
                         </button>
                       ))}
@@ -466,13 +458,13 @@ function LanPlayContent() {
               </div>
 
               {/* Right: QR Code & Wi-Fi IP Status */}
-              <div className="flex-1 rounded-3xl border border-white/10 bg-[#0F111E]/90 p-6 shadow-xl backdrop-blur-md space-y-4">
+              <div className="flex-1 rounded-3xl border border-foreground/10 bg-card/90 p-6 shadow-xl backdrop-blur-md space-y-4">
                 {/* Same-Wi-Fi Network Address Banner */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-2xl border border-cyan-500/30 bg-cyan-950/40 p-3 text-xs">
                   <div className="flex items-center gap-2">
                     <span className="flex h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                    <span className="font-bold text-white/80 text-[11px] uppercase tracking-wider">Wi-Fi IP:</span>
-                    <code className="rounded-lg bg-black/50 border border-white/10 px-2.5 py-1 font-mono text-xs text-cyan-300 font-bold">
+                    <span className="font-bold text-foreground/80 text-[11px] uppercase tracking-wider">Wi-Fi IP:</span>
+                    <code className="rounded-lg bg-black/50 border border-border px-2.5 py-1 font-mono text-xs text-cyan-300 font-bold">
                       {effectiveOrigin}
                     </code>
                   </div>
@@ -486,13 +478,13 @@ function LanPlayContent() {
                 </div>
 
                 {isEditingIp && (
-                  <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/60 p-3 text-xs">
+                  <div className="flex items-center gap-2 rounded-2xl border border-border bg-black/60 p-3 text-xs">
                     <input
                       type="text"
                       placeholder="e.g. 192.168.1.34 or mytunnel.ngrok.io"
                       value={customIp}
                       onChange={(e) => setCustomIp(e.target.value)}
-                      className="flex-1 rounded-xl border border-white/15 bg-white/5 px-3 py-1.5 text-white font-mono placeholder:text-white/30"
+                      className="flex-1 rounded-xl border border-border bg-foreground/5 px-3 py-1.5 text-foreground font-mono placeholder:text-muted-foreground"
                     />
                     <Button size="sm" onClick={() => setIsEditingIp(false)} className="bg-cyan-600 hover:bg-cyan-500 text-white font-bold">
                       Save
@@ -512,7 +504,7 @@ function LanPlayContent() {
 
           {/* Tab 2: Join with Scanner */}
           {activeTab === "join" && (
-            <div className="rounded-3xl border border-white/10 bg-[#0F111E]/90 p-6 shadow-xl">
+            <div className="rounded-3xl border border-foreground/10 bg-card/90 p-6 shadow-xl">
               {showScanner ? (
                 <QrScanner
                   onScan={handleScanSuccess}
@@ -524,10 +516,10 @@ function LanPlayContent() {
                     <CheckCircle2 className="h-8 w-8" />
                   </div>
                   <div>
-                    <h3 className="font-display text-lg font-bold text-white">
+                    <h3 className="font-display text-lg font-bold text-foreground">
                       Connected to LAN Code: <span className="text-cyan-400 font-mono">{lanCode}</span>
                     </h3>
-                    <p className="text-xs text-white/60 mt-1">
+                    <p className="text-xs text-foreground/80 mt-1">
                       Waiting for the host to start the {currentGame.name} match.
                     </p>
                   </div>
@@ -535,7 +527,7 @@ function LanPlayContent() {
                     size="sm"
                     variant="outline"
                     onClick={() => setShowScanner(true)}
-                    className="gap-2 border-white/10 text-white hover:bg-white/10"
+                    className="gap-2 border-border text-foreground hover:bg-foreground/10"
                   >
                     <Camera className="h-4 w-4" /> Scan Another QR Code
                   </Button>
@@ -547,14 +539,14 @@ function LanPlayContent() {
 
         {/* Right Column: Connected Players & Start Game */}
         <div className="lg:col-span-5 space-y-5">
-          <Card className="border-white/10 bg-[#0F111E]/90 backdrop-blur-md p-5 shadow-xl">
-            <CardHeader className="p-0 pb-4 border-b border-white/5 flex flex-row items-center justify-between">
+          <Card className="border-foreground/10 bg-card/90 backdrop-blur-md p-5 shadow-xl">
+            <CardHeader className="p-0 pb-4 border-b border-border flex flex-row items-center justify-between">
               <div>
-                <CardTitle className="text-base font-bold text-white flex items-center gap-2">
+                <CardTitle className="text-base font-bold text-foreground flex items-center gap-2">
                   <Users className="h-4 w-4 text-cyan-400" />
                   <span>Wi-Fi Room Lobby</span>
                 </CardTitle>
-                <p className="text-xs text-white/50 mt-0.5">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   {playersList.length} player(s) on same network
                 </p>
               </div>
@@ -567,7 +559,7 @@ function LanPlayContent() {
               {playersList.map((p) => (
                 <div
                   key={p.userId}
-                  className="flex items-center justify-between p-3 rounded-xl border border-white/5 bg-white/2"
+                  className="flex items-center justify-between p-3 rounded-xl border border-border bg-foreground/2"
                 >
                   <div className="flex items-center gap-3">
                     <div className="relative">
@@ -583,9 +575,9 @@ function LanPlayContent() {
 
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-white">{p.displayName}</span>
+                        <span className="text-xs font-bold text-foreground">{p.displayName}</span>
                         {p.userId === userId && (
-                          <Badge variant="outline" className="text-[9px] border-white/20 text-white/70">
+                          <Badge variant="outline" className="text-[9px] border-foreground/20 text-foreground/80">
                             You
                           </Badge>
                         )}
@@ -597,14 +589,14 @@ function LanPlayContent() {
                     </div>
                   </div>
 
-                  <Badge variant="secondary" className="text-[10px] bg-white/5 text-white/80">
+                  <Badge variant="secondary" className="text-[10px] bg-foreground/5 text-foreground/80">
                     {p.role === "host" ? "Host" : "Connected"}
                   </Badge>
                 </div>
               ))}
 
               {/* Start Match CTA */}
-              <div className="pt-4 border-t border-white/5">
+              <div className="pt-4 border-t border-border">
                 {activeTab === "host" ? (
                   <Button
                     size="lg"
@@ -615,8 +607,8 @@ function LanPlayContent() {
                     <span>Start LAN Match ({currentGame.name})</span>
                   </Button>
                 ) : (
-                  <div className="rounded-2xl border border-white/5 bg-white/2 p-4 text-center">
-                    <p className="text-xs text-white/60 font-medium">
+                  <div className="rounded-2xl border border-border bg-foreground/2 p-4 text-center">
+                    <p className="text-xs text-foreground/80 font-medium">
                       Connected to host. Waiting for match to start…
                     </p>
                   </div>

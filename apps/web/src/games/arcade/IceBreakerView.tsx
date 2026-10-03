@@ -3,133 +3,87 @@
 import * as React from "react";
 import { Button } from "@playora/ui";
 import { Trophy, RotateCcw, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from "lucide-react";
+import { useArcadeRun } from "./use-arcade-run";
+import { ArcadeHud } from "./ArcadeHud";
+import { useJuice } from "./use-juice";
+import { waveAt } from "./juice";
+import { useGameRuntime } from "../runtime/use-game-runtime";
+import {
+  createIceState,
+  stepIce,
+  moveRacer,
+  type IceState,
+  type IceRacer,
+} from "./ice-breaker";
 
-interface IceRacer {
-  id: string;
-  name: string;
-  isBot: boolean;
-  x: number;
-  y: number;
-  alive: boolean;
-  color: string;
+interface IceSnapshot {
+  racers: IceRacer[];
+  radius: number;
+  winner: string | null;
 }
 
 export function IceBreakerView({ onExit }: { onExit?: () => void }) {
-  const [racers, setRacers] = React.useState<IceRacer[]>([
-    { id: "p1", name: "You", isBot: false, x: 50, y: 50, alive: true, color: "#06b6d4" },
-    { id: "p2", name: "BlizzardBot", isBot: true, x: 25, y: 35, alive: true, color: "#ef4444" },
-    { id: "p3", name: "FrostKing", isBot: true, x: 75, y: 35, alive: true, color: "#a855f7" },
-    { id: "p4", name: "PolarAce", isBot: true, x: 50, y: 75, alive: true, color: "#f59e0b" },
-  ]);
+  // Every shrink of the iceberg you survive is worth points; outlasting the
+  // bots is what the run is measured on.
+  const run = useArcadeRun("ice-breaker");
+  const juice = useJuice();
+  const juiceRef = React.useRef(juice);
+  juiceRef.current = juice;
+  const runRef = React.useRef(run);
+  runRef.current = run;
 
-  const [iceRadius, setIceRadius] = React.useState(42);
-  const [gameOver, setGameOver] = React.useState(false);
-  const [winner, setWinner] = React.useState<string | null>(null);
+  /*
+   * One simulation, replacing a shrink interval, an AI interval and a physics
+   * effect that looped forever.
+   *
+   * That effect depended on `racers` and called `setRacers(curr.map(...))` on
+   * every run — `map` returns a new array whether or not anything changed, and
+   * a new reference is never `Object.is`-equal, so React re-ran the effect,
+   * which set state again, until "Maximum update depth exceeded". The
+   * simulation only writes when something actually sank.
+   *
+   * The extraction also caught bots that did not play: their comment claimed a
+   * "nudge towards center or player" and the code was a pure random walk, so
+   * they fell off by accident. They now steer inward as the ice closes.
+   */
+  const rt = useGameRuntime<IceState, IceSnapshot>({
+    create: createIceState,
 
-  // Shrinking iceberg loop
-  React.useEffect(() => {
-    if (gameOver) return;
-
-    const interval = setInterval(() => {
-      setIceRadius((r) => Math.max(18, r - 0.5));
-    }, 1200);
-
-    return () => clearInterval(interval);
-  }, [gameOver]);
-
-  // Physics check: if outside iceRadius -> eliminated into water!
-  React.useEffect(() => {
-    if (gameOver) return;
-
-    setRacers((curr) => {
-      const next = curr.map((racer) => {
-        if (!racer.alive) return racer;
-        const dx = racer.x - 50;
-        const dy = racer.y - 50;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > iceRadius) {
-          return { ...racer, alive: false };
-        }
-        return racer;
-      });
-
-      const aliveRemaining = next.filter((r) => r.alive);
-      if (aliveRemaining.length <= 1) {
-        setGameOver(true);
-        setWinner(aliveRemaining[0]?.name ?? "Nobody");
+    update: (st, ctx) => {
+      stepIce(st, ctx.dt, { wave: waveAt(runRef.current.elapsed), rng: Math.random });
+      if (st.events.shrank) {
+        // Scored per shrink rather than per second, so the points track the
+        // thing that actually gets harder. The iceberg shrinking is the
+        // threat; it should be felt.
+        runRef.current.hit(25);
+        juiceRef.current.impact("solid");
       }
+      if (st.events.sank > 0) juiceRef.current.impact("heavy");
+      if (st.over) {
+        juiceRef.current.impact(st.events.died ? "fatal" : "solid");
+        ctx.over = true;
+      }
+    },
 
-      return next;
-    });
-  }, [iceRadius, racers, gameOver]);
+    snapshot: (st) => ({ racers: st.racers, radius: st.radius, winner: st.winner }),
+    onGameOver: () => runRef.current.end(),
+  });
 
-  // AI bots move & bump
+  const { start } = rt;
   React.useEffect(() => {
-    if (gameOver) return;
+    start();
+  }, [start]);
 
-    const aiLoop = setInterval(() => {
-      setRacers((curr) =>
-        curr.map((racer) => {
-          if (!racer.alive || !racer.isBot) return racer;
-          // Random nudge towards center or player
-          const dx = (Math.random() - 0.5) * 6;
-          const dy = (Math.random() - 0.5) * 6;
-          return {
-            ...racer,
-            x: Math.max(10, Math.min(90, racer.x + dx)),
-            y: Math.max(10, Math.min(90, racer.y + dy)),
-          };
-        })
-      );
-    }, 400);
-
-    return () => clearInterval(aiLoop);
-  }, [gameOver]);
+  const { racers, radius: iceRadius, winner } = rt.state;
+  const gameOver = rt.over;
 
   const movePlayer = (dx: number, dy: number) => {
-    if (gameOver) return;
-    setRacers((curr) =>
-      curr.map((racer) => {
-        if (racer.id !== "p1" || !racer.alive) return racer;
-        const nextX = Math.max(5, Math.min(95, racer.x + dx));
-        const nextY = Math.max(5, Math.min(95, racer.y + dy));
-
-        // Push opponents if close (bump!)
-        return { ...racer, x: nextX, y: nextY };
-      })
-    );
-
-    // Bump nearby bots
-    setRacers((curr) => {
-      const player = curr.find((r) => r.id === "p1");
-      if (!player || !player.alive) return curr;
-
-      return curr.map((racer) => {
-        if (racer.id === "p1" || !racer.alive) return racer;
-        const dist = Math.hypot(racer.x - player.x, racer.y - player.y);
-        if (dist < 10) {
-          // Bump away!
-          return {
-            ...racer,
-            x: racer.x + dx * 2.2,
-            y: racer.y + dy * 2.2,
-          };
-        }
-        return racer;
-      });
-    });
+    rt.mutate((st) => moveRacer(st, dx, dy));
   };
 
   const restart = () => {
-    setRacers([
-      { id: "p1", name: "You", isBot: false, x: 50, y: 50, alive: true, color: "#06b6d4" },
-      { id: "p2", name: "BlizzardBot", isBot: true, x: 25, y: 35, alive: true, color: "#ef4444" },
-      { id: "p3", name: "FrostKing", isBot: true, x: 75, y: 35, alive: true, color: "#a855f7" },
-      { id: "p4", name: "PolarAce", isBot: true, x: 50, y: 75, alive: true, color: "#f59e0b" },
-    ]);
-    setIceRadius(42);
-    setGameOver(false);
-    setWinner(null);
+    run.reset();
+    rt.restart();
   };
 
   return (
@@ -143,6 +97,17 @@ export function IceBreakerView({ onExit }: { onExit?: () => void }) {
           <h2 className="font-display text-xl sm:text-3xl font-black text-white">ICE BREAKER</h2>
         </div>
 
+        {/*
+          * The wave, shown. Escalation a player cannot see reads as the game
+          * quietly becoming unfair rather than as something they are surviving.
+          */}
+        <div className="rounded-xl border border-white/15 bg-black/55 px-3 py-1.5 backdrop-blur-md">
+          <div className="text-[9px] font-bold uppercase tracking-widest text-white/50">Wave</div>
+          <div className="numeric text-lg font-black leading-none text-white tabular-nums sm:text-xl">
+            {waveAt(run.elapsed)}
+          </div>
+        </div>
+        <ArcadeHud run={run} />
         <div className="rounded-xl border border-cyan-400/30 bg-cyan-950/40 px-3 sm:px-4 py-1 sm:py-1.5 text-xs sm:text-sm font-bold text-cyan-300">
           ICEBERG: {Math.round(iceRadius * 2)}%
         </div>
@@ -150,6 +115,7 @@ export function IceBreakerView({ onExit }: { onExit?: () => void }) {
 
       {/* Main Arctic Arena Viewport */}
       <div
+        {...juice.shakeProps}
         className="relative my-2 sm:my-4 flex flex-1 aspect-square max-h-[380px] sm:max-h-[460px] w-full max-w-xl items-center justify-center overflow-hidden rounded-full border-4 border-cyan-300/40 shadow-2xl bg-cover bg-center select-none"
         style={{
           backgroundImage: `linear-gradient(to bottom, rgba(5,50,85,0.65), rgba(2,20,40,0.9)), url('/games/ice-breaker-thumb.jpg')`,

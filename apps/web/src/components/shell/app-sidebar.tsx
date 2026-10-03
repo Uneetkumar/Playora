@@ -56,37 +56,6 @@ export function AppSidebar() {
     setExpanded(false);
   }, [pathname, search]);
 
-  // Bulletproof pointer tracking: auto-close whenever pointer exits the sidebar bounding box
-  React.useEffect(() => {
-    if (!expanded) return;
-
-    const handlePointerMove = (e: PointerEvent) => {
-      if (!sidebarRef.current) return;
-      const rect = sidebarRef.current.getBoundingClientRect();
-      if (
-        e.clientX > rect.right + 8 ||
-        e.clientX < rect.left - 8 ||
-        e.clientY < rect.top - 8 ||
-        e.clientY > rect.bottom + 8
-      ) {
-        setExpanded(false);
-      }
-    };
-
-    const handlePointerDown = (e: PointerEvent) => {
-      if (sidebarRef.current && !sidebarRef.current.contains(e.target as Node)) {
-        setExpanded(false);
-      }
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerdown", handlePointerDown);
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerdown", handlePointerDown);
-    };
-  }, [expanded]);
-
   const isActive = (href: string) => {
     const [path, query] = href.split("?");
 
@@ -124,20 +93,19 @@ export function AppSidebar() {
       <Link
         href={href}
         title={label}
-        onClick={() => setExpanded(false)}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "group flex h-11 items-center gap-3 rounded-xl px-3 transition-all",
+          "group flex h-11 items-center gap-3 rounded-xl px-3 transition-colors",
           active
-            ? "bg-[#7C3AED]/20 text-[#A855F7] font-bold shadow-sm"
-            : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+            ? "bg-primary/20 text-primary-accent font-bold shadow-sm"
+            : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
         )}
       >
         <Icon className="h-5 w-5 shrink-0" aria-hidden />
         <span
           className={cn(
-            "whitespace-nowrap text-sm font-medium transition-opacity duration-150",
-            expanded ? "opacity-100" : "pointer-events-none opacity-0",
+            "whitespace-nowrap text-sm font-medium transition-opacity duration-150 overflow-hidden",
+            expanded ? "opacity-100" : "opacity-0 w-0",
           )}
         >
           {label}
@@ -153,7 +121,7 @@ export function AppSidebar() {
       onMouseLeave={() => setExpanded(false)}
       aria-label="Sections"
       className={cn(
-        "fixed left-0 top-16 z-40 hidden h-[calc(100vh-4rem)] flex-col border-r border-white/10 bg-[#0B0D19]/95 py-3 backdrop-blur-xl transition-[width] duration-200 lg:flex",
+        "fixed left-0 top-16 z-40 hidden h-[calc(100vh-4rem)] flex-col border-r border-foreground/10 bg-surface/95 py-3 backdrop-blur-xl transition-[width] duration-200 lg:flex",
         expanded ? "w-56" : "w-16",
       )}
     >
@@ -164,12 +132,12 @@ export function AppSidebar() {
         {isStaff && <Row href="/admin" label="Staff" icon={ShieldAlert} />}
       </nav>
 
-      <div className="my-3 mx-3 border-t border-white/10" />
+      <div className="my-3 mx-3 border-t border-foreground/10" />
 
       <nav className="flex flex-col gap-1 px-2">
         <p
           className={cn(
-            "px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-white/40 transition-opacity",
+            "px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground transition-opacity",
             expanded ? "opacity-100" : "opacity-0",
           )}
         >

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button, Input } from "@playora/ui";
 import { Hash, ArrowRight, Loader2 } from "lucide-react";
 import { ROOM_CODE_LENGTH } from "@playora/game-types";
-import { useRooms } from "../../hooks/use-rooms";
+import { useRoomResolver } from "../../hooks/use-rooms";
 
 /**
  * Join a friend's room straight from the home page.
@@ -16,7 +16,7 @@ import { useRooms } from "../../hooks/use-rooms";
  */
 export function JoinByCode({ className }: { className?: string }) {
   const router = useRouter();
-  const { resolveCode, error, setError } = useRooms();
+  const { resolveCode, error, setError } = useRoomResolver();
   const [code, setCode] = React.useState("");
   const [isJoining, setIsJoining] = React.useState(false);
 

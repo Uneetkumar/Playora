@@ -31,7 +31,9 @@ export async function GET(req: Request) {
       lanOrigin,
       isLocal: bestIp !== "127.0.0.1",
     });
-  } catch (error) {
+  } catch {
+    // Falling back to localhost rather than failing: a machine with no
+    // reachable LAN address can still play on this device.
     return NextResponse.json(
       { ip: "127.0.0.1", port: "8000", lanOrigin: "http://localhost:8000", isLocal: false },
       { status: 200 }

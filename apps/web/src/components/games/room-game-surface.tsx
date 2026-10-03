@@ -10,6 +10,14 @@ import type { PlayerProgressionPayload } from "@playora/protocol";
 import { ChessGameView } from "../../games/chess/ChessGameView";
 import { UnoGameView } from "../../games/uno/UnoGameView";
 import { ArcadeGameView } from "../../games/arcade/ArcadeGameView";
+import { TicTacToeView } from "../../games/board/TicTacToeView";
+import { ConnectFourView } from "../../games/board/ConnectFourView";
+import { LudoView } from "../../games/board/LudoView";
+import { SnakeLadderView } from "../../games/board/SnakeLadderView";
+import { CheckersView } from "../../games/board/CheckersView";
+import { BattleshipView } from "../../games/board/BattleshipView";
+import { PongView } from "../../games/board/PongView";
+import { MemoryMatchView } from "../../games/board/MemoryMatchView";
 import dynamic from "next/dynamic";
 
 // Three.js is only needed by the two racing games, so it is kept out of the
@@ -166,7 +174,32 @@ function GameBoard({
     case "hot-potato":
     case "bridge-builder":
     case "ice-breaker":
+    case "game-2048":
+    case "minesweeper":
+    case "word-guess":
+    case "flappy-bird":
+    case "retro-snake":
+    case "brick-breaker":
+    case "whack-a-mole":
+    case "simon-says":
       return <ArcadeGameView gameId={gameId} onExit={onRematch} />;
+
+    case "tic-tac-toe":
+      return <TicTacToeView mode="pass-and-play" onExit={onRematch} />;
+    case "connect-four":
+      return <ConnectFourView mode="pass-and-play" onExit={onRematch} />;
+    case "ludo":
+      return <LudoView mode="pass-and-play" onExit={onRematch} />;
+    case "snake-ladder":
+      return <SnakeLadderView mode="pass-and-play" onExit={onRematch} />;
+    case "checkers":
+      return <CheckersView mode="pass-and-play" onExit={onRematch} />;
+    case "battleship":
+      return <BattleshipView onExit={onRematch} />;
+    case "pong":
+      return <PongView mode="pass-and-play" onExit={onRematch} />;
+    case "memory-match":
+      return <MemoryMatchView mode="pass-and-play" onExit={onRematch} />;
 
     default:
       return <UnsupportedGame gameId={gameId} />;

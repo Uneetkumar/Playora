@@ -437,6 +437,421 @@ const iceBreaker: GameArt = {
   ),
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 16. TIC-TAC-TOE — Neon Duel
+// ─────────────────────────────────────────────────────────────────────────────
+const ticTacToe: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #2a0845 0%, #17072b 60%, #0d021a 100%)",
+  imageUrl: "/games/tic-tac-toe-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      <defs>
+        <filter id="neon-glow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+      {/* Grid Lines */}
+      <line x1="60" y1="20" x2="60" y2="100" stroke="#3b1d60" strokeWidth="4" strokeLinecap="round" />
+      <line x1="100" y1="20" x2="100" y2="100" stroke="#3b1d60" strokeWidth="4" strokeLinecap="round" />
+      <line x1="20" y1="46" x2="140" y2="46" stroke="#3b1d60" strokeWidth="4" strokeLinecap="round" />
+      <line x1="20" y1="74" x2="140" y2="74" stroke="#3b1d60" strokeWidth="4" strokeLinecap="round" />
+      {/* Glowing X */}
+      <path d="M32,26 L48,40 M48,26 L32,40" stroke="#00f2fe" strokeWidth="5" strokeLinecap="round" filter="url(#neon-glow)" />
+      <path d="M72,52 L88,68 M88,52 L72,68" stroke="#00f2fe" strokeWidth="5" strokeLinecap="round" filter="url(#neon-glow)" />
+      <path d="M112,80 L128,94 M128,80 L112,94" stroke="#00f2fe" strokeWidth="5" strokeLinecap="round" filter="url(#neon-glow)" />
+      {/* Glowing O */}
+      <circle cx="120" cy="33" r="9" fill="none" stroke="#ff0844" strokeWidth="4.5" filter="url(#neon-glow)" />
+      <circle cx="40" cy="87" r="9" fill="none" stroke="#ff0844" strokeWidth="4.5" filter="url(#neon-glow)" />
+      {/* Winning Strike Line */}
+      <line x1="24" y1="18" x2="136" y2="102" stroke="#4facfe" strokeWidth="3" strokeDasharray="4 2" />
+    </svg>
+  ),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 17. CONNECT FOUR — Gravity Disc Matrix
+// ─────────────────────────────────────────────────────────────────────────────
+const connectFour: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #0f2b5c 0%, #071530 60%, #030814 100%)",
+  imageUrl: "/games/connect-four-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      <rect x="25" y="25" width="110" height="75" rx="10" fill="#1e40af" stroke="#3b82f6" strokeWidth="2.5" />
+      {/* Grid Holes */}
+      {[0, 1, 2, 3, 4].map((col) =>
+        [0, 1, 2, 3].map((row) => {
+          const cx = 40 + col * 20;
+          const cy = 37 + row * 17;
+          let discFill = "#0b162c";
+          if ((col === 1 && row === 3) || (col === 2 && row === 2) || (col === 3 && row === 1)) discFill = "#ef4444";
+          if ((col === 2 && row === 3) || (col === 3 && row === 2) || (col === 4 && row === 3)) discFill = "#eab308";
+          return <circle key={`${col}-${row}`} cx={cx} cy={cy} r="6.5" fill={discFill} stroke="#172554" strokeWidth="1.5" />;
+        })
+      )}
+      {/* Falling Disc */}
+      <circle cx="100" cy="16" r="7" fill="#ef4444" stroke="#fca5a5" strokeWidth="1.5" />
+    </svg>
+  ),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 18. LUDO — The Royal Cross & Dice
+// ─────────────────────────────────────────────────────────────────────────────
+const ludo: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #3b1443 0%, #1f0b24 60%, #0f0512 100%)",
+  imageUrl: "/games/ludo-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      {/* Quadrants */}
+      <rect x="35" y="15" width="36" height="36" rx="4" fill="#ef4444" stroke="#991b1b" strokeWidth="1.5" />
+      <rect x="89" y="15" width="36" height="36" rx="4" fill="#22c55e" stroke="#166534" strokeWidth="1.5" />
+      <rect x="35" y="69" width="36" height="36" rx="4" fill="#3b82f6" stroke="#1e40af" strokeWidth="1.5" />
+      <rect x="89" y="69" width="36" height="36" rx="4" fill="#eab308" stroke="#854d0e" strokeWidth="1.5" />
+      {/* Center Home */}
+      <polygon points="80,51 71,60 80,69 89,60" fill="#f8fafc" stroke="#64748b" strokeWidth="1.5" />
+      {/* 3D Dice in Foreground */}
+      <g transform="translate(68, 48)">
+        <rect x="0" y="0" width="24" height="24" rx="4" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1.5" />
+        <circle cx="6" cy="6" r="2" fill="#ef4444" />
+        <circle cx="18" cy="6" r="2" fill="#ef4444" />
+        <circle cx="12" cy="12" r="2.5" fill="#ef4444" />
+        <circle cx="6" cy="18" r="2" fill="#ef4444" />
+        <circle cx="18" cy="18" r="2" fill="#ef4444" />
+      </g>
+    </svg>
+  ),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 19. SNAKES & LADDERS — Ascent & Serpentine Slide
+// ─────────────────────────────────────────────────────────────────────────────
+const snakeLadder: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #064e3b 0%, #022c22 60%, #01140f 100%)",
+  imageUrl: "/games/snake-ladder-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      {/* Board squares */}
+      <rect x="30" y="15" width="100" height="90" rx="6" fill="#0f172a" stroke="#10b981" strokeWidth="2" />
+      {/* Golden Ladder */}
+      <line x1="50" y1="90" x2="68" y2="30" stroke="#f59e0b" strokeWidth="3" />
+      <line x1="60" y1="92" x2="78" y2="32" stroke="#f59e0b" strokeWidth="3" />
+      <line x1="53" y1="80" x2="63" y2="82" stroke="#f59e0b" strokeWidth="2" />
+      <line x1="57" y1="65" x2="67" y2="67" stroke="#f59e0b" strokeWidth="2" />
+      <line x1="61" y1="50" x2="71" y2="52" stroke="#f59e0b" strokeWidth="2" />
+      <line x1="65" y1="35" x2="75" y2="37" stroke="#f59e0b" strokeWidth="2" />
+      {/* Serpentine Snake */}
+      <path d="M110,25 Q80,45 105,60 T90,95" fill="none" stroke="#ef4444" strokeWidth="6" strokeLinecap="round" />
+      <circle cx="112" cy="24" r="4.5" fill="#dc2626" />
+      <circle cx="113" cy="23" r="1.2" fill="#ffffff" />
+    </svg>
+  ),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 20. CHECKERS — King Draughts
+// ─────────────────────────────────────────────────────────────────────────────
+const checkers: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #422006 0%, #1c0d02 60%, #0d0501 100%)",
+  imageUrl: "/games/checkers-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      {/* Board Skew */}
+      <g transform="translate(15, 20) skewX(-15)">
+        <rect x="10" y="10" width="110" height="70" fill="#1c1917" stroke="#78350f" strokeWidth="2" />
+        <rect x="25" y="10" width="18" height="18" fill="#78350f" />
+        <rect x="61" y="10" width="18" height="18" fill="#78350f" />
+        <rect x="97" y="10" width="18" height="18" fill="#78350f" />
+        <rect x="10" y="28" width="18" height="18" fill="#78350f" />
+        <rect x="43" y="28" width="18" height="18" fill="#78350f" />
+        <rect x="79" y="28" width="18" height="18" fill="#78350f" />
+      </g>
+      {/* Red Crowned King Piece */}
+      <ellipse cx="65" cy="55" rx="18" ry="10" fill="#dc2626" stroke="#fca5a5" strokeWidth="1.5" />
+      <ellipse cx="65" cy="52" rx="14" ry="7" fill="#b91c1c" />
+      {/* Crown */}
+      <polygon points="60,52 62,45 65,49 68,45 70,52" fill="#fbbf24" stroke="#78350f" strokeWidth="0.8" />
+      {/* Black Piece */}
+      <ellipse cx="105" cy="72" rx="18" ry="10" fill="#27272a" stroke="#71717a" strokeWidth="1.5" />
+      <ellipse cx="105" cy="69" rx="14" ry="7" fill="#18181b" />
+    </svg>
+  ),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 21. BATTLESHIP — Naval Radar & Torpedo Strike
+// ─────────────────────────────────────────────────────────────────────────────
+const battleship: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #083344 0%, #031c26 60%, #010a0e 100%)",
+  imageUrl: "/games/battleship-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      {/* Radar Circles */}
+      <circle cx="80" cy="60" r="45" fill="none" stroke="#06b6d4" strokeWidth="1.5" opacity="0.4" />
+      <circle cx="80" cy="60" r="30" fill="none" stroke="#06b6d4" strokeWidth="1.5" opacity="0.6" />
+      <circle cx="80" cy="60" r="15" fill="none" stroke="#06b6d4" strokeWidth="1.5" opacity="0.8" />
+      <line x1="80" y1="15" x2="80" y2="105" stroke="#06b6d4" strokeWidth="1" opacity="0.5" />
+      <line x1="35" y1="60" x2="125" y2="60" stroke="#06b6d4" strokeWidth="1" opacity="0.5" />
+      {/* Naval Destroyer Silhouette */}
+      <path d="M45,62 L75,56 L115,56 L120,62 L105,68 L55,68 Z" fill="#334155" stroke="#38bdf8" strokeWidth="1.5" />
+      {/* Hit Blast Explosion */}
+      <circle cx="95" cy="58" r="7" fill="#f97316" opacity="0.9" />
+      <circle cx="95" cy="58" r="4" fill="#fde047" />
+    </svg>
+  ),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 22. MEMORY MATCH — Holographic Dual Cards
+// ─────────────────────────────────────────────────────────────────────────────
+const memoryMatch: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #4c1d95 0%, #2e1065 60%, #170738 100%)",
+  imageUrl: "/games/memory-match-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      {/* Card 1 */}
+      <rect x="35" y="25" width="40" height="60" rx="6" fill="#1e1b4b" stroke="#818cf8" strokeWidth="2" transform="rotate(-8 55 55)" />
+      <circle cx="53" cy="53" r="10" fill="#a855f7" />
+      <polygon points="53,46 56,52 62,53 58,57 59,63 53,60 47,63 48,57 44,53 50,52" fill="#fde047" transform="rotate(-8 55 55)" />
+      {/* Card 2 */}
+      <rect x="85" y="25" width="40" height="60" rx="6" fill="#1e1b4b" stroke="#818cf8" strokeWidth="2" transform="rotate(8 105 55)" />
+      <circle cx="107" cy="57" r="10" fill="#a855f7" />
+      <polygon points="107,50 110,56 116,57 112,61 113,67 107,64 101,67 102,61 98,57 104,56" fill="#fde047" transform="rotate(8 105 55)" />
+    </svg>
+  ),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 23. 2048 — Golden Synthesis
+// ─────────────────────────────────────────────────────────────────────────────
+const game2048: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #713f12 0%, #422006 60%, #1a0c02 100%)",
+  imageUrl: "/games/game-2048-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      <rect x="25" y="15" width="110" height="90" rx="8" fill="#1e1b18" stroke="#854d0e" strokeWidth="2" />
+      {/* 2048 Golden Tile */}
+      <rect x="52" y="28" width="56" height="56" rx="8" fill="#eab308" stroke="#fef08a" strokeWidth="2" />
+      <text x="80" y="63" fontSize="18" fontWeight="bold" fontFamily="sans-serif" fill="#ffffff" textAnchor="middle">2048</text>
+      {/* Neighbor Tiles */}
+      <rect x="32" y="28" width="16" height="16" rx="3" fill="#fed7aa" />
+      <rect x="112" y="28" width="16" height="16" rx="3" fill="#fdba74" />
+      <rect x="32" y="48" width="16" height="16" rx="3" fill="#fb923c" />
+      <rect x="112" y="48" width="16" height="16" rx="3" fill="#f97316" />
+    </svg>
+  ),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 24. MINESWEEPER — Digital Detonator
+// ─────────────────────────────────────────────────────────────────────────────
+const minesweeper: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #334155 0%, #1e293b 60%, #0f172a 100%)",
+  imageUrl: "/games/minesweeper-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      {/* Grid cells */}
+      <rect x="30" y="20" width="100" height="80" rx="4" fill="#0f172a" stroke="#475569" strokeWidth="2" />
+      {/* Revealed Cell with 3 */}
+      <rect x="36" y="26" width="24" height="24" fill="#1e293b" />
+      <text x="48" y="44" fontSize="16" fontWeight="bold" fontFamily="monospace" fill="#ef4444" textAnchor="middle">3</text>
+      {/* Flagged Cell */}
+      <rect x="68" y="26" width="24" height="24" fill="#334155" stroke="#475569" strokeWidth="1" />
+      <polygon points="76,32 86,36 76,40" fill="#dc2626" />
+      <line x1="76" y1="32" x2="76" y2="44" stroke="#f8fafc" strokeWidth="1.5" />
+      {/* Spiky Naval Mine */}
+      <rect x="100" y="26" width="24" height="24" fill="#1e293b" />
+      <circle cx="112" cy="38" r="6" fill="#000000" stroke="#64748b" strokeWidth="1" />
+      <line x1="112" y1="30" x2="112" y2="46" stroke="#000000" strokeWidth="2" />
+      <line x1="104" y1="38" x2="120" y2="38" stroke="#000000" strokeWidth="2" />
+      <line x1="106" y1="32" x2="118" y2="44" stroke="#000000" strokeWidth="2" />
+      <line x1="118" y1="32" x2="106" y2="44" stroke="#000000" strokeWidth="2" />
+    </svg>
+  ),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 25. WORD GUESS — Lexical Flip
+// ─────────────────────────────────────────────────────────────────────────────
+const wordGuess: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #14532d 0%, #052e16 60%, #021a0c 100%)",
+  imageUrl: "/games/word-guess-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      {/* Row 1 */}
+      {["P", "L", "A", "Y", "S"].map((letter, i) => {
+        let bg = "#15803d";
+        if (i === 1) bg = "#a16207";
+        if (i === 4) bg = "#334155";
+        return (
+          <g key={letter} transform={`translate(${25 + i * 22}, 45)`}>
+            <rect x="0" y="0" width="20" height="26" rx="3" fill={bg} stroke="#ffffff" strokeWidth="1" opacity="0.95" />
+            <text x="10" y="19" fontSize="13" fontWeight="bold" fontFamily="sans-serif" fill="#ffffff" textAnchor="middle">{letter}</text>
+          </g>
+        );
+      })}
+    </svg>
+  ),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 26. CYBER BIRD — Neon Flap
+// ─────────────────────────────────────────────────────────────────────────────
+const flappyBird: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #042f2e 0%, #082020 60%, #031010 100%)",
+  imageUrl: "/games/flappy-bird-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      {/* Neon Pipes */}
+      <rect x="105" y="0" width="22" height="42" fill="#15803d" stroke="#4ade80" strokeWidth="2" />
+      <rect x="102" y="36" width="28" height="8" rx="2" fill="#22c55e" stroke="#86efac" strokeWidth="1" />
+      <rect x="105" y="75" width="22" height="45" fill="#15803d" stroke="#4ade80" strokeWidth="2" />
+      <rect x="102" y="72" width="28" height="8" rx="2" fill="#22c55e" stroke="#86efac" strokeWidth="1" />
+      {/* Cyber Bird */}
+      <circle cx="55" cy="58" r="12" fill="#facc15" stroke="#fde047" strokeWidth="1.5" />
+      <polygon points="65,58 72,61 65,65" fill="#f97316" />
+      <circle cx="60" cy="54" r="2.5" fill="#000" />
+      <circle cx="61" cy="53" r="0.8" fill="#fff" />
+      <ellipse cx="48" cy="60" rx="6" ry="4" fill="#fbbf24" stroke="#d97706" strokeWidth="1" />
+    </svg>
+  ),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 27. RETRO SNAKE — Neon Slither
+// ─────────────────────────────────────────────────────────────────────────────
+const retroSnake: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #064e3b 0%, #022c22 60%, #01140f 100%)",
+  imageUrl: "/games/retro-snake-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      {/* Grid dots */}
+      <circle cx="120" cy="60" r="5" fill="#ef4444" filter="drop-shadow(0 0 4px #ef4444)" />
+      {/* Snake segments */}
+      <rect x="90" y="55" width="10" height="10" rx="2" fill="#4ade80" />
+      <rect x="78" y="55" width="10" height="10" rx="2" fill="#22c55e" />
+      <rect x="66" y="55" width="10" height="10" rx="2" fill="#22c55e" />
+      <rect x="66" y="67" width="10" height="10" rx="2" fill="#16a34a" />
+      <rect x="54" y="67" width="10" height="10" rx="2" fill="#16a34a" />
+      <rect x="42" y="67" width="10" height="10" rx="2" fill="#15803d" />
+      {/* Head Eyes */}
+      <circle cx="97" cy="57" r="1.2" fill="#000" />
+      <circle cx="97" cy="62" r="1.2" fill="#000" />
+    </svg>
+  ),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 28. CYBER PONG — Vector Rally
+// ─────────────────────────────────────────────────────────────────────────────
+const pong: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #1e1b4b 0%, #0f0d2b 60%, #060514 100%)",
+  imageUrl: "/games/pong-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      {/* Center Dotted Divider */}
+      <line x1="80" y1="10" x2="80" y2="110" stroke="#475569" strokeWidth="2" strokeDasharray="5 5" />
+      {/* Left Paddle */}
+      <rect x="25" y="40" width="6" height="35" rx="3" fill="#38bdf8" filter="drop-shadow(0 0 6px #38bdf8)" />
+      {/* Right Paddle */}
+      <rect x="129" y="55" width="6" height="35" rx="3" fill="#f43f5e" filter="drop-shadow(0 0 6px #f43f5e)" />
+      {/* Energy Ball with trail */}
+      <line x1="50" y1="48" x2="72" y2="58" stroke="#38bdf8" strokeWidth="2" opacity="0.4" strokeDasharray="2 2" />
+      <circle cx="72" cy="58" r="4.5" fill="#ffffff" filter="drop-shadow(0 0 5px #ffffff)" />
+    </svg>
+  ),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 29. BRICK BREAKER — Arcade Breakout
+// ─────────────────────────────────────────────────────────────────────────────
+const brickBreaker: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #3b0764 0%, #1e0338 60%, #0d011a 100%)",
+  imageUrl: "/games/brick-breaker-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      {/* Bricks */}
+      {[0, 1, 2, 3].map((row) =>
+        [0, 1, 2, 3, 4].map((col) => {
+          const colors = ["#ef4444", "#f97316", "#eab308", "#22c55e"];
+          return (
+            <rect
+              key={`${row}-${col}`}
+              x={28 + col * 21}
+              y={20 + row * 11}
+              width="19"
+              height="8"
+              rx="2"
+              fill={colors[row]}
+              opacity={col === 2 && row === 3 ? 0 : 0.9}
+            />
+          );
+        })
+      )}
+      {/* Bouncing Ball */}
+      <circle cx="75" cy="75" r="4" fill="#ffffff" filter="drop-shadow(0 0 4px #a855f7)" />
+      {/* Sliding Paddle */}
+      <rect x="55" y="100" width="40" height="7" rx="3.5" fill="#38bdf8" stroke="#bae6fd" strokeWidth="1.5" />
+    </svg>
+  ),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 30. CYBER WHACK — Arcade Hammer Frenzy
+// ─────────────────────────────────────────────────────────────────────────────
+const whackAMole: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #701a75 0%, #4a044e 60%, #240226 100%)",
+  imageUrl: "/games/whack-a-mole-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      {/* Holes */}
+      <ellipse cx="45" cy="45" rx="18" ry="8" fill="#18181b" stroke="#3f3f46" strokeWidth="1.5" />
+      <ellipse cx="115" cy="45" rx="18" ry="8" fill="#18181b" stroke="#3f3f46" strokeWidth="1.5" />
+      <ellipse cx="80" cy="85" rx="22" ry="10" fill="#18181b" stroke="#3f3f46" strokeWidth="2" />
+      {/* Popping Cyber Mole */}
+      <g transform="translate(66, 52)">
+        <rect x="0" y="0" width="28" height="26" rx="14" fill="#a16207" stroke="#ca8a04" strokeWidth="1.5" />
+        <ellipse cx="14" cy="14" rx="6" ry="4" fill="#fde047" />
+        <circle cx="10" cy="10" r="1.5" fill="#000" />
+        <circle cx="18" cy="10" r="1.5" fill="#000" />
+      </g>
+      {/* Floating Hammer */}
+      <g transform="translate(100, 48) rotate(-35)">
+        <rect x="0" y="0" width="14" height="22" rx="3" fill="#cbd5e1" stroke="#475569" strokeWidth="1.5" />
+        <line x1="7" y1="22" x2="7" y2="40" stroke="#92400e" strokeWidth="3.5" strokeLinecap="round" />
+      </g>
+    </svg>
+  ),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 31. SIMON SAYS — Hypnotic Memory Core
+// ─────────────────────────────────────────────────────────────────────────────
+const simonSays: GameArt = {
+  background: "radial-gradient(ellipse at 50% 35%, #1e293b 0%, #0f172a 60%, #020617 100%)",
+  imageUrl: "/games/simon-says-thumb.svg",
+  Art: ({ className }) => (
+    <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
+      {/* 4 Quadrants Circle */}
+      <g transform="translate(80, 60)">
+        {/* Top-Left Green */}
+        <path d="M-5,-42 A40,40 0 0,0 -42,-5 L-12,-5 A12,12 0 0,1 -5,-12 Z" fill="#22c55e" stroke="#4ade80" strokeWidth="1.5" />
+        {/* Top-Right Red */}
+        <path d="M5,-42 A40,40 0 0,1 42,-5 L12,-5 A12,12 0 0,0 5,-12 Z" fill="#ef4444" stroke="#f87171" strokeWidth="1.5" />
+        {/* Bottom-Left Yellow */}
+        <path d="M-5,42 A40,40 0 0,1 -42,5 L-12,5 A12,12 0 0,0 -5,12 Z" fill="#eab308" stroke="#facc15" strokeWidth="1.5" />
+        {/* Bottom-Right Blue */}
+        <path d="M5,42 A40,40 0 0,0 42,5 L12,5 A12,12 0 0,1 5,12 Z" fill="#3b82f6" stroke="#60a5fa" strokeWidth="1.5" />
+        {/* Center Black Disc */}
+        <circle cx="0" cy="0" r="10" fill="#090d16" stroke="#334155" strokeWidth="1.5" />
+      </g>
+    </svg>
+  ),
+};
+
 const ART: Record<string, GameArt> = {
   chess,
   uno,
@@ -453,6 +868,22 @@ const ART: Record<string, GameArt> = {
   "hot-potato": hotPotato,
   "bridge-builder": bridgeBuilder,
   "ice-breaker": iceBreaker,
+  "tic-tac-toe": ticTacToe,
+  "connect-four": connectFour,
+  ludo,
+  "snake-ladder": snakeLadder,
+  checkers,
+  battleship,
+  "memory-match": memoryMatch,
+  "game-2048": game2048,
+  minesweeper,
+  "word-guess": wordGuess,
+  "flappy-bird": flappyBird,
+  "retro-snake": retroSnake,
+  pong,
+  "brick-breaker": brickBreaker,
+  "whack-a-mole": whackAMole,
+  "simon-says": simonSays,
 };
 
 export function artFor(gameId: GameId | string): GameArt {

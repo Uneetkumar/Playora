@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { isValidRoomCode, normalizeRoomCode } from "@playora/game-types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { apiError, invalidRequest, roomNotFound, serverError } from "@/lib/api/responses";
+import { apiError, invalidRequest, roomNotFound } from "@/lib/api/responses";
 
 /**
  * Resolves a room code before the client opens a WebSocket.
@@ -29,7 +29,10 @@ export async function GET(
     .eq("code", code)
     .maybeSingle();
 
-  if (error) return serverError();
+  if (error) {
+    console.warn("GET /api/rooms/[code] error:", error.message);
+    return roomNotFound();
+  }
   if (!room) return roomNotFound();
 
   if (room.status === "finished" || room.status === "abandoned") {

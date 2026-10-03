@@ -3,102 +3,123 @@
 import * as React from "react";
 import { Button, cn } from "@playora/ui";
 import { Trophy, RotateCcw, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from "lucide-react";
+import { useArcadeRun } from "./use-arcade-run";
+import { ArcadeHud } from "./ArcadeHud";
+import { useJuice } from "./use-juice";
+import { waveAt } from "./juice";
+import { useGameRuntime } from "../runtime/use-game-runtime";
+import {
+  createFloorState,
+  stepFloor,
+  moveFloor,
+  GRID,
+  type FloorState,
+  type HexTile,
+} from "./falling-floor";
 
-interface HexTile {
-  id: number;
+interface FloorSnapshot {
+  tiles: HexTile[];
+  layer: number;
   row: number;
   col: number;
-  layer: number;
-  state: "intact" | "shaking" | "collapsed";
+  survived: number;
+  prize: { row: number; col: number } | null;
 }
 
 export function FallingFloorView({ onExit }: { onExit?: () => void }) {
-  const [playerLayer, setPlayerLayer] = React.useState(1);
-  const [playerRow, setPlayerRow] = React.useState(2);
-  const [playerCol, setPlayerCol] = React.useState(2);
-  const [tiles, setTiles] = React.useState<HexTile[]>([]);
-  const [survivedSecs, setSurvivedSecs] = React.useState(0);
-  const [gameOver, setGameOver] = React.useState(false);
+  /*
+   * Surviving is the score. A second on the floor is worth ten points, and the
+   * chain grows for every second you last — so the difference between a good
+   * run and a great one widens the longer you stay alive, which is the shape a
+   * survival game wants.
+   */
+  const run = useArcadeRun("falling-floor");
+  const juice = useJuice();
+  const juiceRef = React.useRef(juice);
+  juiceRef.current = juice;
+  const runRef = React.useRef(run);
+  runRef.current = run;
 
-  // Initialize grid tiles across 3 layers
-  React.useEffect(() => {
-    const grid: HexTile[] = [];
-    let idCounter = 1;
-    for (let layer = 1; layer <= 3; layer++) {
-      for (let r = 0; r < 5; r++) {
-        for (let c = 0; c < 5; c++) {
-          grid.push({
-            id: idCounter++,
-            row: r,
-            col: c,
-            layer,
-            state: "intact",
-          });
-        }
-      }
+  /*
+   * One simulation, on the shared fixed-timestep runtime.
+   *
+   * The collapse used to be a `setTimeout` per tile, created inside an effect
+   * that depended on `tiles` — so it re-ran constantly, and needed a cleanup
+   * to stop a pending collapse from a previous run dropping the floor out from
+   * under a player who had done nothing. The countdown lives on the tile now,
+   * which deletes the timer and the bug together.
+   *
+   * The collapse delay also tightens with the wave. It was a flat 800ms, so
+   * the difficulty ramp the HUD advertised did not exist on the floor itself.
+   */
+  const rt = useGameRuntime<FloorState, FloorSnapshot>({
+    create: () => createFloorState(),
+
+    update: (st, ctx) => {
+      stepFloor(st, ctx.dt, { wave: waveAt(runRef.current.elapsed), rng: Math.random });
+      applyEvents(st);
+      if (st.over) ctx.over = true;
+    },
+
+    snapshot: (st) => ({
+      tiles: st.tiles,
+      layer: st.layer,
+      row: st.row,
+      col: st.col,
+      survived: Math.floor(st.survived),
+      prize: st.prize,
+    }),
+    onGameOver: () => runRef.current.end(),
+  });
+
+  /** Turns simulation events into score and feel. */
+  const applyEvents = (st: FloorState) => {
+    for (let i = 0; i < st.events.secondsSurvived; i++) runRef.current.hit(10);
+    if (st.events.prizeTaken) {
+      // Worth about eight seconds of survival: enough to be worth crossing
+      // weakened ground for, not enough to make survival pointless.
+      runRef.current.hit(80);
+      juiceRef.current.impact("solid");
     }
-    setTiles(grid);
-  }, []);
+    if (st.events.fellThrough) juiceRef.current.impact("heavy");
+    if (st.events.died) juiceRef.current.impact("fatal");
+  };
 
-  // Timer loop
+  const { start } = rt;
   React.useEffect(() => {
-    if (gameOver) return;
-    const timer = setInterval(() => {
-      setSurvivedSecs((s) => s + 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [gameOver]);
-
-  // Handle player standing on tile -> trigger collapse
-  React.useEffect(() => {
-    if (gameOver || tiles.length === 0) return;
-
-    const currentTile = tiles.find(
-      (t) => t.layer === playerLayer && t.row === playerRow && t.col === playerCol
-    );
-
-    if (!currentTile || currentTile.state === "collapsed") {
-      // Fallen through hole!
-      if (playerLayer < 3) {
-        setPlayerLayer((l) => l + 1);
-      } else {
-        // Fallen into abyss!
-        setGameOver(true);
-      }
-      return;
-    }
-
-    if (currentTile.state === "intact") {
-      // Start shaking
-      setTiles((curr) =>
-        curr.map((t) => (t.id === currentTile.id ? { ...t, state: "shaking" } : t))
-      );
-
-      // Collapse after 800ms
-      setTimeout(() => {
-        setTiles((curr) =>
-          curr.map((t) => (t.id === currentTile.id ? { ...t, state: "collapsed" } : t))
-        );
-      }, 800);
-    }
-  }, [playerLayer, playerRow, playerCol, tiles, gameOver]);
+    start();
+  }, [start]);
 
   const move = (dr: number, dc: number) => {
-    if (gameOver) return;
-    const nextR = Math.max(0, Math.min(4, playerRow + dr));
-    const nextC = Math.max(0, Math.min(4, playerCol + dc));
-    setPlayerRow(nextR);
-    setPlayerCol(nextC);
+    rt.mutate((st) => {
+      moveFloor(st, dr, dc, { wave: waveAt(runRef.current.elapsed), rng: Math.random });
+      applyEvents(st);
+    });
+  };
+
+  /** Clicking a tile walks one step towards it, so a tap cannot teleport. */
+  const stepToward = (r: number, c: number) => {
+    rt.mutate((st) => {
+      const dr = Math.sign(r - st.row);
+      const dc = Math.sign(c - st.col);
+      if (dr === 0 && dc === 0) return;
+      // One axis at a time keeps a diagonal tap from crossing two tiles.
+      moveFloor(st, dr !== 0 ? dr : 0, dr !== 0 ? 0 : dc, {
+        wave: waveAt(runRef.current.elapsed),
+        rng: Math.random,
+      });
+      applyEvents(st);
+    });
   };
 
   const restart = () => {
-    setPlayerLayer(1);
-    setPlayerRow(2);
-    setPlayerCol(2);
-    setSurvivedSecs(0);
-    setGameOver(false);
-    setTiles((curr) => curr.map((t) => ({ ...t, state: "intact" })));
+    run.reset();
+    rt.restart();
   };
+
+  const { tiles, layer: playerLayer, row: playerRow, col: playerCol, survived: survivedSecs, prize } =
+    rt.state;
+  const gameOver = rt.over;
 
   return (
     <div className="relative flex h-full w-full flex-col items-center justify-between overflow-hidden rounded-2xl sm:rounded-3xl border border-white/20 bg-gradient-to-b from-[#311042] via-[#180824] to-[#0c0412] p-4 sm:p-6 lg:p-8 text-white shadow-2xl">
@@ -112,6 +133,20 @@ export function FallingFloorView({ onExit }: { onExit?: () => void }) {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          {/*
+            * The wave, shown.
+            *
+            * The difficulty ramp already existed but was invisible, and
+            * escalation a player cannot see reads as the game quietly becoming
+            * unfair rather than as something they are surviving.
+            */}
+          <div className="rounded-xl border border-white/15 bg-black/55 px-3 py-1.5 backdrop-blur-md">
+            <div className="text-[9px] font-bold uppercase tracking-widest text-white/50">Wave</div>
+            <div className="numeric text-lg font-black leading-none text-white tabular-nums sm:text-xl">
+              {waveAt(run.elapsed)}
+            </div>
+          </div>
+          <ArcadeHud run={run} />
           <div className="rounded-xl border border-purple-500/30 bg-purple-950/40 px-3 sm:px-4 py-1 sm:py-1.5 text-xs sm:text-sm font-bold text-purple-300">
             LAYER {playerLayer}/3
           </div>
@@ -123,14 +158,16 @@ export function FallingFloorView({ onExit }: { onExit?: () => void }) {
 
       {/* Hex Grid Arena */}
       <div
-        className="relative my-2 sm:my-4 flex flex-1 w-full max-w-2xl items-center justify-center rounded-2xl sm:rounded-3xl border border-white/20 shadow-2xl bg-cover bg-center p-3 sm:p-6 select-none"
+        ref={rt.containerRef}
+        {...juice.shakeProps}
+        className="relative my-2 sm:my-4 flex flex-1 w-full max-w-2xl items-center justify-center rounded-2xl sm:rounded-3xl border border-white/20 shadow-2xl bg-cover bg-center p-3 sm:p-6 select-none touch-none"
         style={{
           backgroundImage: `linear-gradient(to bottom, rgba(20,5,35,0.75), rgba(8,2,15,0.9)), url('/games/falling-floor-thumb.jpg')`,
         }}
       >
         <div className="grid grid-cols-5 gap-2 sm:gap-4 p-2 sm:p-4 rounded-2xl bg-black/60 backdrop-blur-xl border border-purple-500/30 shadow-2xl">
-          {Array.from({ length: 5 }).map((_, r) =>
-            Array.from({ length: 5 }).map((_, c) => {
+          {Array.from({ length: GRID }).map((_, r) =>
+            Array.from({ length: GRID }).map((_, c) => {
               const tile = tiles.find(
                 (t) => t.layer === playerLayer && t.row === r && t.col === c
               );
@@ -140,10 +177,7 @@ export function FallingFloorView({ onExit }: { onExit?: () => void }) {
                 <button
                   key={`${r}-${c}`}
                   type="button"
-                  onClick={() => {
-                    setPlayerRow(r);
-                    setPlayerCol(c);
-                  }}
+                  onPointerDown={() => stepToward(r, c)}
                   className={cn(
                     "relative flex h-14 w-14 sm:h-20 sm:w-20 items-center justify-center rounded-2xl border-2 transition-all duration-300 font-bold backdrop-blur-sm",
                     tile?.state === "collapsed"
@@ -154,12 +188,32 @@ export function FallingFloorView({ onExit }: { onExit?: () => void }) {
                     isPlayerHere && "ring-4 ring-cyan-400 ring-offset-4 ring-offset-black shadow-[0_0_30px_#22d3ee]"
                   )}
                 >
-                  {/* Hexagon internal energy icon */}
-                  {tile?.state !== "collapsed" && !isPlayerHere && (
-                    <span className="text-[9px] font-mono tracking-tighter text-purple-400/50 uppercase">
-                      L{playerLayer}
-                    </span>
-                  )}
+                  {/*
+                    * The prize, drawn on the tile it sits on.
+                    *
+                    * Reaching it is the only reason one direction is better
+                    * than another — without it every move was worth the same
+                    * and the best play was to shuffle in a safe corner.
+                    */}
+                  {tile?.state !== "collapsed" &&
+                    !isPlayerHere &&
+                    prize?.row === r &&
+                    prize?.col === c && (
+                      <span
+                        className="text-xl sm:text-2xl drop-shadow-[0_0_10px_rgba(250,204,21,0.9)] animate-pulse"
+                        aria-label="Prize"
+                      >
+                        ★
+                      </span>
+                    )}
+
+                  {tile?.state !== "collapsed" &&
+                    !isPlayerHere &&
+                    !(prize?.row === r && prize?.col === c) && (
+                      <span className="text-[9px] font-mono tracking-tighter text-purple-400/50 uppercase">
+                        L{playerLayer}
+                      </span>
+                    )}
                   {isPlayerHere && (
                     <div className="flex h-11 w-11 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-gradient-to-tr from-cyan-500 to-cyan-300 text-black text-2xl sm:text-3xl shadow-[0_0_20px_#22d3ee] animate-pulse">
                       🏃
@@ -185,7 +239,7 @@ export function FallingFloorView({ onExit }: { onExit?: () => void }) {
 
       {/* Directional Pad */}
       <div className="flex w-full items-center justify-between border-t border-white/10 pt-4">
-        <p className="text-xs text-white/60">Use arrow controls or click tiles to stay alive!</p>
+        <p className="text-xs text-white/60">Arrows, WASD or tap a neighbouring tile. Step off before it drops!</p>
 
         <div className="flex items-center gap-1.5">
           <Button variant="outline" size="sm" onClick={() => move(0, -1)} className="border-white/20 text-white">

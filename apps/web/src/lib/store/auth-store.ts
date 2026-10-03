@@ -77,14 +77,24 @@ export const useAuthStore = create<AuthStoreState & AuthActions>((set) => ({
       return;
     }
 
-    const supabase = getSupabaseBrowserClient();
-    const { data } = await supabase.auth.getSession();
-    applySession(set, data.session);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase.auth.getSession();
+      if (error) {
+        console.warn("Supabase auth.getSession error:", error.message);
+        set({ isLoading: false, user: null, session: null, isAuthenticated: false });
+        return;
+      }
+      applySession(set, data.session);
 
-    // Keeps the store in step with token refreshes and sign-outs in other tabs.
-    if (!subscribed) {
-      subscribed = true;
-      supabase.auth.onAuthStateChange((_event, session) => applySession(set, session));
+      // Keeps the store in step with token refreshes and sign-outs in other tabs.
+      if (!subscribed) {
+        subscribed = true;
+        supabase.auth.onAuthStateChange((_event, session) => applySession(set, session));
+      }
+    } catch (err) {
+      console.warn("Supabase connection unavailable, falling back to offline mode:", err);
+      set({ isLoading: false, user: null, session: null, isAuthenticated: false });
     }
   },
 

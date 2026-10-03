@@ -47,9 +47,45 @@ async function readError(res: Response): Promise<string> {
  * browser and navigated, which meant rooms had no server-side existence,
  * no capacity limit and no privacy enforcement.
  */
-export function useRooms(gameFilter?: string | null) {
+export function useRoomResolver() {
+  const [error, setError] = React.useState<string | null>(null);
+
+  /** Validates a code and confirms the room is joinable before navigating. */
+  const resolveCode = React.useCallback(async (raw: string) => {
+    const code = normalizeRoomCode(raw);
+    if (!isValidRoomCode(code)) {
+      setError("That doesn't look like a valid room code.");
+      return null;
+    }
+    try {
+      const res = await fetch(`/api/rooms/${code}`);
+      if (!res.ok) {
+        setError(await readError(res));
+        return null;
+      }
+      const body = (await res.json()) as { isFull: boolean; canSpectate: boolean };
+      if (body.isFull && !body.canSpectate) {
+        setError("That room is already full.");
+        return null;
+      }
+      setError(null);
+      return code;
+    } catch {
+      setError("Couldn't reach that room. Check your connection.");
+      return null;
+    }
+  }, []);
+
+  return { resolveCode, error, setError };
+}
+
+export function useRooms(
+  gameFilter?: string | null,
+  options?: { autoFetch?: boolean },
+) {
+  const autoFetch = options?.autoFetch ?? true;
   const [rooms, setRooms] = React.useState<RoomSummary[]>([]);
-  const [isLoading, setIsLoading] = React.useState(true);
+  const [isLoading, setIsLoading] = React.useState(autoFetch);
   const [error, setError] = React.useState<string | null>(null);
   const [isCreating, setIsCreating] = React.useState(false);
 
@@ -73,8 +109,10 @@ export function useRooms(gameFilter?: string | null) {
   }, [gameFilter]);
 
   React.useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (autoFetch) {
+      void refresh();
+    }
+  }, [refresh, autoFetch]);
 
   /** Returns the new room's code, or null if creation failed. */
   const createRoom = React.useCallback(

@@ -64,9 +64,9 @@ function LoginContent() {
       <Card className="w-full max-w-md border-border bg-card/90 shadow-2xl backdrop-blur-xl">
         <CardHeader className="text-center pb-6">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary shadow-xl shadow-primary/30 mb-4">
-            <Gamepad2 className="h-8 w-8 text-white" />
+            <Gamepad2 className="h-8 w-8 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl font-black text-white">Play together</CardTitle>
+          <CardTitle className="text-2xl font-black text-foreground">Play together</CardTitle>
           <CardDescription className="text-muted-foreground mt-1">
             Sign in with Google, or jump straight in as a guest.
           </CardDescription>

@@ -1,5 +1,6 @@
 import {
   CarRaceEngine,
+  planCorner,
   sampleTrack,
   type RacingAction,
   type RacingEngine,
@@ -8,11 +9,39 @@ import {
   type VehicleState,
 } from "@playora/game-engine";
 import type { GameId } from "@playora/game-types";
+
 import type { AiLevel, BotEngine, RandomSource } from "../types.js";
 
 interface LevelProfile {
   /** Metres of road the driver reads ahead. Short sight is what makes a novice. */
+  /**
+   * How far ahead the driver reads the track, in metres.
+   *
+   * These were 25-120m. Braking from 78 m/s to a 123m-radius corner takes
+   * about 106m plus margin — so even the best bot could not see far enough to
+   * brake in time, and every one of them arrived at corners too fast. They now
+   * span a range where the top level can genuinely plan a corner and the
+   * bottom genuinely cannot.
+   */
   lookahead: number;
+  /**
+   * Safety margin on the braking point.
+   *
+   * This is the difficulty dial that is not "go faster" (spec section 63): a
+   * beginner brakes far too early and loses time, an expert brakes near the
+   * limit.
+   */
+  brakeMargin: number;
+  /**
+   * Fraction of the car's top speed this driver actually uses on a straight.
+   *
+   * Needed because these tracks have no corner tight enough to demand braking
+   * — measured, every bend is flat for this car — so once the corner model was
+   * corrected, every difficulty drove flat out and the ladder collapsed to a
+   * 10% spread. This is the one dial spec section 65 explicitly permits:
+   * adjusting the AI's own target speed, never the player's physics.
+   */
+  pace: number;
   /** How firmly it corrects back to the line, per second. */
   correction: number;
   /** Fraction of top speed it is willing to carry into a corner. */
@@ -31,13 +60,13 @@ interface LevelProfile {
 }
 
 const PROFILES: Record<AiLevel, LevelProfile> = {
-  1: { lookahead: 25, correction: 1.1, cornerSpeed: 0.55, lapseChance: 0.4, sloppiness: 0.5, usesNitroWell: false, avoidsObstacles: false, collectsCoins: false, thinkMs: 120 },
-  2: { lookahead: 40, correction: 1.5, cornerSpeed: 0.65, lapseChance: 0.28, sloppiness: 0.38, usesNitroWell: false, avoidsObstacles: false, collectsCoins: false, thinkMs: 110 },
-  3: { lookahead: 55, correction: 1.9, cornerSpeed: 0.74, lapseChance: 0.18, sloppiness: 0.28, usesNitroWell: false, avoidsObstacles: true, collectsCoins: false, thinkMs: 100 },
-  4: { lookahead: 70, correction: 2.3, cornerSpeed: 0.82, lapseChance: 0.11, sloppiness: 0.2, usesNitroWell: true, avoidsObstacles: true, collectsCoins: true, thinkMs: 90 },
-  5: { lookahead: 85, correction: 2.7, cornerSpeed: 0.88, lapseChance: 0.06, sloppiness: 0.13, usesNitroWell: true, avoidsObstacles: true, collectsCoins: true, thinkMs: 80 },
-  6: { lookahead: 100, correction: 3.1, cornerSpeed: 0.94, lapseChance: 0.02, sloppiness: 0.07, usesNitroWell: true, avoidsObstacles: true, collectsCoins: true, thinkMs: 70 },
-  7: { lookahead: 120, correction: 3.5, cornerSpeed: 1.0, lapseChance: 0, sloppiness: 0, usesNitroWell: true, avoidsObstacles: true, collectsCoins: true, thinkMs: 60 },
+  1: { lookahead: 70, brakeMargin: 1.1, pace: 0.5, correction: 1.1, cornerSpeed: 0.55, lapseChance: 0.4, sloppiness: 0.5, usesNitroWell: false, avoidsObstacles: false, collectsCoins: false, thinkMs: 120 },
+  2: { lookahead: 95, brakeMargin: 0.85, pace: 0.62, correction: 1.5, cornerSpeed: 0.65, lapseChance: 0.28, sloppiness: 0.38, usesNitroWell: false, avoidsObstacles: false, collectsCoins: false, thinkMs: 110 },
+  3: { lookahead: 125, brakeMargin: 0.6, pace: 0.78, correction: 1.9, cornerSpeed: 0.74, lapseChance: 0.18, sloppiness: 0.28, usesNitroWell: false, avoidsObstacles: true, collectsCoins: false, thinkMs: 100 },
+  4: { lookahead: 155, brakeMargin: 0.42, pace: 0.85, correction: 2.3, cornerSpeed: 0.82, lapseChance: 0.11, sloppiness: 0.2, usesNitroWell: true, avoidsObstacles: true, collectsCoins: true, thinkMs: 90 },
+  5: { lookahead: 185, brakeMargin: 0.3, pace: 0.91, correction: 2.7, cornerSpeed: 0.88, lapseChance: 0.06, sloppiness: 0.13, usesNitroWell: true, avoidsObstacles: true, collectsCoins: true, thinkMs: 80 },
+  6: { lookahead: 215, brakeMargin: 0.2, pace: 0.96, correction: 3.1, cornerSpeed: 0.94, lapseChance: 0.02, sloppiness: 0.07, usesNitroWell: true, avoidsObstacles: true, collectsCoins: true, thinkMs: 70 },
+  7: { lookahead: 240, brakeMargin: 0.12, pace: 1.0, correction: 3.5, cornerSpeed: 1.0, lapseChance: 0, sloppiness: 0, usesNitroWell: true, avoidsObstacles: true, collectsCoins: true, thinkMs: 60 },
 };
 
 /** Lateral positions the bot considers when looking for a way through. */
@@ -100,18 +129,49 @@ export class RacingBot implements BotEngine<RacingGameState, RacingAction> {
     const closeGap = (targetLateral - vehicle.lateral) * profile.correction;
     const steer = clamp(holdCorner + closeGap, -1, 1);
 
-    // Corner speed. The tightest curvature within the lookahead decides whether
-    // it should already be braking, which is why lookahead is the skill dial.
-    const worstCurve = this.sharpestCurveAhead(state, vehicle, profile.lookahead);
-    const cornerCeiling = tuning.maxSpeed * profile.cornerSpeed * (1 - Math.min(0.55, worstCurve * 14));
-    const tooFast = vehicle.speed > cornerCeiling;
+    /*
+     * Corner approach, from braking distance rather than from "am I over the
+     * limit right now".
+     *
+     * The old rule braked only once the vehicle was already too fast for the
+     * sharpest bend in sight, which is the one thing a driver must not do —
+     * by then the corner is already being taken badly. `planCorner` works out
+     * the speed the corner allows and how much road it takes to get there, so
+     * braking begins before the corner rather than at it.
+     *
+     * `cornerSpeed` is applied as *grip* rather than as a speed cap: a weaker
+     * driver behaves as though the car has less grip, so it corners slower
+     * everywhere for a physical reason instead of being handed a lower number.
+     */
+    const lookahead = Math.max(profile.lookahead, vehicle.speed * 2.2);
+    const plan = planCorner({
+      track: state.track,
+      distance: vehicle.distance,
+      speed: vehicle.speed,
+      maxSpeed: tuning.maxSpeed,
+      // A weaker driver uses less of the car's steering authority, so it
+      // needs a lower speed to hold the same corner. Same physics, less skill.
+      handling: {
+        steerRate: tuning.steerRate * profile.cornerSpeed,
+        centrifugal: tuning.centrifugal,
+      },
+      brakingPower: tuning.brakePower,
+      lookahead,
+      margin: profile.brakeMargin,
+    });
 
+    const worstCurve = this.sharpestCurveAhead(state, vehicle, profile.lookahead);
     const nitro = this.wantsNitro(state, vehicle, profile, worstCurve);
+
+    // A slower driver lifts off once it reaches its own pace, rather than
+    // being handed different physics.
+    const paceCeiling = tuning.maxSpeed * profile.pace;
+    const atPace = vehicle.speed >= paceCeiling;
 
     return this.action(playerId, {
       steer,
-      throttle: !tooFast,
-      brake: tooFast && vehicle.speed > cornerCeiling * 1.15,
+      throttle: plan.throttle > 0.25 && !atPace,
+      brake: plan.brake > 0.15,
       nitro,
     });
   }

@@ -37,6 +37,8 @@ export interface RaceHudState {
   bestLapTicks: number | null;
   lastLapTicks: number | null;
   gear: number;
+  /** This vehicle's real top speed, so the gauge is scaled to the car you drive. */
+  topSpeed: number;
   standings: Array<{
     playerId: string;
     place: number;
@@ -77,6 +79,44 @@ export function RaceHud({
   onNitro,
 }: RaceHudProps) {
   const reduced = useReducedMotion();
+
+  /*
+   * Which on-screen controls are currently under a finger.
+   *
+   * Two problems this solves, both specific to touch. First, releasing one
+   * steering button used to send steer=0 outright, so a player holding left,
+   * tapping right and letting go of right was left driving straight with their
+   * thumb still on left. Steering is now derived from what is actually held.
+   *
+   * Second, and worse: a touch the browser takes over — a system gesture, an
+   * incoming call, the page deciding it wants to pan — fires `pointercancel`
+   * and never `pointerup`. Without handling it the control stays down forever:
+   * a throttle nobody is pressing, or full lock into a wall. Every control below
+   * releases on cancel and on losing the window as well as on pointer up.
+   */
+  const heldRef = React.useRef({ left: false, right: false });
+
+  const applySteer = React.useCallback(
+    (direction: "left" | "right", held: boolean) => {
+      heldRef.current[direction] = held;
+      const { left, right } = heldRef.current;
+      onSteer?.(left && !right ? -1 : right && !left ? 1 : 0);
+    },
+    [onSteer],
+  );
+
+  const releaseAll = React.useCallback(() => {
+    heldRef.current = { left: false, right: false };
+    onSteer?.(0);
+    onAccelerate?.(false);
+    onBrake(false);
+  }, [onSteer, onAccelerate, onBrake]);
+
+  React.useEffect(() => {
+    // Switching apps mid-corner must not leave the car driving itself.
+    window.addEventListener("blur", releaseAll);
+    return () => window.removeEventListener("blur", releaseAll);
+  }, [releaseAll]);
 
   const mapVehicles: MapVehicle[] = hud.standings.map((row) => ({
     playerId: row.playerId,
@@ -183,9 +223,10 @@ export function RaceHud({
         <div className="flex items-center gap-1.5 sm:gap-2 mb-1 lg:hidden">
           <button
             type="button"
-            onPointerDown={() => onSteer?.(-1)}
-            onPointerUp={() => onSteer?.(0)}
-            onPointerLeave={() => onSteer?.(0)}
+            onPointerDown={() => applySteer("left", true)}
+            onPointerUp={() => applySteer("left", false)}
+            onPointerCancel={() => applySteer("left", false)}
+            onPointerLeave={() => applySteer("left", false)}
             aria-label="Steer Left"
             className="flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-2xl border border-cyan-400/50 bg-black/80 active:bg-cyan-500/50 active:scale-95 shadow-2xl text-cyan-300 font-black text-2xl select-none touch-none backdrop-blur-md"
           >
@@ -193,9 +234,10 @@ export function RaceHud({
           </button>
           <button
             type="button"
-            onPointerDown={() => onSteer?.(1)}
-            onPointerUp={() => onSteer?.(0)}
-            onPointerLeave={() => onSteer?.(0)}
+            onPointerDown={() => applySteer("right", true)}
+            onPointerUp={() => applySteer("right", false)}
+            onPointerCancel={() => applySteer("right", false)}
+            onPointerLeave={() => applySteer("right", false)}
             aria-label="Steer Right"
             className="flex h-14 w-14 sm:h-16 sm:w-16 items-center justify-center rounded-2xl border border-cyan-400/50 bg-black/80 active:bg-cyan-500/50 active:scale-95 shadow-2xl text-cyan-300 font-black text-2xl select-none touch-none backdrop-blur-md"
           >
@@ -211,6 +253,7 @@ export function RaceHud({
           type="button"
           onPointerDown={() => onAccelerate?.(true)}
           onPointerUp={() => onAccelerate?.(false)}
+          onPointerCancel={() => onAccelerate?.(false)}
           onPointerLeave={() => onAccelerate?.(false)}
           aria-label="Accelerate"
           className="flex flex-col items-center gap-1 text-white transition-transform active:scale-95 mb-1 lg:hidden select-none touch-none"
@@ -225,6 +268,7 @@ export function RaceHud({
           type="button"
           onPointerDown={() => onBrake(true)}
           onPointerUp={() => onBrake(false)}
+          onPointerCancel={() => onBrake(false)}
           onPointerLeave={() => onBrake(false)}
           aria-label="Brake"
           className="flex flex-col items-center gap-1 text-white transition-transform active:scale-95 mb-1 select-none touch-none"

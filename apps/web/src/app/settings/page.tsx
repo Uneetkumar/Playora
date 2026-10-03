@@ -9,6 +9,12 @@ import { AUDIO_BUSES, BUS_LABELS } from "@playora/audio";
 import { useAudioStore } from "../../lib/store/audio-store";
 import { useGameplayStore, type GameplayPrefs } from "../../lib/store/gameplay-store";
 import { useAuthStore } from "../../lib/store/auth-store";
+import {
+  applyTheme,
+  readStoredTheme,
+  THEME_STORAGE_KEY,
+  type ThemeChoice,
+} from "../../lib/theme";
 
 /**
  * Settings.
@@ -19,7 +25,6 @@ import { useAuthStore } from "../../lib/store/auth-store";
  * not yet built rather than shown as controls that do nothing.
  */
 
-type ThemeChoice = "dark" | "light" | "system";
 
 const SECTIONS = [
   { id: "account", label: "Account", icon: User },
@@ -31,16 +36,6 @@ const SECTIONS = [
   { id: "accessibility", label: "Accessibility", icon: Accessibility },
 ] as const;
 
-function applyTheme(choice: ThemeChoice) {
-  const root = document.documentElement;
-  const prefersLight =
-    choice === "light" ||
-    (choice === "system" && window.matchMedia("(prefers-color-scheme: light)").matches);
-
-  root.classList.toggle("light", prefersLight);
-  root.classList.toggle("dark", !prefersLight);
-}
-
 export default function SettingsPage() {
   const { user } = useAuthStore();
   const [theme, setTheme] = React.useState<ThemeChoice>("dark");
@@ -49,7 +44,7 @@ export default function SettingsPage() {
   // Restore the saved choices before first paint of this page.
   React.useEffect(() => {
     try {
-      const saved = (localStorage.getItem("playora:theme") as ThemeChoice) ?? "dark";
+      const saved = readStoredTheme();
       setTheme(saved);
       applyTheme(saved);
       setReduceMotion(localStorage.getItem("playora:reduce-motion") === "1");
@@ -62,7 +57,7 @@ export default function SettingsPage() {
     setTheme(choice);
     applyTheme(choice);
     try {
-      localStorage.setItem("playora:theme", choice);
+      localStorage.setItem(THEME_STORAGE_KEY, choice);
     } catch {
       /* storage unavailable */
     }
@@ -102,7 +97,7 @@ export default function SettingsPage() {
       <div className="mt-8 space-y-5">
         <Card id="account" className="border-border bg-card p-6">
           <h2 className="flex items-center gap-2 font-display text-lg font-bold text-foreground">
-            <User className="h-5 w-5 text-primary" aria-hidden />
+            <User className="h-5 w-5 text-primary-accent" aria-hidden />
             Account
           </h2>
           <dl className="mt-4 space-y-2 text-sm">
@@ -133,7 +128,7 @@ export default function SettingsPage() {
 
         <Card id="appearance" className="border-border bg-card p-6">
           <h2 className="flex items-center gap-2 font-display text-lg font-bold text-foreground">
-            <Palette className="h-5 w-5 text-primary" aria-hidden />
+            <Palette className="h-5 w-5 text-primary-accent" aria-hidden />
             Appearance
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">Theme</p>
@@ -146,7 +141,7 @@ export default function SettingsPage() {
                 aria-pressed={theme === choice}
                 className={`flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm font-medium capitalize transition-colors ${
                   theme === choice
-                    ? "border-primary bg-primary/15 text-primary"
+                    ? "border-primary bg-primary/15 text-primary-accent"
                     : "border-border bg-muted/30 text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -159,7 +154,7 @@ export default function SettingsPage() {
 
         <Card id="accessibility" className="border-border bg-card p-6">
           <h2 className="flex items-center gap-2 font-display text-lg font-bold text-foreground">
-            <Accessibility className="h-5 w-5 text-primary" aria-hidden />
+            <Accessibility className="h-5 w-5 text-primary-accent" aria-hidden />
             Accessibility
           </h2>
           <label className="mt-4 flex cursor-pointer items-center justify-between gap-4">
@@ -238,7 +233,7 @@ function AudioSettings() {
   return (
     <Card id="audio" className="border-border bg-card p-6">
       <h2 className="flex items-center gap-2 font-display text-lg font-bold text-foreground">
-        <Volume2 className="h-5 w-5 text-primary" aria-hidden />
+        <Volume2 className="h-5 w-5 text-primary-accent" aria-hidden />
         Audio
       </h2>
 
@@ -393,7 +388,7 @@ function GameplaySettings() {
   return (
     <Card id="gameplay" className="border-border bg-card p-6">
       <h2 className="flex items-center gap-2 font-display text-lg font-bold text-foreground">
-        <Gamepad2 className="h-5 w-5 text-primary" aria-hidden />
+        <Gamepad2 className="h-5 w-5 text-primary-accent" aria-hidden />
         Gameplay
       </h2>
 

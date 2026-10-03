@@ -43,7 +43,7 @@ export default function LeaderboardPage() {
             className={cn(
               "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
               gameSlug === game.id
-                ? "border-primary bg-primary/15 text-primary"
+                ? "border-primary bg-primary/15 text-primary-accent"
                 : "border-border text-muted-foreground hover:text-foreground",
             )}
           >
@@ -110,7 +110,7 @@ export default function LeaderboardPage() {
             className={cn(
               "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
               scope === tab.id
-                ? "bg-primary/15 text-primary"
+                ? "bg-primary/15 text-primary-accent"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >

@@ -3,69 +3,128 @@
 import * as React from "react";
 import { Button, cn } from "@playora/ui";
 import { Users, Trophy, RotateCcw, ArrowRight, Play, Sparkles } from "lucide-react";
+import { useArcadeRun } from "./use-arcade-run";
+import { ArcadeHud } from "./ArcadeHud";
+import { useJuice } from "./use-juice";
+import { waveAt } from "./juice";
+import { sawRisk } from "./scoring";
+import { useGameRuntime } from "../runtime/use-game-runtime";
+import {
+  createRopeState,
+  stepRope,
+  setAnchor,
+  startZip,
+  nextLevel,
+  starsFor,
+  batchSizeFor,
+  type RopeState,
+} from "./rope-rescue";
+
+interface RopeSnapshot {
+  level: number;
+  waiting: number;
+  rescued: number;
+  lost: number;
+  zipping: boolean;
+  anchorY: number;
+  sawY: number;
+  cleared: boolean;
+  stars: number;
+}
 
 export function RopeRescueView({ onExit }: { onExit?: () => void }) {
-  const [level, setLevel] = React.useState(1);
-  const [survivors, setSurvivors] = React.useState(10);
-  const [rescued, setRescued] = React.useState(0);
-  const [lost, setLost] = React.useState(0);
-  const [isZipping, setIsZipping] = React.useState(false);
-  const [gameOver, setGameOver] = React.useState(false);
-  const [stars, setStars] = React.useState(0);
+  // Each survivor who makes it across scores and extends the chain; one lost
+  // to a hazard breaks it. That makes a clean run worth far more than a
+  // scrappy one with the same number rescued.
+  const run = useArcadeRun("rope-rescue");
+  const juice = useJuice();
+  const juiceRef = React.useRef(juice);
+  juiceRef.current = juice;
+  const runRef = React.useRef(run);
+  runRef.current = run;
 
-  // Rope anchor points
-  const [anchorY, setAnchorY] = React.useState(180);
+  /*
+   * One clock for the blade and the zip line.
+   *
+   * These were two `setInterval`s: a 50ms saw tick reading wall-clock
+   * `Date.now()` and a 380ms zip tick. The original comment defended
+   * `setInterval` over rAF because rAF stops in a background tab, so an
+   * rAF-driven saw would freeze while the game kept scoring against a blade
+   * the player could no longer see. That was right about the danger and wrong
+   * about the fix: the answer is one clock for both, which is what the runtime
+   * gives.
+   *
+   * `level` was cosmetic — a button incremented it, `restart()` never reset
+   * it, and nothing read it. It now sets the batch size and feeds the blade.
+   */
+  const rt = useGameRuntime<RopeState, RopeSnapshot>({
+    create: () => createRopeState(1),
 
-  const startRescue = () => {
-    if (survivors <= 0 || isZipping || gameOver) return;
-    setIsZipping(true);
-  };
-
-  const stopRescue = () => {
-    setIsZipping(false);
-  };
-
-  React.useEffect(() => {
-    if (!isZipping || survivors <= 0 || gameOver) return;
-
-    const timer = setInterval(() => {
-      setSurvivors((s) => {
-        if (s <= 1) {
-          setIsZipping(false);
-          setGameOver(true);
-        }
-        return Math.max(0, s - 1);
-      });
-
-      // Saw collision check based on anchor position
-      const hitHazard = Math.random() < 0.15;
-      if (hitHazard) {
-        setLost((l) => l + 1);
-      } else {
-        setRescued((r) => r + 1);
+    update: (st, ctx) => {
+      stepRope(st, ctx.dt, { wave: waveAt(runRef.current.elapsed), rng: Math.random });
+      if (st.events.rescued) {
+        runRef.current.hit(40);
+        juiceRef.current.impact("tap");
       }
-    }, 380);
+      if (st.events.lost) {
+        runRef.current.miss();
+        juiceRef.current.impact("heavy");
+      }
+      if (st.events.cleared) juiceRef.current.impact("solid");
+      if (st.events.died) juiceRef.current.impact("fatal");
+      if (st.over) ctx.over = true;
+    },
 
-    return () => clearInterval(timer);
-  }, [isZipping, survivors, gameOver]);
+    snapshot: (st) => ({
+      level: st.level,
+      waiting: st.waiting,
+      rescued: st.rescued,
+      lost: st.lost,
+      zipping: st.zipping,
+      anchorY: st.anchorY,
+      sawY: st.sawY,
+      cleared: st.cleared,
+      stars: starsFor(st),
+    }),
+    onGameOver: () => runRef.current.end(),
+  });
 
+  const { start } = rt;
   React.useEffect(() => {
-    if (gameOver) {
-      const rescuedPct = rescued / 10;
-      if (rescuedPct >= 0.8) setStars(3);
-      else if (rescuedPct >= 0.5) setStars(2);
-      else if (rescuedPct > 0) setStars(1);
-      else setStars(0);
-    }
-  }, [gameOver, rescued]);
+    start();
+  }, [start]);
+
+  const {
+    level,
+    waiting: survivors,
+    rescued,
+    lost,
+    zipping: isZipping,
+    anchorY,
+    sawY,
+    cleared,
+    stars,
+  } = rt.state;
+  const gameOver = rt.over;
+
+  const startRescue = () => rt.mutate(startZip);
+  const stopRescue = () =>
+    rt.mutate((st) => {
+      st.zipping = false;
+    });
+  const moveAnchor = (y: number) => rt.mutate((st) => setAnchor(st, y));
 
   const restart = () => {
-    setSurvivors(10);
-    setRescued(0);
-    setLost(0);
-    setIsZipping(false);
-    setGameOver(false);
-    setStars(0);
+    run.reset();
+    rt.restart();
+  };
+
+  /** Carries the level forward rather than resetting it to 1. */
+  const advanceLevel = () => {
+    rt.mutate((st) => {
+      const next = nextLevel(st);
+      Object.assign(st, next);
+    });
   };
 
   return (
@@ -80,11 +139,25 @@ export function RopeRescueView({ onExit }: { onExit?: () => void }) {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          {/*
+            * The wave, shown.
+            *
+            * The difficulty ramp already existed but was invisible, and
+            * escalation a player cannot see reads as the game quietly becoming
+            * unfair rather than as something they are surviving.
+            */}
+          <div className="rounded-xl border border-white/15 bg-black/55 px-3 py-1.5 backdrop-blur-md">
+            <div className="text-[9px] font-bold uppercase tracking-widest text-white/50">Wave</div>
+            <div className="numeric text-lg font-black leading-none text-white tabular-nums sm:text-xl">
+              {waveAt(run.elapsed)}
+            </div>
+          </div>
+          <ArcadeHud run={run} />
           <div className="rounded-xl border border-white/10 bg-white/5 px-3 sm:px-4 py-1 sm:py-1.5 text-xs sm:text-sm font-bold text-cyan-400">
             L{level}
           </div>
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-950/40 px-3 sm:px-4 py-1 sm:py-1.5 text-xs sm:text-sm font-bold text-emerald-400">
-            SAVED: {rescued}/10
+            SAVED: {rescued}/{batchSizeFor(level)}
           </div>
           <div className="rounded-xl border border-rose-500/30 bg-rose-950/40 px-3 sm:px-4 py-1 sm:py-1.5 text-xs sm:text-sm font-bold text-rose-400">
             LOST: {lost}
@@ -94,6 +167,7 @@ export function RopeRescueView({ onExit }: { onExit?: () => void }) {
 
       {/* Main Physics Canvas Simulation */}
       <div
+        {...juice.shakeProps}
         className="relative my-2 sm:my-4 flex flex-1 w-full max-w-4xl items-center justify-center overflow-hidden rounded-2xl sm:rounded-3xl border border-white/20 shadow-2xl bg-cover bg-center"
         style={{
           backgroundImage: `linear-gradient(to bottom, rgba(5,10,25,0.7), rgba(2,6,23,0.85)), url('/games/rope-rescue-thumb.jpg')`,
@@ -163,7 +237,7 @@ export function RopeRescueView({ onExit }: { onExit?: () => void }) {
           <circle cx="250" cy={anchorY} r="4" fill="#ffffff" />
 
           {/* Spinning Hazard Saw Blade with Teeth & Sparks */}
-          <g transform="translate(240, 95)" className="animate-spin origin-center" filter="url(#glow-saw)">
+          <g transform={`translate(240, ${sawY})`} className="animate-spin origin-center" filter="url(#glow-saw)">
             <circle cx="0" cy="0" r="26" fill="#dc2626" opacity="0.35" />
             <circle cx="0" cy="0" r="20" fill="url(#saw-metal)" stroke="#fca5a5" strokeWidth="2" />
             {/* Saw Teeth */}
@@ -191,17 +265,37 @@ export function RopeRescueView({ onExit }: { onExit?: () => void }) {
           )}
         </svg>
 
-        {/* Anchor Adjustment Slider Control */}
+        {/*
+          * The slider, with the risk it is buying.
+          *
+          * Showing the number matters more here than anywhere else in the set:
+          * this control did nothing at all before, so a player who used it and
+          * saw no effect learned — correctly — that it was decoration. The
+          * readout is the proof that it is not.
+          */}
         <div className="absolute top-4 right-6 flex items-center gap-3 rounded-2xl border border-white/20 bg-black/60 px-4 py-2 backdrop-blur-md shadow-2xl">
-          <span className="text-xs font-black tracking-wider text-cyan-300">ROPE TENSION:</span>
+          <span className="text-xs font-black tracking-wider text-cyan-300">ROPE HEIGHT</span>
           <input
             type="range"
             min="100"
             max="220"
             value={anchorY}
-            onChange={(e) => setAnchorY(Number(e.target.value))}
+            onChange={(e) => moveAnchor(Number(e.target.value))}
+            aria-label="Rope height"
             className="h-2 w-28 accent-cyan-400 cursor-pointer"
           />
+          <span
+            className={cn(
+              "numeric w-14 text-right text-xs font-black tabular-nums",
+              sawRisk(anchorY, sawY) > 0.35
+                ? "text-rose-300"
+                : sawRisk(anchorY, sawY) > 0.12
+                  ? "text-amber-300"
+                  : "text-emerald-300",
+            )}
+          >
+            {Math.round(sawRisk(anchorY, sawY) * 100)}% risk
+          </span>
         </div>
       </div>
 
@@ -212,7 +306,7 @@ export function RopeRescueView({ onExit }: { onExit?: () => void }) {
         </Button>
 
         {/* Hold to Zip-line Button */}
-        {!gameOver ? (
+        {!gameOver && !cleared ? (
           <button
             type="button"
             onPointerDown={startRescue}
@@ -241,15 +335,29 @@ export function RopeRescueView({ onExit }: { onExit?: () => void }) {
                 />
               ))}
             </div>
-            <Button
-              onClick={() => {
-                setLevel((l) => l + 1);
-                restart();
-              }}
-              className="gap-2 bg-emerald-500 hover:bg-emerald-600 font-bold px-6"
-            >
-              NEXT LEVEL <ArrowRight className="h-4 w-4" />
-            </Button>
+            {/*
+              * Clearing and failing are different outcomes now.
+              *
+              * The batch simply running out used to end every game the same
+              * way regardless of how it went, so there was no difference
+              * between rescuing nine and rescuing one. Clearing half the batch
+              * advances; losing more than half ends the run.
+              */}
+            {cleared ? (
+              <Button
+                onClick={advanceLevel}
+                className="gap-2 bg-emerald-500 hover:bg-emerald-600 font-bold px-6"
+              >
+                NEXT LEVEL <ArrowRight className="h-4 w-4" />
+              </Button>
+            ) : (
+              <Button
+                onClick={restart}
+                className="gap-2 bg-[#7c3aed] hover:bg-[#6d28d9] font-bold px-6"
+              >
+                <RotateCcw className="h-4 w-4" /> Try Again
+              </Button>
+            )}
           </div>
         )}
 

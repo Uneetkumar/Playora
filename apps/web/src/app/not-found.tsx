@@ -14,13 +14,13 @@ export default function NotFound() {
     <div className="flex min-h-[70vh] flex-col items-center justify-center px-4 text-center">
       <div className="relative">
         <span
-          className="font-display text-[7rem] font-black leading-none text-primary/15 sm:text-[10rem]"
+          className="font-display text-[7rem] font-black leading-none text-primary-accent/15 sm:text-[10rem]"
           aria-hidden
         >
           404
         </span>
         <span className="absolute inset-0 flex items-center justify-center">
-          <Gamepad2 className="h-16 w-16 text-primary" aria-hidden />
+          <Gamepad2 className="h-16 w-16 text-primary-accent" aria-hidden />
         </span>
       </div>
 

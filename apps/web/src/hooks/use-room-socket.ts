@@ -25,6 +25,13 @@ interface UseRoomSocketOptions {
   onError?: (error: string) => void;
 }
 
+/** First retry delay; doubles each attempt. */
+const RECONNECT_BASE_DELAY_MS = 1000;
+/** Never wait longer than this between attempts. */
+const MAX_RECONNECT_DELAY_MS = 15000;
+/** After this many consecutive failures, stop and tell the player. */
+const MAX_RECONNECT_ATTEMPTS = 6;
+
 export function useRoomSocket({
   roomId,
   gameId = "chess",
@@ -42,6 +49,23 @@ export function useRoomSocket({
 
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  /*
+   * Set before any close this hook performs itself.
+   *
+   * `onclose` fires for *every* close, including the ones we ask for — so
+   * tearing the socket down scheduled a fresh reconnect two seconds later.
+   * The cleanup cleared the pending timer and then called `close()`, in that
+   * order, so the timer it cleared was never the one that mattered: closing
+   * created a new one immediately afterwards and nothing cancelled it.
+   *
+   * Every re-render that changed a dependency therefore left a phantom socket
+   * opening two seconds later, to a room the player may already have left.
+   * Navigating between rooms a few times stacks them up, which is what the
+   * repeated reconnects were.
+   */
+  const intentionalCloseRef = useRef(false);
+  /** Consecutive failed attempts, for backoff. */
+  const attemptsRef = useRef(0);
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<
     "connecting" | "connected" | "disconnected" | "reconnecting"
@@ -113,11 +137,14 @@ export function useRoomSocket({
 
     if (socketRef.current) {
       try {
+        intentionalCloseRef.current = true;
         socketRef.current.close();
       } catch (e) {
         console.warn("Socket close cleanup:", e);
       }
     }
+    // Cleared for the socket about to be opened.
+    intentionalCloseRef.current = false;
 
     setConnecting(true);
     setConnectionStatus("connecting");
@@ -182,6 +209,8 @@ export function useRoomSocket({
           case "CONNECTED":
             setConnected(true);
             setConnectionStatus("connected");
+        // A successful connection clears the backoff.
+        attemptsRef.current = 0;
             break;
 
           case "ROOM_STATE": {
@@ -353,15 +382,46 @@ export function useRoomSocket({
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         setConnected(false);
-        setConnectionStatus("reconnecting");
         if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
 
-        // Auto reconnect after 2 seconds
+        // A close we asked for is not a dropped connection.
+        if (intentionalCloseRef.current) {
+          intentionalCloseRef.current = false;
+          setConnectionStatus("disconnected");
+          return;
+        }
+
+        // 1000 is a normal closure — the server said goodbye, so retrying it
+        // is not reconnecting, it is arguing.
+        if (event.code === 1000) {
+          setConnectionStatus("disconnected");
+          return;
+        }
+
+        attemptsRef.current += 1;
+        if (attemptsRef.current > MAX_RECONNECT_ATTEMPTS) {
+          setConnectionStatus("disconnected");
+          setError("Lost connection to the room. Reload to try again.");
+          return;
+        }
+
+        /*
+         * Exponential backoff, capped.
+         *
+         * A flat two-second retry hammers a Worker that is down at the same
+         * rate for as long as the tab is open, and the player sees the same
+         * "reconnecting" message for ever with no signal that it is hopeless.
+         */
+        setConnectionStatus("reconnecting");
+        const delay = Math.min(
+          MAX_RECONNECT_DELAY_MS,
+          RECONNECT_BASE_DELAY_MS * 2 ** (attemptsRef.current - 1),
+        );
         reconnectTimeoutRef.current = setTimeout(() => {
           void connect();
-        }, 2000);
+        }, delay);
       };
 
       ws.onerror = () => {
@@ -404,13 +464,19 @@ export function useRoomSocket({
     void connect();
     return () => {
       if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       if (socketRef.current) {
         try {
+          // Flagged *before* closing, so `onclose` knows not to reconnect.
+          intentionalCloseRef.current = true;
           socketRef.current.close();
         } catch (e) {
           console.warn("Cleanup socket close:", e);
         }
+      }
+      // Cleared last: closing the socket above may have scheduled one.
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
     };
   }, [connect]);

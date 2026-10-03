@@ -23,6 +23,25 @@ export interface UseLanSocketOptions {
   onGameStart?: () => void;
 }
 
+/**
+ * The slice of a game engine the LAN host drives.
+ *
+ * Five engines run through this hook and their state and action types have
+ * nothing in common, so the call site cannot name a single concrete engine.
+ * Naming the *surface* instead of reaching for `any` keeps the method names
+ * and arity checked — a renamed method still fails the build.
+ */
+interface LanHostEngine {
+  validateAction: (state: unknown, action: unknown) => { valid: boolean; reason?: string };
+  executeAction: (state: unknown, action: unknown) => { state: unknown; events?: unknown[] };
+  getPlayerView: (state: unknown, userId: string) => unknown;
+  isGameOver: (state: unknown) => boolean;
+  calculateResult: (state: unknown, sessionId: string) => GameResult;
+  /** Seats needed before a match can start. */
+  minPlayers: number;
+  init: (players: unknown[], config?: unknown) => unknown;
+}
+
 export function useLanSocket({
   roomCode,
   gameId,
@@ -39,7 +58,15 @@ export function useLanSocket({
 
   // Authoritative host engine & raw full state
   const engineRef = React.useRef<ChessEngine | UnoEngine | UnoNoMercyEngine | CarRaceEngine | BikeRaceEngine | null>(null);
-  const rawStateRef = React.useRef<any>(null);
+  /*
+   * The host's full authoritative state, whichever game is running.
+   *
+   * `unknown` rather than `any`: this hook serves five different engines whose
+   * state shapes have nothing in common, and the only code that reads it hands
+   * it straight back to the engine that produced it. `any` would let a typo
+   * through silently; `unknown` forces the cast to be written down.
+   */
+  const rawStateRef = React.useRef<unknown>(null);
   const channelRef = React.useRef<BroadcastChannel | null>(null);
   const lastEventTimeRef = React.useRef<number>(0);
   const isStartedRef = React.useRef(isStarted);
@@ -212,7 +239,10 @@ export function useLanSocket({
             // If host received a guest action over Wi-Fi
             if (ev.type === "GAME_ACTION" && role === "host" && ev.senderId !== userId) {
               if (engineRef.current && rawStateRef.current) {
-                const engine = engineRef.current as any;
+                // The registry holds five engines with different action and
+                // state types. They share this surface, which is all the LAN
+                // host uses.
+                const engine = engineRef.current as unknown as LanHostEngine;
                 try {
                   const validation = engine.validateAction(rawStateRef.current, ev.payload);
                   if (validation.valid) {
@@ -226,7 +256,9 @@ export function useLanSocket({
                     for (const p of Object.values(playersRef.current)) {
                       try {
                         pViews[p.userId] = engine.getPlayerView(exec.state, p.userId);
-                      } catch {}
+                      } catch {
+                        // A player who has left mid-hand has no view to build.
+                      }
                     }
                     const hostView = pViews[userId] || engine.getPlayerView(exec.state, userId);
                     setGameState(hostView);
@@ -256,8 +288,9 @@ export function useLanSocket({
             }
           }
         }
-      } catch (pollErr) {
-        // Network heartbeat transient error
+      } catch {
+        // A dropped heartbeat is expected on a flaky local network; the next
+        // poll 200ms later recovers.
       }
     }, 200);
 
@@ -282,7 +315,7 @@ export function useLanSocket({
       lastTickTime = now;
 
       const ticksToAdvance = Math.max(1, Math.round((elapsedMs / 1000) * 60));
-      const engine = engineRef.current as any;
+      const engine = engineRef.current as unknown as LanHostEngine;
 
       try {
         const exec = engine.executeAction(rawStateRef.current, {
@@ -299,7 +332,9 @@ export function useLanSocket({
         for (const p of Object.values(playersRef.current)) {
           try {
             pViews[p.userId] = engine.getPlayerView(exec.state, p.userId);
-          } catch {}
+          } catch {
+                        // A player who has left mid-hand has no view to build.
+                      }
         }
         const hostView = pViews[userId] || engine.getPlayerView(exec.state, userId);
         setGameState(hostView);
@@ -346,7 +381,7 @@ export function useLanSocket({
       };
 
       if (role === "host" && engineRef.current && rawStateRef.current) {
-        const engine = engineRef.current as any;
+        const engine = engineRef.current as unknown as LanHostEngine;
         try {
           const validation = engine.validateAction(rawStateRef.current, action);
           if (validation.valid) {
@@ -360,7 +395,9 @@ export function useLanSocket({
             for (const p of Object.values(players)) {
               try {
                 pViews[p.userId] = engine.getPlayerView(exec.state, p.userId);
-              } catch {}
+              } catch {
+                        // A player who has left mid-hand has no view to build.
+                      }
             }
             const nextView = pViews[userId] || engine.getPlayerView(exec.state, userId);
             setGameState(nextView);
@@ -428,8 +465,8 @@ export function useLanSocket({
     }
 
     if (!engineRef.current) return;
-    const engine = engineRef.current as any;
-    let playerList: Player[] = Object.values(players);
+    const engine = engineRef.current as unknown as LanHostEngine;
+    const playerList: Player[] = Object.values(players);
 
     // If game needs at least 2 players (Chess, UNO) and only host is in lobby, add opponent slot
     if (playerList.length < engine.minPlayers) {
@@ -460,7 +497,9 @@ export function useLanSocket({
       for (const p of playerList) {
         try {
           pViews[p.userId] = engine.getPlayerView(initialState, p.userId);
-        } catch {}
+        } catch {
+                        // A player who has left mid-hand has no view to build.
+                      }
       }
 
       const initialView = pViews[userId] || engine.getPlayerView(initialState, userId);

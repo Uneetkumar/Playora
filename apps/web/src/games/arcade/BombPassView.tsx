@@ -3,101 +3,109 @@
 import * as React from "react";
 import { Button, cn } from "@playora/ui";
 import { Trophy, RotateCcw } from "lucide-react";
+import { useArcadeRun } from "./use-arcade-run";
+import { ArcadeHud } from "./ArcadeHud";
+import { useJuice } from "./use-juice";
+import { waveAt } from "./juice";
+import { bombHoldValue, formatScore } from "./scoring";
+import { BombSprite, PlayerToken } from "./ArcadeSprites";
+import { useGameRuntime } from "../runtime/use-game-runtime";
+import {
+  createBombState,
+  stepBomb,
+  passBomb,
+  type BombState,
+  type BombPlayer,
+} from "./bomb-pass";
 
-interface PlayerState {
-  id: string;
-  name: string;
-  isBot: boolean;
-  x: number;
-  y: number;
-  alive: boolean;
-  color: string;
+interface BombSnapshot {
+  players: BombPlayer[];
+  holderId: string;
+  fuse: number;
+  held: number;
+  round: number;
+  winner: string | null;
 }
 
 export function BombPassView({ onExit }: { onExit?: () => void }) {
-  const [players, setPlayers] = React.useState<PlayerState[]>([
-    { id: "p1", name: "You", isBot: false, x: 25, y: 70, alive: true, color: "#06b6d4" },
-    { id: "p2", name: "ApexBot", isBot: true, x: 75, y: 30, alive: true, color: "#f59e0b" },
-    { id: "p3", name: "CyberAce", isBot: true, x: 30, y: 30, alive: true, color: "#a855f7" },
-    { id: "p4", name: "Shadow", isBot: true, x: 70, y: 70, alive: true, color: "#10b981" },
-  ]);
+  // Surviving a round scores; holding the bomb when it goes off ends the run.
+  const run = useArcadeRun("bomb-pass");
+  const juice = useJuice();
+  const juiceRef = React.useRef(juice);
+  juiceRef.current = juice;
+  const runRef = React.useRef(run);
+  runRef.current = run;
 
-  const [bombHolderId, setBombHolderId] = React.useState<string>("p1");
-  const [fuseTime, setFuseTime] = React.useState<number>(8.0);
-  const [round, setRound] = React.useState<number>(1);
-  const [gameOver, setGameOver] = React.useState<boolean>(false);
-  const [winner, setWinner] = React.useState<string | null>(null);
+  /*
+   * One simulation, replacing a 100ms fuse tick, a 1200ms AI loop and the
+   * `latest` ref that mirrored state so both could read it. That mirror
+   * existed because the original ran its elimination inside
+   * `setFuseTime(t => ...)`, which StrictMode double-invokes.
+   *
+   * The extraction surfaced two gameplay bugs, both now fixed in
+   * `bomb-pass.ts`: the fuse reset to a hardcoded 7.0 regardless of wave, and
+   * bots rolled a flat 35% pass chance blind to how much fuse was left.
+   */
+  const rt = useGameRuntime<BombState, BombSnapshot>({
+    create: createBombState,
 
-  // Fuse countdown
-  React.useEffect(() => {
-    if (gameOver) return;
-
-    const timer = setInterval(() => {
-      setFuseTime((t) => {
-        if (t <= 0.1) {
-          // Explode current holder!
-          setPlayers((curr) => {
-            const next = curr.map((p) => (p.id === bombHolderId ? { ...p, alive: false } : p));
-            const aliveRemaining = next.filter((p) => p.alive);
-
-            if (aliveRemaining.length <= 1) {
-              setGameOver(true);
-              setWinner(aliveRemaining[0]?.name ?? "None");
-            } else {
-              // Pass bomb to random remaining alive player
-              const nextHolder = aliveRemaining[Math.floor(Math.random() * aliveRemaining.length)]!;
-              setBombHolderId(nextHolder.id);
-            }
-            return next;
-          });
-          setRound((r) => r + 1);
-          return 7.0;
-        }
-        return Math.max(0, t - 0.1);
-      });
-    }, 100);
-
-    return () => clearInterval(timer);
-  }, [gameOver, bombHolderId]);
-
-  // AI Bot movement & auto-pass
-  React.useEffect(() => {
-    if (gameOver) return;
-
-    const aiLoop = setInterval(() => {
-      if (bombHolderId !== "p1") {
-        // AI has the bomb! Chase another player to pass
-        setPlayers((curr) => {
-          const alive = curr.filter((p) => p.alive && p.id !== bombHolderId);
-          if (alive.length > 0 && Math.random() < 0.35) {
-            const target = alive[Math.floor(Math.random() * alive.length)]!;
-            setBombHolderId(target.id);
-          }
-          return curr;
-        });
+    update: (st, ctx) => {
+      stepBomb(st, ctx.dt, { wave: waveAt(runRef.current.elapsed), rng: Math.random });
+      if (st.events.survivedRound) runRef.current.hit(50);
+      if (st.events.exploded) {
+        // The bomb going off is the loudest thing in this game.
+        juiceRef.current.impact(st.events.died ? "fatal" : "heavy");
       }
-    }, 1200);
+      if (st.over) ctx.over = true;
+    },
 
-    return () => clearInterval(aiLoop);
-  }, [gameOver, bombHolderId]);
+    snapshot: (st) => ({
+      players: st.players,
+      holderId: st.holderId,
+      fuse: st.fuse,
+      held: st.held,
+      round: st.round,
+      winner: st.winner,
+    }),
+    onGameOver: () => runRef.current.end(),
+  });
+
+  const { start } = rt;
+  React.useEffect(() => {
+    start();
+  }, [start]);
+
+  const {
+    players,
+    holderId: bombHolderId,
+    fuse: fuseTime,
+    held: heldSeconds,
+    round,
+    winner,
+  } = rt.state;
+  const gameOver = rt.over;
 
   const passBombTo = (targetId: string) => {
-    if (bombHolderId !== "p1" || gameOver) return;
-    setBombHolderId(targetId);
+    rt.mutate((st) => {
+      /*
+       * The pass banks the hold — and the fuse does *not* reset, so whoever
+       * receives it inherits however little is left. That is the whole
+       * strategy: hold long enough to be worth something, then hand on a bomb
+       * nobody can survive.
+       */
+      const held = passBomb(st, targetId);
+      if (held === null) return;
+      const banked = bombHoldValue(held);
+      if (banked > 0) {
+        runRef.current.bank(banked);
+        juiceRef.current.impact(banked > 200 ? "solid" : "tap");
+      }
+    });
   };
 
   const restart = () => {
-    setPlayers([
-      { id: "p1", name: "You", isBot: false, x: 25, y: 70, alive: true, color: "#06b6d4" },
-      { id: "p2", name: "ApexBot", isBot: true, x: 75, y: 30, alive: true, color: "#f59e0b" },
-      { id: "p3", name: "CyberAce", isBot: true, x: 30, y: 30, alive: true, color: "#a855f7" },
-      { id: "p4", name: "Shadow", isBot: true, x: 70, y: 70, alive: true, color: "#10b981" },
-    ]);
-    setBombHolderId("p1");
-    setFuseTime(8.0);
-    setRound(1);
-    setGameOver(false);
-    setWinner(null);
+    run.reset();
+    rt.restart();
   };
 
   return (
@@ -112,6 +120,38 @@ export function BombPassView({ onExit }: { onExit?: () => void }) {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          {/*
+            * The wave, shown.
+            *
+            * The difficulty ramp already existed but was invisible, and
+            * escalation a player cannot see reads as the game quietly becoming
+            * unfair rather than as something they are surviving.
+            */}
+          <div className="rounded-xl border border-white/15 bg-black/55 px-3 py-1.5 backdrop-blur-md">
+            <div className="text-[9px] font-bold uppercase tracking-widest text-white/50">Wave</div>
+            <div className="numeric text-lg font-black leading-none text-white tabular-nums sm:text-xl">
+              {waveAt(run.elapsed)}
+            </div>
+          </div>
+          {bombHolderId === "p1" && heldSeconds > 0 && (
+            /*
+             * What is riding on the current hold.
+             *
+             * Unlike Hot Potato this sits beside a visible fuse, so the player
+             * is weighing a number they can see against a clock they can also
+             * see — a judgement call rather than a blind gamble, which is what
+             * makes the two games feel different despite the same skeleton.
+             */
+            <div className="rounded-xl border border-rose-400/60 bg-rose-500/20 px-3 py-1.5 backdrop-blur-md">
+              <div className="text-[9px] font-bold uppercase tracking-widest text-rose-200/70">
+                At risk
+              </div>
+              <div className="numeric text-lg font-black leading-none text-rose-100 tabular-nums sm:text-xl">
+                {formatScore(bombHoldValue(heldSeconds))}
+              </div>
+            </div>
+          )}
+          <ArcadeHud run={run} />
           <div className="rounded-xl border border-rose-500/40 bg-rose-950/60 px-3 sm:px-4 py-1 sm:py-1.5 font-display text-base sm:text-xl font-black text-rose-400 animate-pulse">
             💥 {fuseTime.toFixed(1)}s
           </div>
@@ -123,12 +163,13 @@ export function BombPassView({ onExit }: { onExit?: () => void }) {
 
       {/* Main Arena */}
       <div
+        {...juice.shakeProps}
         className="relative my-2 sm:my-4 flex flex-1 w-full max-w-4xl items-center justify-center overflow-hidden rounded-2xl sm:rounded-3xl border border-white/20 shadow-2xl bg-cover bg-center select-none"
         style={{
           backgroundImage: `linear-gradient(to bottom, rgba(25,5,5,0.7), rgba(10,2,2,0.9)), url('/games/bomb-pass-thumb.jpg')`,
         }}
       >
-        {players.map((p) => {
+        {players.map((p, i) => {
           const hasBomb = bombHolderId === p.id;
           if (!p.alive) {
             return (
@@ -156,10 +197,19 @@ export function BombPassView({ onExit }: { onExit?: () => void }) {
               )}
             >
               <div
-                className="flex h-12 w-12 items-center justify-center rounded-2xl border shadow-lg text-lg font-bold"
+                className="flex h-12 w-12 items-center justify-center rounded-2xl border shadow-lg"
                 style={{ borderColor: p.color, backgroundColor: `${p.color}30` }}
               >
-                {hasBomb ? "💣" : p.isBot ? "🤖" : "👑"}
+                {/*
+                 * The bomb is armed whenever someone is holding it, so the fuse
+                 * animates on whoever is actually in danger — the emoji it
+                 * replaces could not show that at all.
+                 */}
+                {hasBomb ? (
+                  <BombSprite size={34} armed />
+                ) : (
+                  <PlayerToken seat={i} size={30} eliminated={!p.alive} />
+                )}
               </div>
               <span className="text-[11px] font-bold text-white">{p.name}</span>
               {hasBomb && (
@@ -192,8 +242,8 @@ export function BombPassView({ onExit }: { onExit?: () => void }) {
       <div className="flex w-full items-center justify-between border-t border-white/10 pt-4">
         <p className="text-xs text-white/60">
           {bombHolderId === "p1"
-            ? "⚠️ YOU HAVE THE BOMB! Tap any player to pass it before time expires!"
-            : "Keep distance and survive until the bomb explodes!"}
+            ? "Holding pays — but the fuse carries over when you pass. Bail too late and it is yours."
+            : "The fuse does not reset. Whoever is holding it when it hits zero is out."}
         </p>
 
         <div className="flex items-center gap-3">

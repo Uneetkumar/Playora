@@ -19,8 +19,13 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { VehicleShowroom3D } from "./VehicleShowroom3D";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
+
+const VehicleShowroom3D = dynamic(
+  () => import("./VehicleShowroom3D").then((m) => m.VehicleShowroom3D),
+  { ssr: false }
+);
 
 export type GarageTab = "performance" | "customize" | "upgrades" | "paint" | "wheels" | "nitro";
 export type FilterTab = "all" | "owned" | "locked";

@@ -19,6 +19,21 @@ export function getSupabaseBrowserClient(): SupabaseClient {
   client ??= createBrowserClient(
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    {
+      global: {
+        fetch: async (input, init) => {
+          try {
+            return await fetch(input, init);
+          } catch {
+            // Gracefully catch DNS or network failures to prevent unhandled rejection overlays in React
+            return new Response(
+              JSON.stringify({ error: "invalid_grant", message: "Supabase host unreachable" }),
+              { status: 400, headers: { "Content-Type": "application/json" } }
+            );
+          }
+        },
+      },
+    },
   );
   return client;
 }

@@ -34,7 +34,7 @@ export function Header() {
             </div>
             <div className="flex flex-col">
               <span className="font-display text-lg font-extrabold tracking-wide text-foreground">
-                PLAY<span className="text-primary">ORA</span>
+                PLAY<span className="text-primary-accent">ORA</span>
               </span>
               {/* Wraps and crowds the header below ~400px; the wordmark carries
                   the brand on its own there. */}
@@ -54,7 +54,7 @@ export function Header() {
                   href={href}
                   className={`flex items-center space-x-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                     isActive
-                      ? "bg-border/90 text-white font-semibold shadow-sm"
+                      ? "bg-border/90 text-foreground font-semibold shadow-sm"
                       : "text-muted-foreground hover:bg-border/50 hover:text-foreground"
                   }`}
                 >
@@ -75,7 +75,7 @@ export function Header() {
             >
               <Avatar src={user.avatarUrl} fallbackText={user.displayName} size="sm" />
               <div className="flex flex-col text-left">
-                <span className="text-xs font-semibold text-white leading-tight">
+                <span className="text-xs font-semibold text-foreground leading-tight">
                   {user.displayName}
                 </span>
                 {user.isGuest && (

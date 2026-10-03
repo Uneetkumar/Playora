@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <radialGradient id="chkBg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#451a03" />
+      <stop offset="60%" stop-color="#1c0d02" />
+      <stop offset="100%" stop-color="#080300" />
+    </radialGradient>
+    <linearGradient id="woodLight" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fed7aa" />
+      <stop offset="100%" stop-color="#fba866" />
+    </linearGradient>
+    <linearGradient id="woodDark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#78350f" />
+      <stop offset="100%" stop-color="#451a03" />
+    </linearGradient>
+    <radialGradient id="redPiece" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#f87171" />
+      <stop offset="60%" stop-color="#dc2626" />
+      <stop offset="100%" stop-color="#7f1d1d" />
+    </radialGradient>
+    <radialGradient id="blackPiece" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#52525b" />
+      <stop offset="60%" stop-color="#27272a" />
+      <stop offset="100%" stop-color="#09090b" />
+    </radialGradient>
+    <filter id="pieceShadow">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#000" flood-opacity="0.8" />
+    </filter>
+  </defs>
+  <rect width="800" height="600" fill="url(#chkBg)" />
+  <!-- Isometric 3D Checkers Board -->
+  <g transform="translate(180, 110) skewX(-16)" filter="url(#pieceShadow)">
+    <rect width="460" height="340" rx="16" fill="#291404" stroke="#92400e" stroke-width="4" />
+    
+        <rect x="3" y="3" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="68" y="3" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="133" y="3" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="198" y="3" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="263" y="3" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="328" y="3" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="393" y="3" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="3" y="70" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="68" y="70" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="133" y="70" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="198" y="70" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="263" y="70" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="328" y="70" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="393" y="70" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="3" y="137" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="68" y="137" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="133" y="137" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="198" y="137" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="263" y="137" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="328" y="137" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="393" y="137" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="3" y="204" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="68" y="204" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="133" y="204" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="198" y="204" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="263" y="204" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="328" y="204" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="393" y="204" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="3" y="271" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="68" y="271" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="133" y="271" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="198" y="271" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="263" y="271" width="62" height="64" fill="url(#woodLight)" />
+      
+        <rect x="328" y="271" width="62" height="64" fill="url(#woodDark)" />
+      
+        <rect x="393" y="271" width="62" height="64" fill="url(#woodLight)" />
+      
+  </g>
+  <!-- Majestic Crowned Red King Piece in Foreground -->
+  <g transform="translate(350, 270)" filter="url(#pieceShadow)">
+    <ellipse cx="0" cy="18" rx="72" ry="38" fill="url(#redPiece)" />
+    <ellipse cx="0" cy="0" rx="72" ry="38" fill="url(#redPiece)" stroke="#fca5a5" stroke-width="3" />
+    <ellipse cx="0" cy="0" rx="54" ry="28" fill="#b91c1c" />
+    <!-- Golden Crown on King -->
+    <polygon points="-24,0 -30,-28 -12,-16 0,-34 12,-16 30,-28 24,0" fill="#facc15" stroke="#854d0e" stroke-width="2" />
+  </g>
+  <!-- Black Opponent Piece Jumping -->
+  <g transform="translate(540, 190)" filter="url(#pieceShadow)">
+    <ellipse cx="0" cy="14" rx="58" ry="30" fill="url(#blackPiece)" />
+    <ellipse cx="0" cy="0" rx="58" ry="30" fill="url(#blackPiece)" stroke="#71717a" stroke-width="2" />
+  </g>
+  <text x="400" y="550" text-anchor="middle" font-family="system-ui, sans-serif" font-weight="900" font-size="32" fill="#ffffff" letter-spacing="4" opacity="0.95">CHECKERS ROYALE</text>
+</svg>

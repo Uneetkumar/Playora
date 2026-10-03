@@ -5,6 +5,7 @@ import type { RacingPlayerView, TrackSpec, VehicleInput } from "@playora/game-en
 import type { Player } from "@playora/game-types";
 import { RaceCanvas } from "./RaceCanvas";
 import { RaceHud, type RaceHudState } from "./RaceHud";
+import { useCoarsePointer } from "./touch-controls";
 import { RacePauseMenu } from "./RacePauseMenu";
 
 interface RaceStageProps {
@@ -52,8 +53,10 @@ export function RaceStage({
   onLeave,
   onSettings,
 }: RaceStageProps) {
-  const maxSpeed = isBike ? 72 : 78;
+  // From the vehicle actually being driven, not the class base.
+  const maxSpeed = hud.topSpeed || (isBike ? 72 : 78);
   const [paused, setPaused] = React.useState(false);
+  const coarsePointer = useCoarsePointer();
 
   const setPausedAndReport = React.useCallback(
     (next: boolean) => {
@@ -83,6 +86,15 @@ export function RaceStage({
         onReady={onReady}
         setInput={setInput}
         interactive={!hud.finished && !paused}
+        /*
+         * Dragging the canvas to steer is a mouse affordance. On a touch device
+         * the canvas fills the screen behind the controls, and canvas steering
+         * takes priority over everything else in the input loop — so a thumb
+         * resting anywhere on the track would override the D-pad and hold the
+         * throttle open. The on-screen controls are the touch scheme; this is
+         * the pointer one.
+         */
+        pointerSteering={!coarsePointer}
         onRestart={onRestart}
       />
       <RaceHud

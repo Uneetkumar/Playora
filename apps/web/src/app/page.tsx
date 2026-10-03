@@ -20,6 +20,7 @@ import { GAME_CATALOG, isPlayable } from "../lib/games/catalog";
 import { GameTile } from "../components/games/game-tile";
 import { useAuthStore } from "../lib/store/auth-store";
 import { usePlayerProgression } from "../hooks/use-progression";
+import { ContinuePlaying } from "../components/games/continue-playing";
 
 const CATEGORY_ICONS: Record<string, string> = {
   Strategy: "♟️",
@@ -50,7 +51,7 @@ function FilterChip({
         "group relative flex shrink-0 items-center gap-2 whitespace-nowrap rounded-2xl px-4 py-2.5 text-xs font-bold transition-all duration-300 select-none overflow-hidden",
         active
           ? "bg-gradient-to-r from-[#7C3AED] via-[#9333EA] to-[#C084FC] text-white shadow-[0_0_25px_rgba(124,58,237,0.5)] scale-105 ring-1 ring-white/30"
-          : "bg-[#0F111E]/80 text-white/70 hover:bg-white/10 hover:text-white border border-white/10 hover:border-white/20 hover:scale-102"
+          : "bg-card/80 text-muted-foreground hover:bg-foreground/10 hover:text-foreground border border-border hover:border-foreground/20 hover:scale-102"
       )}
     >
       {/* Active Sheen */}
@@ -63,7 +64,7 @@ function FilterChip({
         <span
           className={cn(
             "relative z-10 rounded-full px-2 py-0.5 text-[10px] font-black transition-colors",
-            active ? "bg-white/25 text-white shadow-sm" : "bg-white/10 text-white/50 group-hover:text-white/80"
+            active ? "bg-white/25 text-white shadow-sm" : "bg-foreground/10 text-muted-foreground group-hover:text-foreground/80"
           )}
         >
           {count}
@@ -158,7 +159,7 @@ export default function HomePage() {
                 </span>
               </Link>
               <Link href="/play?game=car-race&mode=vs-ai&level=3">
-                <span className="flex items-center gap-1.5 rounded-xl border border-pink-500/30 bg-pink-950/40 px-3 py-1.5 text-xs font-bold text-pink-300 hover:bg-pink-900/60 hover:scale-105 transition-all">
+                <span className="flex items-center gap-1.5 rounded-xl border border-[#EC4899]/30 bg-[#831843]/40 px-3 py-1.5 text-xs font-bold text-[#F9A8D4] hover:bg-[#9D174D]/60 hover:scale-105 transition-all">
                   <Zap className="h-3.5 w-3.5" />
                   3D Apex GT Racing
                 </span>
@@ -208,6 +209,11 @@ export default function HomePage() {
       </div>
 
       {/* ───────────────────────────────────────────────────────────── */}
+      {/* JUMP BACK IN — renders nothing on a first visit */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      <ContinuePlaying />
+
+      {/* ───────────────────────────────────────────────────────────── */}
       {/* CATEGORY FILTER CHIPS (Swipeable on Mobile) */}
       {/* ───────────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap scrollbar-none">
@@ -242,13 +248,13 @@ export default function HomePage() {
         {/* Games Catalog */}
         <div className="min-w-0">
           {filteredGames.length === 0 ? (
-            <div className="rounded-3xl border border-dashed border-white/10 bg-[#0F111E]/40 py-16 text-center">
-              <p className="font-display text-lg font-bold text-white">No games in this category</p>
-              <p className="mt-1 text-sm text-white/50">Select another category or view all games.</p>
+            <div className="rounded-3xl border border-dashed border-border bg-card/40 py-16 text-center">
+              <p className="font-display text-lg font-bold text-foreground">No games in this category</p>
+              <p className="mt-1 text-sm text-muted-foreground">Select another category or view all games.</p>
               <Button
                 variant="outline"
                 size="sm"
-                className="mt-4 border-white/10 text-white"
+                className="mt-4 border-border text-foreground"
                 onClick={() => setSelectedCategory(null)}
               >
                 Show All Games
@@ -261,10 +267,10 @@ export default function HomePage() {
                 <section>
                   <div className="mb-4 flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <h2 className="font-display text-xl font-black text-white">
+                      <h2 className="font-display text-xl font-black text-foreground">
                         {selectedCategory ? `${selectedCategory} Games` : "Featured Games"}
                       </h2>
-                      <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-bold text-white/60">
+                      <span className="rounded-full bg-foreground/10 px-2.5 py-0.5 text-xs font-bold text-muted-foreground">
                         {playableGames.length}
                       </span>
                     </div>
@@ -283,8 +289,8 @@ export default function HomePage() {
                 <section>
                   <div className="mb-4 flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <h2 className="font-display text-lg font-bold text-white/80">Coming Soon</h2>
-                      <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-bold text-white/40">
+                      <h2 className="font-display text-lg font-bold text-foreground/80">Coming Soon</h2>
+                      <span className="rounded-full bg-foreground/10 px-2.5 py-0.5 text-xs font-bold text-muted-foreground">
                         {upcomingGames.length}
                       </span>
                     </div>
@@ -304,22 +310,22 @@ export default function HomePage() {
         {/* Right Sidebar: Progress & Community Feed */}
         <aside className="space-y-6">
           {/* Your Level / XP Card */}
-          <Card className="overflow-hidden border-white/10 bg-[#0F111E]/90 backdrop-blur-md p-5 shadow-xl relative group">
+          <Card className="overflow-hidden border-border bg-card/90 backdrop-blur-md p-5 shadow-xl relative group">
             <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#C084FC] to-transparent" />
             <div className="flex items-center justify-between mb-4">
-              <span className="text-xs font-black uppercase tracking-wider text-white/50 flex items-center gap-1.5">
+              <span className="text-xs font-black uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                 <Trophy className="h-3.5 w-3.5 text-amber-400" />
                 Player Status
               </span>
-              <span className="rounded-full bg-[#7C3AED]/20 border border-[#7C3AED]/40 px-2 py-0.5 text-[10px] font-bold text-[#C084FC]">
+              <span className="rounded-full bg-[#7C3AED]/20 border border-[#7C3AED]/40 px-2 py-0.5 text-[10px] font-bold text-primary-accent dark:text-[#C084FC]">
                 Level {progression?.level?.level ?? 1}
               </span>
             </div>
 
             <div className="space-y-2">
-              <div className="flex justify-between text-xs font-bold text-white">
+              <div className="flex justify-between text-xs font-bold text-foreground">
                 <span>Total XP</span>
-                <span className="text-[#C084FC] font-mono">{progression?.level?.xpIntoLevel ?? 150} / {progression?.level?.xpForNextLevel ?? 500} XP</span>
+                <span className="text-primary-accent dark:text-[#C084FC] font-mono">{progression?.level?.xpIntoLevel ?? 150} / {progression?.level?.xpForNextLevel ?? 500} XP</span>
               </div>
               <div className="h-2 w-full rounded-full bg-white/5 overflow-hidden">
                 <div
@@ -327,22 +333,22 @@ export default function HomePage() {
                   style={{ width: `${Math.min(100, Math.round((progression?.level?.progress ?? 0.3) * 100))}%` }}
                 />
               </div>
-              <p className="text-[10px] text-white/40 pt-1">
+              <p className="text-[10px] text-muted-foreground pt-1">
                 Win matches against players or bots to earn XP and level up!
               </p>
             </div>
           </Card>
 
           {/* Quick LAN Action Card */}
-          <Card className="overflow-hidden border-cyan-500/20 bg-gradient-to-b from-[#0C1B33]/80 to-[#0A0B14]/90 p-5 shadow-xl">
+          <Card className="overflow-hidden border-cyan-500/20 bg-card/90 bg-gradient-to-b from-cyan-500/10 to-transparent p-5 shadow-xl">
             <div className="flex items-center gap-2 mb-2 text-cyan-400 text-xs font-black uppercase tracking-wider">
               <Wifi className="h-4 w-4" />
               <span>Same Wi-Fi Play</span>
             </div>
-            <h3 className="font-display text-sm font-bold text-white">
+            <h3 className="font-display text-sm font-bold text-foreground">
               Playing on the same local network?
             </h3>
-            <p className="text-xs text-white/60 mt-1 mb-3">
+            <p className="text-xs text-muted-foreground mt-1 mb-3">
               Connect phone to laptop or friends on Wi-Fi with instant QR code scanning.
             </p>
             <Link href="/lan">

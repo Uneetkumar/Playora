@@ -9,10 +9,18 @@
     --foreground: 0 0% 100%;
     --card: 231 24% 11%;
     --card-foreground: 0 0% 100%;
+    /* Chrome — the sidebar, header and mobile nav. Distinct from both the page
+       background and a card, so the frame reads as frame in either theme. */
+    --surface: 231 23% 7%;
+    --surface-foreground: 0 0% 100%;
     --popover: 230 22% 15%;
     --popover-foreground: 0 0% 100%;
     --primary: 248 57% 60%;
     --primary-foreground: 0 0% 100%;
+    /* Primary as *text* on a surface, which is a different job from primary as
+       a fill: 57% lightness is right for a button and measures 3.9:1 as label
+       text on the near-black page. This is the legible sibling. */
+    --primary-accent: 270 91% 65%;
     --secondary: 198 93% 60%;
     --secondary-foreground: 232 21% 6%;
     --muted: 230 22% 15%;
@@ -38,10 +46,15 @@
     --foreground: 232 21% 10%;
     --card: 0 0% 100%;
     --card-foreground: 232 21% 10%;
+    /* White chrome on the near-white page: the border does the separating,
+       rather than a grey bar that reads as disabled. */
+    --surface: 0 0% 100%;
+    --surface-foreground: 232 21% 10%;
     --popover: 0 0% 100%;
     --popover-foreground: 232 21% 10%;
     --primary: 248 52% 50%;
     --primary-foreground: 0 0% 100%;
+    --primary-accent: 248 52% 45%;
     --secondary: 198 85% 42%;
     --secondary-foreground: 0 0% 100%;
     --muted: 240 12% 95%;
@@ -205,4 +218,14 @@
 .scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
 }

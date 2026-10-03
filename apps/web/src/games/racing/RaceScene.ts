@@ -110,6 +110,160 @@ export const THEMES: Record<string, RacingTheme> = {
     lightHemisphereGround: 0x080204,
     chevronGlow: 0xf97316,
   },
+
+  /*
+   * The remaining themes from the track asset pack.
+   *
+   * Each one is a palette, not a set of models: the sky gradient, the fog, the
+   * tarmac and the barrier glows are what actually establish where a track is,
+   * far more than any prop does. Daylight themes deliberately carry a much
+   * lighter fog than the night ones, because reusing a near-black fog under a
+   * blue sky reads as smog rather than distance.
+   */
+  mountainPass: {
+    name: "Mountain Pass",
+    fog: 0x8fa8c4,
+    skyTop: 0x2f6fb5,
+    skyBottom: 0xbcd4ea,
+    roadAsphalt: 0x2a2f38,
+    curbColor1: 0xdc2626,
+    curbColor2: 0xf1f5f9,
+    railLeft: 0x94a3b8,
+    railRight: 0x94a3b8,
+    buildingColor: 0x4b5563,
+    windowGlow1: 0xe2e8f0,
+    windowGlow2: 0xcbd5e1,
+    lightAmbient: 0xffffff,
+    lightHemisphereSky: 0x9ec5f0,
+    lightHemisphereGround: 0x5a6b52,
+    chevronGlow: 0xfacc15,
+  },
+  desertDunes: {
+    name: "Desert Run",
+    fog: 0xe0b483,
+    skyTop: 0x3d86c0,
+    skyBottom: 0xf5d9a8,
+    roadAsphalt: 0x3a3129,
+    curbColor1: 0xf59e0b,
+    curbColor2: 0xfef3c7,
+    railLeft: 0xd97706,
+    railRight: 0xd97706,
+    buildingColor: 0x8a6a45,
+    windowGlow1: 0xfde68a,
+    windowGlow2: 0xfbbf24,
+    lightAmbient: 0xfff7e6,
+    lightHemisphereSky: 0xfcd9a0,
+    lightHemisphereGround: 0x8a6a45,
+    chevronGlow: 0xfb923c,
+  },
+  jungleRuins: {
+    name: "Jungle Ruins",
+    fog: 0x1c3326,
+    skyTop: 0x123322,
+    skyBottom: 0x3f6b4a,
+    roadAsphalt: 0x232a26,
+    curbColor1: 0x65a30d,
+    curbColor2: 0x1f2d24,
+    railLeft: 0x84cc16,
+    railRight: 0x0d9488,
+    buildingColor: 0x2f4034,
+    windowGlow1: 0xa3e635,
+    windowGlow2: 0x22d3ee,
+    lightAmbient: 0xd9f99d,
+    lightHemisphereSky: 0x86efac,
+    lightHemisphereGround: 0x14251a,
+    chevronGlow: 0x4ade80,
+  },
+  snowPeak: {
+    name: "Frozen Summit",
+    fog: 0xdbe7f2,
+    skyTop: 0x6ea8dc,
+    skyBottom: 0xeaf2fa,
+    roadAsphalt: 0x3d4652,
+    curbColor1: 0x1d4ed8,
+    curbColor2: 0xf8fafc,
+    railLeft: 0xbae6fd,
+    railRight: 0xbae6fd,
+    buildingColor: 0x9fb3c8,
+    windowGlow1: 0xe0f2fe,
+    windowGlow2: 0xffffff,
+    lightAmbient: 0xffffff,
+    lightHemisphereSky: 0xdbeafe,
+    lightHemisphereGround: 0xb8c9d9,
+    chevronGlow: 0x38bdf8,
+  },
+  industrialZone: {
+    name: "Industrial Zone",
+    fog: 0x2b2f36,
+    skyTop: 0x1d232c,
+    skyBottom: 0x545a63,
+    roadAsphalt: 0x1a1e24,
+    curbColor1: 0xf59e0b,
+    curbColor2: 0x27303a,
+    railLeft: 0xfbbf24,
+    railRight: 0x64748b,
+    buildingColor: 0x353b44,
+    windowGlow1: 0xfcd34d,
+    windowGlow2: 0xf97316,
+    lightAmbient: 0xd6dae0,
+    lightHemisphereSky: 0x8a929c,
+    lightHemisphereGround: 0x1a1e24,
+    chevronGlow: 0xfbbf24,
+  },
+  forestTrail: {
+    name: "Forest Trail",
+    fog: 0x22301f,
+    skyTop: 0x2c4a2a,
+    skyBottom: 0x6f8f5c,
+    roadAsphalt: 0x38302a,
+    curbColor1: 0x854d0e,
+    curbColor2: 0x1f2a1c,
+    railLeft: 0x4d7c0f,
+    railRight: 0x4d7c0f,
+    buildingColor: 0x27341f,
+    windowGlow1: 0xbef264,
+    windowGlow2: 0x84cc16,
+    lightAmbient: 0xecfccb,
+    lightHemisphereSky: 0x9ccb7a,
+    lightHemisphereGround: 0x1b2416,
+    chevronGlow: 0xa3e635,
+  },
+  canyonRush: {
+    name: "Canyon Rush",
+    fog: 0xc07a4e,
+    skyTop: 0x3b6ea8,
+    skyBottom: 0xe8a877,
+    roadAsphalt: 0x35291f,
+    curbColor1: 0xdc2626,
+    curbColor2: 0xfed7aa,
+    railLeft: 0xea580c,
+    railRight: 0xea580c,
+    buildingColor: 0x7c4128,
+    windowGlow1: 0xfdba74,
+    windowGlow2: 0xf97316,
+    lightAmbient: 0xffedd5,
+    lightHemisphereSky: 0xf3b98a,
+    lightHemisphereGround: 0x6b3a24,
+    chevronGlow: 0xf97316,
+  },
+  coastalHighway: {
+    name: "Coastal Highway",
+    fog: 0xa8d4e0,
+    skyTop: 0x1d6fa8,
+    skyBottom: 0xd6f0f7,
+    roadAsphalt: 0x2b323a,
+    curbColor1: 0x0ea5e9,
+    curbColor2: 0xf8fafc,
+    railLeft: 0x22d3ee,
+    railRight: 0x22d3ee,
+    buildingColor: 0x5d7c8a,
+    windowGlow1: 0xa5f3fc,
+    windowGlow2: 0xfde68a,
+    lightAmbient: 0xffffff,
+    lightHemisphereSky: 0xbae6fd,
+    lightHemisphereGround: 0x3f6070,
+    chevronGlow: 0x06b6d4,
+  },
 };
 
 const CAR_COLOURS = [
@@ -118,6 +272,27 @@ const CAR_COLOURS = [
 
 const ROAD_STEP = 8;
 
+/**
+ * Suspension feel.
+ *
+ * Travel is deliberately small. Real road-car wheel travel under braking is a
+ * couple of centimetres, and exaggerating it past about 5cm stops reading as a
+ * heavy car settling and starts reading as a toy on springs.
+ */
+const SUSPENSION_TRAVEL = 0.05;
+/** Converts m/s^2 of deceleration into a 0..1 load. Tuned so hard braking sits near 1. */
+const SUSPENSION_LONG_GAIN = 0.05;
+/** Converts steer x speed into a 0..1 lateral load. */
+const SUSPENSION_LAT_GAIN = 0.012;
+/** How far a fully loaded car rolls onto its outside springs, in radians. */
+const SUSPENSION_ROLL_ANGLE = 0.05;
+/** How far the body pitches under full braking, in radians. */
+const SUSPENSION_PITCH_ANGLE = 0.075;
+
+function clamp(value: number, min: number, max: number): number {
+  return value < min ? min : value > max ? max : value;
+}
+
 export class RaceScene {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -125,16 +300,30 @@ export class RaceScene {
   private centerline: ReturnType<typeof trackCenterline> = [];
   private vehicles = new Map<string, VehicleRig>();
   private coinMeshes = new Map<string, THREE.Mesh>();
+  private pickupMeshes: THREE.Mesh[] = [];
   private cameraTarget = new THREE.Vector3();
   private cameraPosition = new THREE.Vector3();
   private disposed = false;
   private isBike: boolean;
   private composer: EffectComposer | null = null;
   private bloom: UnrealBloomPass | null = null;
+  /**
+   * The most anisotropic filtering this GPU supports.
+   *
+   * Read once from the renderer: a building facade is seen almost edge-on for
+   * most of a lap, which is exactly the case plain mipmapping blurs into mush
+   * and anisotropy fixes.
+   */
+  private maxAnisotropy = 1;
   private particles: ParticleField | null = null;
   private speedLines: SpeedLines | null = null;
   private lastFrameAt = 0;
-  private previous = new Map<string, { distance: number; crashTicks: number; coins: number }>();
+  // `speed` is kept so suspension can measure real acceleration between frames
+  // rather than inferring it from the brake and throttle flags.
+  private previous = new Map<
+    string,
+    { distance: number; crashTicks: number; coins: number; speed: number }
+  >();
   private theme: RacingTheme;
 
   constructor(
@@ -171,8 +360,10 @@ export class RaceScene {
     this.buildCity(track);
     this.buildOverheadGantries();
     this.buildBoostPads(track);
+    this.buildZones(track);
     this.buildObstacles(track);
     this.buildCoins(track);
+    this.buildPickups(track);
     this.buildFinish();
 
     // Post-Processing with Tone Mapping & High-Definition Bloom
@@ -523,6 +714,7 @@ export class RaceScene {
 
   // ---------------------------------------------------------------- city & buildings
   private buildCity(track: TrackSpec): void {
+    this.maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
     const facadeTex = this.createFacadeTexture();
     const billboardTex = this.createBillboardTexture();
 
@@ -530,9 +722,12 @@ export class RaceScene {
     const bldgMaterial = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       map: facadeTex,
-      roughness: 0.25,
-      metalness: 0.85,
-      envMapIntensity: 1.6,
+      // Glass, not chrome. At 0.85 metalness every window acted as a mirror
+      // and threw a moving specular highlight as the car drove past, which
+      // read as flickering.
+      roughness: 0.55,
+      metalness: 0.35,
+      envMapIntensity: 0.7,
     });
 
     // Dark Matte Structural Steel Material
@@ -546,14 +741,14 @@ export class RaceScene {
     const neonCyan = new THREE.MeshStandardMaterial({
       color: this.theme.windowGlow1,
       emissive: new THREE.Color(this.theme.windowGlow1),
-      emissiveIntensity: 1.8,
+      emissiveIntensity: 0.9,
       roughness: 0.1,
     });
 
     const neonMagenta = new THREE.MeshStandardMaterial({
       color: this.theme.windowGlow2,
       emissive: new THREE.Color(this.theme.windowGlow2),
-      emissiveIntensity: 1.8,
+      emissiveIntensity: 0.9,
       roughness: 0.1,
     });
 
@@ -568,7 +763,10 @@ export class RaceScene {
     for (let i = 0; i < buildingCount; i++) {
       const point = this.centerline[i % this.centerline.length]!;
       const side = i % 2 === 0 ? 1 : -1;
-      const distance = ROAD_HALF_WIDTH + 22 + (i % 4) * 14;
+      // Depth as well as height: a fixed set of four offsets built four
+      // perfectly straight walls of buildings either side of the track.
+      const rowNoise = Math.sin(i * 7.13) * 0.5 + 0.5;
+      const distance = ROAD_HALF_WIDTH + 20 + rowNoise * 58;
 
       const nx = Math.cos(point.heading) * side;
       const nz = -Math.sin(point.heading) * side;
@@ -577,10 +775,34 @@ export class RaceScene {
       const posZ = point.z + nz * distance;
       const posY = point.y;
 
-      const archetype = i % 4;
+      /*
+       * Variation, from the building's own index.
+       *
+       * Every tower of a given archetype was built from the same hard-coded
+       * numbers — width 24, heights 28/45/35 — so a skyline of 180 buildings
+       * was four shapes repeated forty-five times, at identical size, in
+       * strict rotation. That reads as wallpaper rather than a city.
+       *
+       * A cheap hash of the index gives each tower its own proportions while
+       * staying deterministic, so the skyline is the same every time you drive
+       * the track and does not flicker as buildings are rebuilt.
+       */
+      const hash = (n: number) => {
+        const x = Math.sin(i * 12.9898 + n * 78.233) * 43758.5453;
+        return x - Math.floor(x);
+      };
+      // Archetype from a hash rather than `i % 4`, so the four kinds do not
+      // alternate in a visible pattern down the road.
+      const archetype = Math.floor(hash(0) * 4);
+      // Slim towers next to broad ones, and a real spread of heights.
+      const widthScale = 0.55 + hash(1) * 0.95;
+      const heightScale = 0.5 + hash(2) * 1.6;
+
       const towerGroup = new THREE.Group();
       towerGroup.position.set(posX, posY, posZ);
-      towerGroup.rotation.y = point.heading;
+      // Turned off-axis so the facades do not all face the road square-on.
+      towerGroup.rotation.y = point.heading + (hash(3) - 0.5) * 0.9;
+      towerGroup.scale.set(widthScale, heightScale, widthScale);
 
       if (archetype === 0) {
         // ── ARCHETYPE 1: 3-Tiered Modern Skyscraper with Helipad ──
@@ -768,8 +990,13 @@ export class RaceScene {
       for (let x = 6; x < 512; x += 32) {
         if (Math.random() > 0.4) {
           const color = windowColors[Math.floor(Math.random() * windowColors.length)]!;
+          // Lit windows vary in brightness. Painting them all at full
+          // saturation put every one of them over the bloom threshold, so the
+          // whole facade glowed and shimmered as one sheet.
+          ctx.globalAlpha = 0.35 + Math.random() * 0.4;
           ctx.fillStyle = color;
           ctx.fillRect(x, y, 20, 24);
+          ctx.globalAlpha = 1;
         }
       }
     }
@@ -777,7 +1004,25 @@ export class RaceScene {
     const texture = new THREE.CanvasTexture(canvas);
     texture.wrapS = THREE.RepeatWrapping;
     texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(2, 4);
+    /*
+     * This is the fix for the "blinking" city.
+     *
+     * The facade is a grid of small bright window rectangles. Repeated 2x4
+     * over a tower forty metres tall, each window ends up smaller than a pixel
+     * at any distance — so every frame samples a different one and the whole
+     * building crawls and flashes. It is not a light effect; it is aliasing.
+     *
+     * Mipmaps give the GPU a pre-averaged version to sample at distance, and
+     * anisotropy keeps the facade sharp at the glancing angles you see a
+     * building from while driving past it. The repeat is halved so the windows
+     * are large enough to survive being minified in the first place.
+     */
+    texture.repeat.set(1, 2);
+    texture.generateMipmaps = true;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.anisotropy = this.maxAnisotropy;
+    texture.needsUpdate = true;
     return texture;
   }
 
@@ -910,6 +1155,91 @@ export class RaceScene {
     }
   }
 
+  // -------------------------------------------------------------- Surface Zones
+  /**
+   * Painted areas of tarmac that change how the car behaves.
+   *
+   * Drawn flat and read at a glance, because a driver has about a second to
+   * decide whether to take the inside line. Each kind gets its own colour *and*
+   * its own surface treatment — matte mud, mirror-black oil, textured grip —
+   * because colour alone fails for the ~8% of players with a colour vision
+   * deficiency, and a racing game that punishes them for it is badly made.
+   */
+  private buildZones(track: TrackSpec): void {
+    if (!track.zones?.length) return;
+
+    // One material per kind, shared across every patch. A material per step
+    // would be several hundred of them on a long track, each its own draw call.
+    const materials: Record<string, THREE.MeshStandardMaterial> = {
+      // Cyan, matching the boost pads a driver already recognises.
+      boost: new THREE.MeshStandardMaterial({
+        color: 0x0284c7,
+        emissive: new THREE.Color(0x06b6d4),
+        emissiveIntensity: 0.6,
+        roughness: 0.25,
+        metalness: 0.3,
+      }),
+      // Mud and gravel: matte, unlit, visibly draggy.
+      slow: new THREE.MeshStandardMaterial({
+        color: 0x4a3a24,
+        roughness: 0.95,
+        metalness: 0.02,
+      }),
+      // Oil: near-black and mirror-smooth, the one surface that looks wet.
+      slick: new THREE.MeshStandardMaterial({
+        color: 0x0b0d12,
+        emissive: new THREE.Color(0x1e1b4b),
+        emissiveIntensity: 0.18,
+        roughness: 0.04,
+        metalness: 0.9,
+      }),
+      grip: new THREE.MeshStandardMaterial({
+        color: 0x166534,
+        emissive: new THREE.Color(0x22c55e),
+        emissiveIntensity: 0.4,
+        roughness: 0.7,
+        metalness: 0.1,
+      }),
+      // Purple and the brightest of the set, because it is the rarest.
+      nitro: new THREE.MeshStandardMaterial({
+        color: 0x581c87,
+        emissive: new THREE.Color(0xa855f7),
+        emissiveIntensity: 0.85,
+        roughness: 0.3,
+        metalness: 0.4,
+      }),
+    };
+
+    for (const zone of track.zones) {
+      const material = materials[zone.kind];
+      if (!material) continue;
+
+      // Stepped along the centreline rather than drawn as one long slab: a
+      // straight box across a corner floats off the road on the outside and
+      // sinks into it on the inside.
+      const steps = Math.max(2, Math.round(zone.length / 6));
+      const stepLength = zone.length / steps;
+      const geometry = new THREE.BoxGeometry(
+        zone.halfWidth * 2 * ROAD_HALF_WIDTH,
+        0.02,
+        stepLength + 0.3,
+      );
+
+      for (let i = 0; i < steps; i++) {
+        const point = this.worldPoint(zone.distance + i * stepLength, zone.lateral);
+        if (!point) continue;
+
+        const mesh = new THREE.Mesh(geometry, material);
+        // Just above the tarmac: coplanar surfaces z-fight into a flicker far
+        // more distracting than the zone itself.
+        mesh.position.set(point.x, point.y + 0.012, point.z);
+        mesh.rotation.y = point.heading;
+        mesh.receiveShadow = true;
+        this.scene.add(mesh);
+      }
+    }
+  }
+
   // ---------------------------------------------------------------- Boost Pads
   private buildBoostPads(track: TrackSpec): void {
     if (!track.boostPads) return;
@@ -990,6 +1320,107 @@ export class RaceScene {
   }
 
   /** Builds Collectible Gold Coins & 3D Nitro Booster Bottles */
+  // ------------------------------------------------------------------ Pickups
+  /**
+   * Power-ups, each readable as a silhouette before its colour registers.
+   *
+   * A driver sees these for well under a second while deciding whether the
+   * detour is worth it, so shape carries the meaning and colour reinforces it:
+   * a bottle is nitro, a disc is a shield, a ring is a magnet, a cross is a
+   * repair, and a cube with nothing on it is a mystery box. Five glowing
+   * lozenges in five colours would be unreadable at racing speed.
+   */
+  private buildPickups(track: TrackSpec): void {
+    if (!track.pickups?.length) return;
+
+    const make = (kind: string | null): THREE.Mesh => {
+      switch (kind) {
+        case "nitro":
+          return new THREE.Mesh(
+            new THREE.CapsuleGeometry(0.32, 0.5, 6, 12),
+            new THREE.MeshStandardMaterial({
+              color: 0x0ea5e9,
+              emissive: new THREE.Color(0x38bdf8),
+              emissiveIntensity: 1.1,
+              roughness: 0.2,
+              metalness: 0.5,
+            }),
+          );
+        case "perfectNitro":
+          return new THREE.Mesh(
+            new THREE.CapsuleGeometry(0.34, 0.56, 6, 12),
+            new THREE.MeshStandardMaterial({
+              color: 0x9333ea,
+              emissive: new THREE.Color(0xc084fc),
+              emissiveIntensity: 1.4,
+              roughness: 0.15,
+              metalness: 0.6,
+            }),
+          );
+        case "shield":
+          return new THREE.Mesh(
+            new THREE.CylinderGeometry(0.52, 0.52, 0.12, 6),
+            new THREE.MeshStandardMaterial({
+              color: 0x0891b2,
+              emissive: new THREE.Color(0x22d3ee),
+              emissiveIntensity: 1.0,
+              roughness: 0.18,
+              metalness: 0.8,
+            }),
+          );
+        case "magnet":
+          return new THREE.Mesh(
+            new THREE.TorusGeometry(0.42, 0.14, 8, 18, Math.PI * 1.4),
+            new THREE.MeshStandardMaterial({
+              color: 0xd97706,
+              emissive: new THREE.Color(0xfbbf24),
+              emissiveIntensity: 1.1,
+              roughness: 0.25,
+              metalness: 0.85,
+            }),
+          );
+        case "repair":
+          return new THREE.Mesh(
+            new THREE.BoxGeometry(0.62, 0.2, 0.2),
+            new THREE.MeshStandardMaterial({
+              color: 0x15803d,
+              emissive: new THREE.Color(0x4ade80),
+              emissiveIntensity: 1.0,
+              roughness: 0.3,
+              metalness: 0.4,
+            }),
+          );
+        default:
+          // Mystery box: deliberately featureless, because its contents are not
+          // decided until it is driven over.
+          return new THREE.Mesh(
+            new THREE.BoxGeometry(0.62, 0.62, 0.62),
+            new THREE.MeshStandardMaterial({
+              color: 0xca8a04,
+              emissive: new THREE.Color(0xfacc15),
+              emissiveIntensity: 0.9,
+              roughness: 0.35,
+              metalness: 0.5,
+            }),
+          );
+      }
+    };
+
+    for (const pickup of track.pickups) {
+      const point = this.worldPoint(pickup.distance, pickup.lateral);
+      if (!point) continue;
+
+      const mesh = make(pickup.kind);
+      // Floating clear of the road so it reads against the tarmac and is not
+      // lost in the car's own shadow.
+      mesh.position.set(point.x, point.y + 0.9, point.z);
+      mesh.rotation.y = point.heading;
+      mesh.castShadow = true;
+      this.scene.add(mesh);
+      this.pickupMeshes.push(mesh);
+    }
+  }
+
   private buildCoins(track: TrackSpec): void {
     // 1. Gold Coin Materials
     const coinGeo = new THREE.CylinderGeometry(0.8, 0.8, 0.14, 18);
@@ -1195,8 +1626,16 @@ export class RaceScene {
     const crashed = before !== undefined && vehicle.crashTicks > before.crashTicks;
     const tookCoin = before !== undefined && vehicle.coins > before.coins;
 
-    // Wheel spin
-    const spin = (vehicle.speed / 0.6) * delta;
+    /*
+     * Wheel rotation from the ground actually passing underneath.
+     *
+     * This was `speed / 0.6`, a constant with no relationship to the wheel it
+     * was turning — so a 0.36m car wheel and a 0.32m bike wheel span at the
+     * same rate, and neither matched the road. Rolling without slipping is
+     * angle = distance / radius, and the eye is unexpectedly good at spotting
+     * when that is wrong: wheels that under-rotate read as skidding.
+     */
+    const spin = (vehicle.speed * delta) / rig.wheelRadius;
     for (const wheel of rig.wheels) wheel.rotation.x -= spin;
 
     // Steering rotation
@@ -1204,11 +1643,65 @@ export class RaceScene {
       wheel.rotation.y += (vehicle.input.steer * 0.45 - wheel.rotation.y) * Math.min(1, delta * 14);
     }
 
-    // Leaning & suspension pitch
-    const leanTarget = -vehicle.lean * (rig.isBike ? 0.72 : 0.16);
+    /*
+     * Suspension, as weight transfer on the body.
+     *
+     * The important detail is which part moves. The wheels are siblings of the
+     * chassis, not children of it, so their y is height above the *road* — a
+     * tyre in contact with the ground stays at its radius, always. Pushing the
+     * wheels down to represent braking load buries them in the tarmac; the load
+     * belongs on the body, which is the thing actually moving on springs.
+     *
+     * The fender arches are part of the chassis, so this comes out right for
+     * free: as the body dips, the gap between arch and tyre closes, which is
+     * exactly what compressing suspension looks like from outside the car.
+     *
+     * Load comes from measured acceleration rather than the input flags, so
+     * coasting to a stop or being slowed by a hazard dips the nose too. It
+     * should — the body does not know why it is decelerating.
+     */
+    const dt = Math.max(delta, 1 / 120);
+    const longitudinal = before ? (vehicle.speed - before.speed) / dt : 0;
+    // Cornering load scales with speed: turning the wheel while stopped
+    // transfers no weight at all.
+    const lateral = vehicle.input.steer * vehicle.speed;
+
+    const dive = clamp(-longitudinal * SUSPENSION_LONG_GAIN, -1, 1);
+    const rollLoad = clamp(lateral * SUSPENSION_LAT_GAIN, -1, 1);
+
+    // Heave: both ends compress under any hard load, so the car settles instead
+    // of pivoting around a fixed ride height.
+    const heaveTarget = -Math.abs(dive) * SUSPENSION_TRAVEL;
+    rig.chassis.position.y += (heaveTarget - rig.chassis.position.y) * Math.min(1, delta * 9);
+
+    // Wheels stay planted. Anything that lifts them belongs to a jump or a
+    // bump, which the simulation does not model yet.
+    for (let i = 0; i < rig.wheels.length; i++) {
+      const rest = rig.wheelRest[i];
+      const wheel = rig.wheels[i];
+      if (rest && wheel) wheel.position.y = rest.y;
+    }
+
+    /*
+     * Roll and lean.
+     *
+     * A bike banks into a corner — the whole machine leans with the rider. A
+     * car rolls the other way, onto its outside springs, and by far less. Using
+     * one number for both is why the cars used to lean into corners like
+     * motorcycles.
+     */
+    const leanTarget = rig.isBike
+      ? -vehicle.lean * 0.72
+      : -vehicle.lean * 0.16 + rollLoad * SUSPENSION_ROLL_ANGLE;
     rig.chassis.rotation.z += (leanTarget - rig.chassis.rotation.z) * Math.min(1, delta * 12);
 
-    const pitchTarget = vehicle.crashTicks > 0 ? -0.25 : vehicle.input.brake ? 0.06 : boosting ? -0.06 : 0;
+    /*
+     * Pitch follows the same measured acceleration as the heave, so body angle
+     * and ride height always agree. Previously pitch was driven by the brake
+     * flag alone, which made braking look like the car tilting on a hinge.
+     */
+    const pitchTarget =
+      vehicle.crashTicks > 0 ? -0.25 : clamp(dive * SUSPENSION_PITCH_ANGLE, -0.075, 0.075);
     rig.chassis.rotation.x += (pitchTarget - rig.chassis.rotation.x) * Math.min(1, delta * 10);
 
     // Dynamic brake & headlight intensity with smooth interpolation (no sudden flicker)
@@ -1252,6 +1745,7 @@ export class RaceScene {
       distance: vehicle.distance,
       crashTicks: vehicle.crashTicks,
       coins: vehicle.coins,
+      speed: vehicle.speed,
     });
   }
 
@@ -1261,6 +1755,12 @@ export class RaceScene {
         coin.rotation.z += 0.06;
         coin.rotation.y += 0.04;
       }
+    }
+    // Pickups turn more slowly than coins. They are larger and there are far
+    // fewer of them, and matching the coin rate makes them read as clutter
+    // rather than as something worth going out of your way for.
+    for (const pickup of this.pickupMeshes) {
+      pickup.rotation.y += 0.022;
     }
   }
 

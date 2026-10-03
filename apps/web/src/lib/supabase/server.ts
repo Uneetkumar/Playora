@@ -27,5 +27,21 @@ export async function createSupabaseServerClient() {
         }
       },
     },
+    global: {
+      fetch: async (input, init) => {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 1500);
+          const res = await fetch(input, { ...init, signal: controller.signal });
+          clearTimeout(timer);
+          return res;
+        } catch {
+          return new Response(
+            JSON.stringify({ error: "network_unavailable", message: "Supabase host unreachable" }),
+            { status: 400, headers: { "Content-Type": "application/json" } },
+          );
+        }
+      },
+    },
   });
 }

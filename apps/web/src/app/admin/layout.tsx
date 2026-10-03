@@ -43,7 +43,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <p className="mt-2 text-sm text-muted-foreground">
           This area is for moderators and administrators.
         </p>
-        <Link href="/" className="mt-6 inline-block text-sm text-primary hover:underline">
+        <Link href="/" className="mt-6 inline-block text-sm text-primary-accent hover:underline">
           Back to Playora
         </Link>
       </div>
@@ -72,7 +72,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
                 active
-                  ? "border-primary bg-primary/15 text-primary"
+                  ? "border-primary bg-primary/15 text-primary-accent"
                   : "border-border text-muted-foreground hover:text-foreground",
               )}
             >

@@ -191,3 +191,22 @@ export function vehicleStats(spec: VehicleSpec): VehicleStats {
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
+
+/**
+ * A vehicle's real top speed, for the dashboard.
+ *
+ * The HUD had `78` hardcoded in three separate files — the *base* car speed,
+ * before the chosen vehicle's modifier. So the gauge and the gear readout were
+ * calibrated for a car you might not be driving: a Thunder V10 tops out at 89
+ * and pegged the needle early, while a bike tops out at 72 and never reached
+ * the end of its own dial.
+ */
+export function topSpeedFor(gameId: GameId, vehicleId: string | null | undefined): number {
+  const isBike = gameId === "bike-race";
+  const base = isBike ? BIKE_BASE_TOP_SPEED : CAR_BASE_TOP_SPEED;
+  return base * vehicleById(gameId, vehicleId).modifiers.maxSpeed;
+}
+
+/** Base top speeds, matching CarRaceEngine and BikeRaceEngine tuning. */
+export const CAR_BASE_TOP_SPEED = 78;
+export const BIKE_BASE_TOP_SPEED = 72;

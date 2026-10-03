@@ -3,61 +3,109 @@
 import * as React from "react";
 import { Button, cn } from "@playora/ui";
 import { Trophy, RotateCcw, Play, Check } from "lucide-react";
+import { useArcadeRun } from "./use-arcade-run";
+import { ArcadeHud } from "./ArcadeHud";
+import { useJuice } from "./use-juice";
+import { trussNeededFor } from "./scoring";
+import { useGameRuntime } from "../runtime/use-game-runtime";
+import {
+  createBridgeState,
+  stepBridge,
+  startTest,
+  setTruss,
+  scoreFor,
+  type BridgeState,
+} from "./bridge-builder";
+
+interface BridgeSnapshot {
+  loadTonnes: number;
+  trussHeight: number;
+  truckX: number;
+  simulating: boolean;
+  snapped: boolean;
+  success: boolean;
+}
 
 export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
   const budget = 1200;
   const cost = 650;
+  // Cosmetic, so it stays view state rather than entering the simulation.
   const [material, setMaterial] = React.useState<"wood" | "steel" | "cable">("steel");
-  const [trussHeight, setTrussHeight] = React.useState(50);
-  const [simulating, setSimulating] = React.useState(false);
-  const [truckX, setTruckX] = React.useState(20);
-  const [bridgeSnapped, setBridgeSnapped] = React.useState(false);
-  const [success, setSuccess] = React.useState(false);
 
-  const startTest = () => {
-    if (simulating) return;
-    setSimulating(true);
-    setBridgeSnapped(false);
-    setSuccess(false);
-    setTruckX(20);
-  };
+  /*
+   * A puzzle, so the score is the solution rather than a stream of hits: a
+   * bridge that holds is worth points scaled to how little material it used.
+   * Rewarding a heavier bridge for surviving would reward the safe answer.
+   *
+   * The threshold used to be a hard-coded 30, and the score rewarded using
+   * less material — so the optimal answer was exactly 30, every time, for
+   * ever. A load that changes each attempt turns it into a judgement: read the
+   * weight, estimate the truss, and choose how fine to cut it.
+   */
+  const run = useArcadeRun("bridge-builder");
+  const juice = useJuice();
+  const juiceRef = React.useRef(juice);
+  juiceRef.current = juice;
+  const runRef = React.useRef(run);
+  runRef.current = run;
 
+  /*
+   * One fixed-timestep simulation, replacing a 40ms interval that moved the
+   * truck 3 units a tick and decided the whole verdict inside itself against
+   * refs mirroring React state. The truck now moves in units per *second*, so
+   * a throttled tab and an idle one take the same time to cross.
+   */
+  const rt = useGameRuntime<BridgeState, BridgeSnapshot>({
+    create: () => createBridgeState(),
+
+    update: (st, ctx) => {
+      stepBridge(st, ctx.dt);
+      if (st.events.snapped) {
+        juiceRef.current.impact("heavy");
+        runRef.current.end();
+        ctx.over = true;
+      }
+      if (st.events.crossed) {
+        // Scored on the margin over what the load actually needed, so a light
+        // truck is not worth more than a well-judged heavy one.
+        runRef.current.hit(scoreFor(st));
+        juiceRef.current.impact("solid");
+        runRef.current.end();
+        ctx.over = true;
+      }
+    },
+
+    snapshot: (st) => ({
+      loadTonnes: st.loadTonnes,
+      trussHeight: st.trussHeight,
+      truckX: st.truckX,
+      simulating: st.simulating,
+      snapped: st.snapped,
+      success: st.success,
+    }),
+  });
+
+  const { start } = rt;
   React.useEffect(() => {
-    if (!simulating || bridgeSnapped || success) return;
+    start();
+  }, [start]);
 
-    const interval = setInterval(() => {
-      setTruckX((x) => {
-        const nextX = x + 3;
+  const {
+    loadTonnes,
+    trussHeight,
+    truckX,
+    simulating,
+    snapped: bridgeSnapped,
+    success,
+  } = rt.state;
 
-        // Stress test in the middle
-        if (nextX >= 180 && nextX <= 260) {
-          if (trussHeight < 30) {
-            // Weak structure!
-            setBridgeSnapped(true);
-            setSimulating(false);
-            return nextX;
-          }
-        }
-
-        if (nextX >= 380) {
-          // Reached destination!
-          setSuccess(true);
-          setSimulating(false);
-          return 380;
-        }
-
-        return nextX;
-      });
-    }, 40);
-
-    return () => clearInterval(interval);
-  }, [simulating, trussHeight, bridgeSnapped, success]);
+  const startTestRun = () => rt.mutate(startTest);
+  const changeTruss = (h: number) => rt.mutate((st) => setTruss(st, h));
 
   const restart = () => {
-    setSimulating(false);
-    setTruckX(20);
-    setBridgeSnapped(false);
-    setSuccess(false);
+    run.reset();
+    // A new load, so the answer cannot be memorised.
+    rt.restart();
   };
 
   return (
@@ -72,6 +120,7 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          <ArcadeHud run={run} />
           <div className="rounded-xl border border-white/10 bg-white/5 px-3 sm:px-4 py-1 sm:py-1.5 text-xs sm:text-sm font-bold text-cyan-300">
             BUDGET: ${budget - cost}
           </div>
@@ -83,6 +132,7 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
 
       {/* Main Bridge Physics Viewport */}
       <div
+        {...juice.shakeProps}
         className="relative my-2 sm:my-4 flex flex-1 w-full max-w-4xl items-center justify-center overflow-hidden rounded-2xl sm:rounded-3xl border border-white/20 shadow-2xl bg-cover bg-center select-none"
         style={{
           backgroundImage: `linear-gradient(to bottom, rgba(10,35,55,0.65), rgba(3,15,25,0.9)), url('/games/bridge-builder-thumb.jpg')`,
@@ -111,7 +161,13 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
               <path
                 d={`M 90 122 L 170 ${122 - trussHeight} L 250 122 L 330 ${122 - trussHeight} L 410 122`}
                 fill="none"
-                stroke={simulating ? (trussHeight < 30 ? "#ef4444" : "#10b981") : "#38bdf8"}
+                stroke={
+                  simulating
+                    ? trussHeight < trussNeededFor(loadTonnes)
+                      ? "#ef4444"
+                      : "#10b981"
+                    : "#38bdf8"
+                }
                 strokeWidth="4"
               />
               <line x1={`170`} y1={`${122 - trussHeight}`} x2={`330`} y2={`${122 - trussHeight}`} stroke="#38bdf8" strokeWidth="3" />
@@ -131,6 +187,21 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
         </svg>
 
         {/* Structure Height Slider Control */}
+        {/*
+          * The load, always visible.
+          *
+          * It is the only information the decision rests on: the required truss
+          * is a function of it, and without it the slider is a blind guess
+          * rather than a judgement. Deliberately not showing the *required*
+          * height — working that out is the game.
+          */}
+        <div className="absolute top-3 left-3 rounded-xl border border-amber-400/40 bg-amber-500/15 px-3 py-1.5 backdrop-blur-md">
+          <div className="text-[9px] font-bold uppercase tracking-widest text-amber-200/70">Load</div>
+          <div className="numeric text-base font-black leading-none text-amber-100 tabular-nums">
+            {loadTonnes}t
+          </div>
+        </div>
+
         {!simulating && (
           <div className="absolute top-3 right-3 flex items-center gap-2 rounded-xl bg-black/60 px-3 py-1.5 backdrop-blur-md">
             <span className="text-[10px] font-bold text-white/70">TRUSS HEIGHT:</span>
@@ -139,9 +210,13 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
               min="15"
               max="75"
               value={trussHeight}
-              onChange={(e) => setTrussHeight(Number(e.target.value))}
+              onChange={(e) => changeTruss(Number(e.target.value))}
+              aria-label="Truss height"
               className="h-1.5 w-24 accent-cyan-400 cursor-pointer"
             />
+            <span className="numeric text-[10px] font-black tabular-nums text-cyan-300">
+              {trussHeight}
+            </span>
           </div>
         )}
 
@@ -188,7 +263,7 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
         </div>
 
         <Button
-          onClick={startTest}
+          onClick={startTestRun}
           disabled={simulating}
           className="gap-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 font-bold px-8 py-3 text-xs shadow-xl"
         >

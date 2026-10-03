@@ -44,7 +44,7 @@ export default function AdminReportsPage() {
             className={cn(
               "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
               filter === f.id
-                ? "border-primary bg-primary/15 text-primary"
+                ? "border-primary bg-primary/15 text-primary-accent"
                 : "border-border text-muted-foreground hover:text-foreground",
             )}
           >

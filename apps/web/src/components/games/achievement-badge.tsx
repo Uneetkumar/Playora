@@ -91,7 +91,7 @@ export function AchievementBadge({
       <span
         className={cn(
           "numeric ml-auto shrink-0 text-xs font-bold",
-          unlocked ? tier.text : "text-muted-foreground/60",
+          unlocked ? tier.text : "text-muted-foreground",
         )}
       >
         {achievement.points}

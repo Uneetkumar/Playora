@@ -14,29 +14,57 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
 
   if (!isSupabaseConfigured) return response;
 
-  const supabase = createServerClient(
-    env.NEXT_PUBLIC_SUPABASE_URL,
-    env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
+  // If there are no auth cookies in the request, there is no session to refresh.
+  // Avoid making outbound network requests on guest or unauthenticated page views.
+  const hasAuthCookie = request.cookies
+    .getAll()
+    .some((c) => c.name.startsWith("sb-") && c.name.endsWith("-auth-token"));
+
+  if (!hasAuthCookie) return response;
+
+  try {
+    const supabase = createServerClient(
+      env.NEXT_PUBLIC_SUPABASE_URL,
+      env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            for (const { name, value } of cookiesToSet) {
+              request.cookies.set(name, value);
+            }
+            response = NextResponse.next({ request });
+            for (const { name, value, options } of cookiesToSet) {
+              response.cookies.set(name, value, options);
+            }
+          },
         },
-        setAll(cookiesToSet) {
-          for (const { name, value } of cookiesToSet) {
-            request.cookies.set(name, value);
-          }
-          response = NextResponse.next({ request });
-          for (const { name, value, options } of cookiesToSet) {
-            response.cookies.set(name, value, options);
-          }
+        global: {
+          fetch: async (input, init) => {
+            try {
+              const controller = new AbortController();
+              const timer = setTimeout(() => controller.abort(), 1200);
+              const res = await fetch(input, { ...init, signal: controller.signal });
+              clearTimeout(timer);
+              return res;
+            } catch {
+              return new Response(
+                JSON.stringify({ error: "network_unavailable", message: "Supabase host unreachable" }),
+                { status: 400, headers: { "Content-Type": "application/json" } },
+              );
+            }
+          },
         },
       },
-    },
-  );
+    );
 
-  // Touching getUser() is what triggers the refresh. Do not remove.
-  await supabase.auth.getUser();
+    // Touching getUser() is what triggers the refresh. Do not block if network is unreachable.
+    await supabase.auth.getUser();
+  } catch {
+    // If Supabase host is unreachable or DNS fails, do not throw or crash requests
+  }
 
   return response;
 }

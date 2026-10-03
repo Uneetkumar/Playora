@@ -105,7 +105,7 @@ export default function FriendsPage() {
             className={cn(
               "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
               tab === t.id
-                ? "bg-primary/15 text-primary"
+                ? "bg-primary/15 text-primary-accent"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
@@ -211,7 +211,7 @@ export default function FriendsPage() {
 function Avatar({ profile }: { profile: FriendProfile }) {
   return (
     <span
-      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sm font-bold text-primary"
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/15 text-sm font-bold text-primary-accent"
       aria-hidden
     >
       {profile.displayName.slice(0, 1).toUpperCase()}

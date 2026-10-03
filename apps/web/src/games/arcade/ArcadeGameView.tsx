@@ -12,6 +12,14 @@ import { TargetRushView } from "./TargetRushView";
 import { HotPotatoView } from "./HotPotatoView";
 import { BridgeBuilderView } from "./BridgeBuilderView";
 import { IceBreakerView } from "./IceBreakerView";
+import { Game2048View } from "./Game2048View";
+import { MinesweeperView } from "./MinesweeperView";
+import { WordGuessView } from "./WordGuessView";
+import { SimonSaysView } from "./SimonSaysView";
+import { RetroSnakeView } from "./RetroSnakeView";
+import { FlappyBirdView } from "./FlappyBirdView";
+import { BrickBreakerView } from "./BrickBreakerView";
+import { WhackAMoleView } from "./WhackAMoleView";
 
 export function ArcadeGameView({
   gameId,
@@ -41,7 +49,24 @@ export function ArcadeGameView({
       return <BridgeBuilderView onExit={onExit} />;
     case "ice-breaker":
       return <IceBreakerView onExit={onExit} />;
+    case "game-2048":
+      return <Game2048View onExit={onExit} />;
+    case "minesweeper":
+      return <MinesweeperView onExit={onExit} />;
+    case "word-guess":
+      return <WordGuessView onExit={onExit} />;
+    case "simon-says":
+      return <SimonSaysView onExit={onExit} />;
+    case "retro-snake":
+      return <RetroSnakeView onExit={onExit} />;
+    case "flappy-bird":
+      return <FlappyBirdView onExit={onExit} />;
+    case "brick-breaker":
+      return <BrickBreakerView onExit={onExit} />;
+    case "whack-a-mole":
+      return <WhackAMoleView onExit={onExit} />;
     default:
       return null;
   }
 }
+

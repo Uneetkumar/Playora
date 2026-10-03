@@ -42,7 +42,7 @@ export function RoomChat({
     <Card className={`flex flex-col bg-card/60 border-border backdrop-blur-md ${className}`}>
       <CardHeader className="py-3 px-4 border-b border-border flex flex-row items-center justify-between space-y-0">
         <div className="flex items-center space-x-2">
-          <MessageSquare className="h-4 w-4 text-primary" />
+          <MessageSquare className="h-4 w-4 text-primary-accent" />
           <CardTitle className="text-sm font-semibold text-foreground">Room Chat</CardTitle>
         </div>
         <button

@@ -81,7 +81,7 @@ export function QuickMatch({
       {(mm.state === "connecting" || mm.state === "searching") && (
         <>
           <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full border-2 border-primary/40 bg-primary/10">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" aria-hidden />
+            <Loader2 className="h-8 w-8 animate-spin text-primary-accent" aria-hidden />
           </div>
           <h2 className="font-display text-2xl font-bold text-foreground">Finding an opponent…</h2>
           <p className="mt-2 text-sm text-muted-foreground">{mm.message}</p>
@@ -107,7 +107,7 @@ export function QuickMatch({
             <button
               type="button"
               onClick={() => { mm.cancel(); onPlayAi(); }}
-              className="mt-3 text-xs text-primary underline-offset-4 hover:underline"
+              className="mt-3 text-xs text-primary-accent underline-offset-4 hover:underline"
             >
               Tired of waiting? Play the AI instead
             </button>
@@ -122,7 +122,7 @@ export function QuickMatch({
 
           <div className="mt-6 flex items-center justify-center gap-6">
             <div className="text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/20 font-display text-lg font-bold text-primary">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/20 font-display text-lg font-bold text-primary-accent">
                 YOU
               </div>
               <div className="mt-2 text-sm font-semibold text-foreground">You</div>

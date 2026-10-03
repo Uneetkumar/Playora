@@ -2,9 +2,25 @@
 
 import * as React from "react";
 import { Button, cn } from "@playora/ui";
-import { Trophy, RotateCcw, Zap } from "lucide-react";
+import { RotateCcw, Zap, Heart } from "lucide-react";
+import { useArcadeRun } from "./use-arcade-run";
+import { ArcadeHud, ArcadeResult } from "./ArcadeHud";
+import { useJuice } from "./use-juice";
+import { waveAt } from "./juice";
+import { useGameRuntime } from "../runtime/use-game-runtime";
+import {
+  createColorState,
+  stepColor,
+  matchColor,
+  type ColorKey,
+  type RushState as ColorState,
+  type Orb,
+} from "./color-rush";
 
-type ColorKey = "cyan" | "red" | "green" | "yellow";
+interface ColorSnapshot {
+  orbs: Orb[];
+  lives: number;
+}
 
 const COLORS: Record<ColorKey, { name: string; hex: string; bg: string }> = {
   cyan: { name: "Cyan", hex: "#06b6d4", bg: "bg-cyan-500" },
@@ -16,67 +32,105 @@ const COLORS: Record<ColorKey, { name: string; hex: string; bg: string }> = {
 const COLOR_KEYS: ColorKey[] = ["cyan", "red", "green", "yellow"];
 
 export function ColorRushView({ onExit }: { onExit?: () => void }) {
-  const [score, setScore] = React.useState(0);
-  const [streak, setStreak] = React.useState(0);
-  const [currentOrbs, setCurrentOrbs] = React.useState<Array<{ id: number; color: ColorKey; y: number }>>([]);
-  const [gameOver, setGameOver] = React.useState(false);
+  // Score, chain and the personal best come from the shared run.
+  const run = useArcadeRun("color-rush");
+  const juice = useJuice();
+  const juiceRef = React.useRef(juice);
+  juiceRef.current = juice;
+  const runRef = React.useRef(run);
+  runRef.current = run;
 
-  // Spawn loop
-  React.useEffect(() => {
-    if (gameOver) return;
+  /*
+   * Lives, and a chain you can choose to bank.
+   *
+   * The game was a reflex test with one input and a harsh fail: match the
+   * colour, and one wrong tap ended the run instantly. There was nothing to
+   * decide and nothing to weigh, which is the shape the retention research
+   * says goes monotonous fastest.
+   *
+   * Two changes give it a decision. Lives make a mistake a cost rather than an
+   * ending, so pushing is survivable. Banking makes the chain a *choice*: it
+   * multiplies what each match is worth and is lost entirely on a miss, so
+   * every few seconds the player is deciding whether to take what they have or
+   * go for more.
+   */
+  const [banked, setBanked] = React.useState(0);
 
-    const interval = setInterval(() => {
-      const randomColor = COLOR_KEYS[Math.floor(Math.random() * COLOR_KEYS.length)]!;
-      setCurrentOrbs((curr) => [...curr, { id: Date.now() + Math.random(), color: randomColor, y: 0 }]);
-    }, 1100);
+  /*
+   * One fixed-timestep simulation, replacing a spawner at a hardcoded 1100ms
+   * and a fall tick at 40ms.
+   *
+   * Both of those numbers were constants, which meant the wave badge in the
+   * HUD described an escalation the game never actually performed — orbs fell
+   * at the same speed in minute five as in second five. Spawn interval now
+   * comes from the shared difficulty ramp and fall speed climbs with the wave.
+   */
+  const rt = useGameRuntime<ColorState, ColorSnapshot>({
+    create: createColorState,
 
-    return () => clearInterval(interval);
-  }, [gameOver]);
-
-  // Falling movement loop
-  React.useEffect(() => {
-    if (gameOver) return;
-
-    const tick = setInterval(() => {
-      setCurrentOrbs((curr) => {
-        const next: Array<{ id: number; color: ColorKey; y: number }> = [];
-        for (const orb of curr) {
-          const nextY = orb.y + 2.5;
-          if (nextY >= 75) {
-            // Reached prism: verify if current matching quadrant was active
-            // Missed!
-            setGameOver(true);
-          } else {
-            next.push({ ...orb, y: nextY });
-          }
-        }
-        return next;
+    update: (st, ctx) => {
+      stepColor(st, ctx.dt, {
+        spawnIntervalMs: runRef.current.spawnInterval(1100),
+        wave: waveAt(runRef.current.elapsed),
+        rng: Math.random,
       });
-    }, 40);
+      for (let i = 0; i < st.events.dropped; i++) runRef.current.miss();
+      if (st.events.died) {
+        juiceRef.current.impact("fatal");
+        ctx.over = true;
+      } else if (st.events.dropped > 0) {
+        juiceRef.current.impact("heavy");
+      }
+    },
 
-    return () => clearInterval(tick);
-  }, [gameOver]);
+    snapshot: (st) => ({ orbs: st.orbs, lives: st.lives }),
+    onGameOver: () => runRef.current.end(),
+  });
 
-  const matchColor = (color: ColorKey) => {
-    if (gameOver || currentOrbs.length === 0) return;
+  const { start } = rt;
+  React.useEffect(() => {
+    start();
+  }, [start]);
 
-    const targetOrb = currentOrbs[0];
-    if (targetOrb && targetOrb.color === color) {
-      // Successful match!
-      setCurrentOrbs((curr) => curr.slice(1));
-      setScore((s) => s + 10 * (1 + streak * 0.2));
-      setStreak((st) => st + 1);
-    } else {
-      // Wrong match
-      setGameOver(true);
-    }
+  const { orbs: currentOrbs, lives } = rt.state;
+  const gameOver = rt.over;
+
+  const handleColor = (color: ColorKey) => {
+    rt.mutate((st) => {
+      const result = matchColor(st, color);
+      if (result === "hit") {
+        runRef.current.hit(10);
+        juiceRef.current.impact("tap");
+      } else if (result === "wrong") {
+        // A miss costs a life and the whole unbanked chain — the price of
+        // having pushed rather than banked.
+        runRef.current.miss();
+        juiceRef.current.impact(st.over ? "fatal" : "heavy");
+      }
+    });
+  };
+
+  /**
+   * Locks the chain in as points and resets it.
+   *
+   * The decision the game did not have: a long chain is worth far more per
+   * match, and one mistake takes all of it. Banking is the safe half of that
+   * bet.
+   */
+  const bankChain = () => {
+    if (gameOver || run.combo < 2) return;
+    const value = run.combo * 15;
+    setBanked((b) => b + value);
+    // `bank`, not `hit`: the value is already derived from the chain, and
+    // `hit` would multiply it by the chain a second time.
+    run.bank(value);
+    juice.impact("solid");
   };
 
   const restart = () => {
-    setScore(0);
-    setStreak(0);
-    setCurrentOrbs([]);
-    setGameOver(false);
+    setBanked(0);
+    run.reset();
+    rt.restart();
   };
 
   return (
@@ -91,17 +145,39 @@ export function ColorRushView({ onExit }: { onExit?: () => void }) {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="rounded-xl border border-amber-500/30 bg-amber-950/40 px-3 sm:px-4 py-1 sm:py-1.5 text-xs sm:text-sm font-black text-amber-300">
-            SCORE: {score}
+          {/*
+            * The wave, shown.
+            *
+            * The difficulty ramp already existed but was invisible, and
+            * escalation a player cannot see reads as the game quietly becoming
+            * unfair rather than as something they are surviving.
+            */}
+          <div className="rounded-xl border border-white/15 bg-black/55 px-3 py-1.5 backdrop-blur-md">
+            <div className="text-[9px] font-bold uppercase tracking-widest text-white/50">Wave</div>
+            <div className="numeric text-lg font-black leading-none text-white tabular-nums sm:text-xl">
+              {waveAt(run.elapsed)}
+            </div>
           </div>
-          <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/40 px-3 sm:px-4 py-1 sm:py-1.5 text-xs sm:text-sm font-bold text-cyan-300">
-            STREAK: {streak}🔥
+          {/* Lives: a mistake is now a cost, not an ending. */}
+          <div className="rounded-xl border border-white/15 bg-black/55 px-3 py-1.5 backdrop-blur-md">
+            <div className="text-[9px] font-bold uppercase tracking-widest text-white/50">Lives</div>
+            <div className="flex gap-1 pt-0.5" aria-label={`${lives} lives left`}>
+              {[0, 1, 2].map((i) => (
+                <Heart
+                  key={i}
+                  className={cn("h-3.5 w-3.5", i < lives ? "fill-rose-500 text-rose-500" : "text-white/20")}
+                  aria-hidden
+                />
+              ))}
+            </div>
           </div>
+          <ArcadeHud run={run} />
         </div>
       </div>
 
       {/* Falling Arena */}
       <div
+        {...juice.shakeProps}
         className="relative my-2 sm:my-4 flex flex-1 w-full max-w-2xl flex-col items-center justify-between overflow-hidden rounded-2xl sm:rounded-3xl border border-white/20 shadow-2xl bg-cover bg-center p-4 sm:p-6"
         style={{
           backgroundImage: `linear-gradient(to bottom, rgba(20,5,40,0.65), rgba(10,2,20,0.9)), url('/games/color-rush-thumb.jpg')`,
@@ -129,16 +205,28 @@ export function ColorRushView({ onExit }: { onExit?: () => void }) {
         </div>
 
         {gameOver && (
-          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/85 backdrop-blur-md">
-            <Trophy className="h-12 w-12 text-amber-400 animate-bounce" />
-            <h3 className="font-display text-3xl font-black text-white mt-2">RUN COMPLETED</h3>
-            <p className="text-sm text-white/70">Final Score: <strong className="text-cyan-400">{score}</strong></p>
-            <Button onClick={restart} className="mt-4 gap-2 bg-[#7c3aed] hover:bg-[#6d28d9] px-6 font-bold">
-              <RotateCcw className="h-4 w-4" /> Try Again
-            </Button>
-          </div>
+          <ArcadeResult run={run} onRestart={restart} onExit={onExit} title="Run over" />
         )}
       </div>
+
+      {/*
+        * Bank, beside the colour pads.
+        *
+        * Only offered once there is a chain worth protecting — a button that
+        * does nothing most of the time teaches the player to ignore it.
+        */}
+      {run.combo >= 2 && !gameOver && (
+        <button
+          type="button"
+          onClick={bankChain}
+          className="mb-2 flex items-center gap-2 rounded-2xl border border-emerald-400/60 bg-emerald-500/20 px-6 py-2.5 font-display text-sm font-black uppercase tracking-wide text-emerald-200 transition-transform active:scale-95"
+        >
+          Bank {run.combo * 15}
+          {banked > 0 && (
+            <span className="text-[10px] font-bold text-emerald-300/70">({banked} saved)</span>
+          )}
+        </button>
+      )}
 
       {/* 4 Quadrant Match Buttons */}
       <div className="grid w-full max-w-md grid-cols-4 gap-3 border-t border-white/10 pt-4">
@@ -146,7 +234,7 @@ export function ColorRushView({ onExit }: { onExit?: () => void }) {
           <button
             key={k}
             type="button"
-            onClick={() => matchColor(k)}
+            onPointerDown={() => handleColor(k)}
             className={cn(
               "flex flex-col items-center justify-center gap-1 rounded-2xl py-3 font-display text-xs font-black uppercase text-white shadow-xl transition-transform active:scale-90",
               COLORS[k].bg

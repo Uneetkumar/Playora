@@ -10,6 +10,7 @@ import { useRoomInfo } from "../../../hooks/use-rooms";
 import { RoomChat } from "../../../components/chat/room-chat";
 import { ReactionOverlay, type FloatingReaction } from "../../../components/reactions/reaction-overlay";
 import { RoomGameSurface } from "../../../components/games/room-game-surface";
+import { GAME_CATALOG } from "../../../lib/games/catalog";
 import type { GameId, PlayerReaction } from "@playora/game-types";
 import {
   Button,
@@ -75,6 +76,12 @@ function RoomDetailsContent() {
 
   const { info: roomInfo, isResolving: roomResolving } = useRoomInfo(roomCode);
 
+  const activeGameId = ((currentRoom?.gameId || roomInfo?.gameSlug || "chess") as GameId);
+  const gameMeta = GAME_CATALOG.find((g) => g.id === activeGameId);
+  const gameName = gameMeta?.name || (activeGameId ? activeGameId.toUpperCase() : "Game");
+  const minPlayers = gameMeta?.minPlayers || 2;
+  const maxPlayers = currentRoom?.settings?.maxPlayers || gameMeta?.maxPlayers || 2;
+
   const {
     connectionStatus,
     setReady,
@@ -85,13 +92,11 @@ function RoomDetailsContent() {
     sendReaction,
     leaveRoom,
     addBot,
+    removeBot,
     requestRematch,
   } = useRoomSocket({
     roomId: roomCode,
-    // Resolved from the server before connecting. Deliberately does NOT fall
-    // back to currentRoom: that arrives after ROOM_STATE, so including it made
-    // gameId change mid-session and tore the socket down.
-    gameId: roomInfo?.gameSlug ?? "chess",
+    gameId: activeGameId,
     ready: !roomResolving,
     onReaction: handleIncomingReaction,
   });
@@ -115,10 +120,9 @@ function RoomDetailsContent() {
   const playersList = currentRoom ? Object.values(currentRoom.players) : [];
   const myPlayerRecord = currentRoom?.players[currentUserId];
   const isHost = currentRoom?.hostId === currentUserId;
-  const isAllReady = playersList.length >= 2 && playersList.every((p) => p.isReady || p.role === "host");
-
-  const player1 = playersList[0];
-  const player2 = playersList[1];
+  const isAllReady =
+    playersList.length >= minPlayers &&
+    playersList.every((p) => p.isReady || p.role === "host");
 
   const handleLeave = () => {
     leaveRoom();
@@ -126,35 +130,38 @@ function RoomDetailsContent() {
     router.push("/rooms");
   };
 
+  const totalDisplaySlots = Math.max(minPlayers, Math.min(maxPlayers, playersList.length + 1));
+  const emptySlotsCount = Math.max(0, totalDisplaySlots - playersList.length);
+
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col bg-[#080c14] text-foreground relative pb-12">
+    <div className="h-full min-h-screen flex flex-col bg-[#080c14] text-foreground relative overflow-y-auto">
       {/* Ephemeral Reaction Overlay */}
       <ReactionOverlay reactions={floatingReactions} />
 
       {/* Top Navigation / Room Info Header */}
-      <header className="border-b border-border bg-background/70 backdrop-blur-md sticky top-16 z-30 px-4 py-3">
+      <header className="border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-30 px-4 py-3 shrink-0">
         <div className="container mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
-            <Button variant="ghost" size="sm" onClick={handleLeave} className="h-8 gap-1 text-muted-foreground">
+            <Button variant="ghost" size="sm" onClick={handleLeave} className="h-8 gap-1 text-muted-foreground hover:text-foreground">
               <ArrowLeft className="h-4 w-4" />
               <span>Leave</span>
             </Button>
             <div className="h-4 w-px bg-border" />
             <div>
               <div className="flex items-center space-x-2">
-                <span className="text-sm font-bold text-white tracking-wide">
+                <span className="text-sm font-bold text-foreground tracking-wide">
                   {currentRoom?.name || `Room ${roomCode}`}
                 </span>
-                <Badge variant="default" className="text-[10px] uppercase">
-                  {currentRoom?.gameId || "Chess"}
+                <Badge variant="default" className="text-[10px] uppercase font-bold tracking-wider">
+                  {gameName}
                 </Badge>
                 {/* Privacy Badge in Header */}
                 {isRoomPrivate ? (
-                  <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-400 bg-amber-950/40 gap-1">
+                  <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10 dark:bg-amber-950/40 gap-1">
                     <Lock className="h-2.5 w-2.5" /> Private
                   </Badge>
                 ) : (
-                  <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-400 bg-emerald-950/40 gap-1">
+                  <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 dark:bg-emerald-950/40 gap-1">
                     <Globe2 className="h-2.5 w-2.5" /> Public
                   </Badge>
                 )}
@@ -180,14 +187,14 @@ function RoomDetailsContent() {
 
             {/* Room Code Badge with Copy */}
             <div className="flex items-center bg-card border border-primary/40 rounded-lg p-0.5 shadow-sm">
-              <span className="px-2 text-xs font-mono font-bold text-primary">
+              <span className="px-2 text-xs font-mono font-bold text-primary-accent">
                 {roomCode}
               </span>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleCopyCode}
-                className="h-7 w-7 p-0 text-primary hover:text-primary"
+                className="h-7 w-7 p-0 text-primary-accent hover:text-primary-accent"
                 title="Copy Room Code"
               >
                 {copiedCode ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
@@ -223,7 +230,7 @@ function RoomDetailsContent() {
             <div className="lg:col-span-3">
               {gameState || lastResult ? (
                 <RoomGameSurface
-                  gameId={(currentRoom.gameId ?? "chess") as GameId}
+                  gameId={activeGameId}
                   gameState={gameState}
                   players={currentRoom.players}
                   currentUserId={currentUserId}
@@ -254,7 +261,7 @@ function RoomDetailsContent() {
           </div>
         ) : (
           /* 2. Lobby Mode: Player Slots, Ready status, Host start controls */
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             {/* Left: Player Slots & Lobby Controls */}
             <div className="lg:col-span-2 space-y-6">
               {/* Privacy Notice & Invite Card */}
@@ -302,150 +309,163 @@ function RoomDetailsContent() {
                     <div>
                       <CardTitle className="text-lg">Match Lobby</CardTitle>
                       <CardDescription>
-                        2 Players required for Chess. Waiting for players to ready up.
+                        {minPlayers} {minPlayers === 1 ? "Player" : "Players"} required for {gameName}. {playersList.length < minPlayers ? "Waiting for players to join..." : "Waiting for players to ready up."}
                       </CardDescription>
                     </div>
                     <Badge variant="secondary" className="gap-1">
                       <Users className="h-3.5 w-3.5" />
                       <span>
-                        {playersList.length}/{currentRoom?.settings.maxPlayers || 2}
+                        {playersList.length}/{maxPlayers}
                       </span>
                     </Badge>
                   </div>
                 </CardHeader>
 
                 <CardContent className="space-y-4">
-                  {/* Player 1 Slot (White / Host) */}
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-background/60 border border-border">
-                    <div className="flex items-center space-x-3">
-                      <div className="relative">
-                        <div className="w-12 h-12 rounded-xl bg-primary/20 border border-primary/40 text-primary flex items-center justify-center font-extrabold text-base">
-                          {player1?.displayName?.slice(0, 2).toUpperCase() || "P1"}
+                  {/* Dynamic Players List */}
+                  {playersList.map((player, index) => {
+                    const isPlayerHost = player.role === "host" || player.userId === currentRoom?.hostId;
+                    const isMe = player.userId === currentUserId;
+
+                    let roleSubtitle = `Player ${index + 1}`;
+                    if (activeGameId === "chess") {
+                      roleSubtitle = index === 0 ? "Plays White ♔" : "Plays Black ♚";
+                    } else if (isPlayerHost) {
+                      roleSubtitle = "Room Host";
+                    }
+
+                    return (
+                      <div
+                        key={player.userId || index}
+                        className="flex items-center justify-between p-4 rounded-xl bg-background/60 border border-border"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="relative">
+                            <div
+                              className={`w-12 h-12 rounded-xl flex items-center justify-center font-extrabold text-base ${
+                                index === 0
+                                  ? "bg-primary/20 border border-primary/40 text-primary-accent"
+                                  : index === 1
+                                  ? "bg-purple-600/20 border border-purple-500/40 text-purple-400"
+                                  : "bg-blue-600/20 border border-blue-500/40 text-blue-400"
+                              }`}
+                            >
+                              {player.isBot ? (
+                                <Bot className="h-6 w-6" />
+                              ) : (
+                                player.displayName?.slice(0, 2).toUpperCase() || `P${index + 1}`
+                              )}
+                            </div>
+                            {isPlayerHost && (
+                              <div className="absolute -top-1.5 -right-1.5 bg-amber-500 text-background p-1 rounded-full shadow-sm">
+                                <Crown className="h-3 w-3 text-amber-950" />
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-bold text-foreground">
+                                {player.displayName || `Player ${index + 1}`}
+                              </span>
+                              {isMe && (
+                                <Badge variant="outline" className="text-[10px]">
+                                  You
+                                </Badge>
+                              )}
+                              {player.isBot && (
+                                <Badge variant="warning" className="text-[10px] gap-1">
+                                  <Bot className="h-3 w-3" />
+                                  BOT
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="text-xs text-muted-foreground">{roleSubtitle}</span>
+                          </div>
                         </div>
-                        {player1?.role === "host" && (
-                          <div className="absolute -top-1.5 -right-1.5 bg-amber-500 text-background p-1 rounded-full">
-                            <Crown className="h-3 w-3" />
+
+                        <div className="flex items-center gap-2">
+                          {isPlayerHost ? (
+                            <Badge variant="default" className="text-xs">
+                              Host
+                            </Badge>
+                          ) : player.isReady ? (
+                            <Badge variant="success" className="text-xs gap-1">
+                              <CheckCircle2 className="h-3 w-3" /> Ready
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-xs gap-1">
+                              <Clock className="h-3 w-3" /> Not Ready
+                            </Badge>
+                          )}
+
+                          {isHost && player.isBot && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => removeBot(player.userId)}
+                              className="h-7 text-xs text-red-700 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-500/20 dark:hover:bg-red-950/30 px-2"
+                              title="Remove Bot"
+                            >
+                              Remove
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Empty / Open Slots */}
+                  {Array.from({ length: emptySlotsCount }).map((_, i) => (
+                    <div
+                      key={`empty-slot-${i}`}
+                      className="flex items-center justify-between p-4 rounded-xl bg-background/40 border border-dashed border-border"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center font-extrabold text-base border border-dashed border-border text-muted-foreground">
+                          ?
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <span className="font-bold text-foreground/70">
+                              Waiting for opponent...
+                            </span>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            Share room code or invite link
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <div className="hidden sm:flex items-center space-x-1.5 text-xs text-muted-foreground font-medium">
+                          <Sparkles className="h-3.5 w-3.5 text-[#A855F7]" />
+                          <span>Slot Open</span>
+                        </div>
+                        {isHost && (
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5 border-[#7C3AED]/40 bg-primary/15 hover:bg-primary/25 text-[#C084FC] h-8 text-xs font-bold shadow-sm"
+                              onClick={() => addBot(3)}
+                            >
+                              <Bot className="h-3.5 w-3.5" />
+                              <span>+ Add AI Bot (Lvl 3)</span>
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-border bg-foreground/5 hover:bg-foreground/10 text-foreground/80 h-8 text-xs font-semibold px-2"
+                              onClick={() => addBot(5)}
+                              title="Add Expert AI (Level 5)"
+                            >
+                              <span>Lvl 5</span>
+                            </Button>
                           </div>
                         )}
                       </div>
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <span className="font-bold text-foreground">
-                            {player1?.displayName || "Player 1"}
-                          </span>
-                          {player1?.userId === currentUserId && (
-                            <Badge variant="outline" className="text-[10px]">
-                              You
-                            </Badge>
-                          )}
-                        </div>
-                        <span className="text-xs text-muted-foreground">Plays White ♔</span>
-                      </div>
                     </div>
-
-                    <div>
-                      {player1 ? (
-                        player1.role === "host" ? (
-                          <Badge variant="default" className="text-xs">
-                            Host
-                          </Badge>
-                        ) : player1.isReady ? (
-                          <Badge variant="success" className="text-xs gap-1">
-                            <CheckCircle2 className="h-3 w-3" /> Ready
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="text-xs gap-1">
-                            <Clock className="h-3 w-3" /> Not Ready
-                          </Badge>
-                        )
-                      ) : (
-                        <Badge variant="outline" className="text-xs">
-                          Open Slot
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Player 2 Slot (Black / Challenger) */}
-                  <div className="flex items-center justify-between p-4 rounded-xl bg-background/60 border border-border">
-                    <div className="flex items-center space-x-3">
-                      <div className="relative">
-                        <div
-                          className={`w-12 h-12 rounded-xl flex items-center justify-center font-extrabold text-base ${
-                            player2
-                              ? "bg-purple-600/20 border border-purple-500/40 text-purple-400"
-                              : "border border-dashed border-border text-muted-foreground"
-                          }`}
-                        >
-                          {player2?.displayName?.slice(0, 2).toUpperCase() || "?"}
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <span className="font-bold text-foreground">
-                            {player2?.displayName || "Waiting for opponent..."}
-                          </span>
-                          {player2?.userId === currentUserId && (
-                            <Badge variant="outline" className="text-[10px]">
-                              You
-                            </Badge>
-                          )}
-                          {player2?.isBot && (
-                            <Badge variant="warning" className="text-[10px] gap-1">
-                              <Bot className="h-3 w-3" />
-                              BOT
-                            </Badge>
-                          )}
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {player2 ? "Plays Black ♚" : "Share room code or invite link"}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div>
-                      {player2 ? (
-                        player2.isReady ? (
-                          <Badge variant="success" className="text-xs gap-1">
-                            <CheckCircle2 className="h-3 w-3" /> Ready
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="text-xs gap-1">
-                            <Clock className="h-3 w-3" /> Not Ready
-                          </Badge>
-                        )
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          <div className="hidden sm:flex items-center space-x-1.5 text-xs text-white/50 font-medium">
-                            <Sparkles className="h-3.5 w-3.5 text-[#A855F7]" />
-                            <span>Slot Open</span>
-                          </div>
-                          {isHost && (
-                            <div className="flex items-center gap-1.5">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="gap-1.5 border-[#7C3AED]/40 bg-[#7C3AED]/15 hover:bg-[#7C3AED]/25 text-[#C084FC] h-8 text-xs font-bold shadow-sm"
-                                onClick={() => addBot(3)}
-                              >
-                                <Bot className="h-3.5 w-3.5" />
-                                <span>+ Add AI Bot (Lvl 3)</span>
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="border-white/10 bg-white/5 hover:bg-white/10 text-white/80 h-8 text-xs font-semibold px-2"
-                                onClick={() => addBot(5)}
-                                title="Add Expert AI (Level 5)"
-                              >
-                                <span>Lvl 5</span>
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  ))}
 
                   {/* Action Buttons */}
                   <div className="pt-4 border-t border-border flex flex-wrap items-center justify-between gap-3">
@@ -466,11 +486,17 @@ function RoomDetailsContent() {
                       <Button
                         size="lg"
                         onClick={() => startGame()}
-                        disabled={!isAllReady || playersList.length < 2}
+                        disabled={!isAllReady || playersList.length < minPlayers}
                         className="w-full sm:w-auto gap-2 shadow-primary/30"
                       >
                         <Play className="h-5 w-5 fill-current" />
-                        <span>{playersList.length < 2 ? "Waiting for Opponent" : !isAllReady ? "Waiting for Ready" : "Start Game"}</span>
+                        <span>
+                          {playersList.length < minPlayers
+                            ? "Waiting for Opponent"
+                            : !isAllReady
+                            ? "Waiting for Ready"
+                            : "Start Game"}
+                        </span>
                       </Button>
                     )}
 
@@ -489,7 +515,7 @@ function RoomDetailsContent() {
                 currentUserId={currentUserId}
                 onSendMessage={sendChatMessage}
                 onSendReaction={sendReaction}
-                className="h-full min-h-[420px]"
+                className="h-full min-h-[440px]"
               />
             </div>
           </div>
