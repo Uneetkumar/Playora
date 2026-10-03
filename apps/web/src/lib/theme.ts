@@ -1,3 +1,5 @@
+import { REDUCE_MOTION_CLASS, REDUCE_MOTION_STORAGE_KEY } from "@playora/animation";
+
 /**
  * Theme choice, in one place.
  *
@@ -12,11 +14,19 @@
  * without a flash of the wrong theme, and `applyTheme` is what the settings
  * page calls. Both go through `resolveTheme`, so a change to how "system" is
  * interpreted cannot land in one and miss the other.
+ *
+ * The in-app "Reduce motion" setting had the same bug — saved, but only ever
+ * re-applied by visiting Settings — so the bootstrap restores it too, and
+ * `applyReduceMotion` / `readStoredReduceMotion` are its counterparts to the
+ * theme functions. `useReducedMotionPref` (lib/motion.ts) is how components
+ * read the result.
  */
 
 export type ThemeChoice = "dark" | "light" | "system";
 
 export const THEME_STORAGE_KEY = "playora:theme";
+
+export { REDUCE_MOTION_CLASS, REDUCE_MOTION_STORAGE_KEY };
 
 /** Whether a choice should render light, resolving `system` against the OS. */
 export function resolveLight(choice: ThemeChoice): boolean {
@@ -49,12 +59,37 @@ export function readStoredTheme(): ThemeChoice {
 }
 
 /**
+ * Turns the in-app reduced-motion setting on or off for this page and saves
+ * it. The class is what CSS and `useReducedMotionPref` read; the stored value
+ * is what the bootstrap restores on the next load.
+ */
+export function applyReduceMotion(on: boolean): void {
+  document.documentElement.classList.toggle(REDUCE_MOTION_CLASS, on);
+  try {
+    localStorage.setItem(REDUCE_MOTION_STORAGE_KEY, on ? "1" : "0");
+  } catch {
+    /* storage unavailable: the setting lasts for this page only */
+  }
+}
+
+export function readStoredReduceMotion(): boolean {
+  try {
+    return localStorage.getItem(REDUCE_MOTION_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Inlined into <head> and run before the first paint.
  *
  * Deliberately terse and dependency-free: it blocks rendering, and a theme
  * flash on every load is worse than the few bytes it saves. Kept in sync with
- * `applyTheme` by hand because that function cannot be serialised here.
+ * `applyTheme` and `applyReduceMotion` by hand because those functions cannot
+ * be serialised here.
  */
-export const THEME_BOOTSTRAP = `(function(){try{var c=localStorage.getItem(${JSON.stringify(
+export const THEME_BOOTSTRAP = `(function(){try{var s=localStorage,c=s.getItem(${JSON.stringify(
   THEME_STORAGE_KEY,
-)});var l=c==="light"||(c==="system"&&window.matchMedia("(prefers-color-scheme: light)").matches);var r=document.documentElement;r.classList.toggle("light",l);r.classList.toggle("dark",!l);r.style.colorScheme=l?"light":"dark";}catch(e){}})();`;
+)});var l=c==="light"||(c==="system"&&window.matchMedia("(prefers-color-scheme: light)").matches);var r=document.documentElement;r.classList.toggle("light",l);r.classList.toggle("dark",!l);r.style.colorScheme=l?"light":"dark";r.classList.toggle(${JSON.stringify(
+  REDUCE_MOTION_CLASS,
+)},s.getItem(${JSON.stringify(REDUCE_MOTION_STORAGE_KEY)})==="1");}catch(e){}})();`;

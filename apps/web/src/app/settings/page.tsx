@@ -311,7 +311,7 @@ function VolumeSlider({
           {label}
         </label>
         <div className="flex items-center gap-2">
-          <span className="numeric text-xs text-muted-foreground">
+          <span className="numeric font-bold text-xs text-muted-foreground">
             {Math.round(value * 100)}
           </span>
           {onToggleMute && (

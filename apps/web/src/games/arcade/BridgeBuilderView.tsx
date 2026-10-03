@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { cn } from "@playora/ui";
+import { Button, cn, focusRingClass } from "@playora/ui";
 import { GameLoop } from "@playora/game-runtime";
 import {
   Activity,
@@ -9,7 +9,6 @@ import {
   ChevronRight,
   Eraser,
   FlipHorizontal2,
-  LayoutGrid,
   Lightbulb,
   Lock,
   Pencil,
@@ -20,10 +19,10 @@ import {
   Star,
   Trash2,
   Undo2,
-  Volume2,
-  VolumeX,
   X,
 } from "lucide-react";
+import { GameShell, ShellIconButton } from "../../components/games/game-shell";
+import { useAudioStore } from "../../lib/store/audio-store";
 import { useArcadeRun } from "./use-arcade-run";
 import { ArcadeHud } from "./ArcadeHud";
 import { useJuice } from "./use-juice";
@@ -209,16 +208,34 @@ function failureCopy(s: BridgeState): { title: string; detail: string; tip: stri
   };
 }
 
-function Stars({ count, size = "h-5 w-5" }: { count: number; size?: string }) {
+/**
+ * `onDark` is for the result card, which sits over the canvas art in either
+ * theme; the default follows the theme, for the level list.
+ */
+function Stars({
+  count,
+  size = "h-5 w-5",
+  tone = "theme",
+}: {
+  count: number;
+  size?: string;
+  tone?: "theme" | "onDark";
+}) {
   return (
-    <div className="flex items-center gap-0.5" aria-label={`${count} of 3 stars`}>
+    <div className="flex items-center gap-0.5" role="img" aria-label={`${count} of 3 stars`}>
       {[0, 1, 2].map((i) => (
         <Star
           key={i}
           aria-hidden
           className={cn(
             size,
-            i < count ? "fill-amber-400 text-amber-400" : "fill-white/10 text-white/25"
+            i < count
+              // Gold fill, with an outline that holds 3:1 on a white card,
+              // where the gold alone is 1.7:1.
+              ? "fill-badge-top text-reward"
+              : tone === "onDark"
+                ? "fill-white/10 text-white/25"
+                : "fill-foreground/10 text-foreground/25"
           )}
         />
       ))}
@@ -252,13 +269,13 @@ function ToolButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex h-10 min-w-10 flex-col items-center justify-center rounded-xl px-2 text-[10px] font-bold transition-colors",
+        "flex h-10 min-w-10 flex-col items-center justify-center rounded-lg px-2 text-[10px] font-bold transition-colors duration-hover ease-out-expo",
         "disabled:cursor-not-allowed disabled:opacity-35",
         active
           ? tone === "danger"
-            ? "bg-rose-500 text-white"
-            : "bg-sky-500 text-white"
-          : "bg-white/[0.06] text-white/80 hover:bg-white/[0.12]"
+            ? "bg-destructive text-destructive-foreground"
+            : "bg-primary text-primary-foreground"
+          : "bg-foreground/[0.06] text-foreground/80 hover:bg-foreground/[0.12]"
       )}
     >
       {children}
@@ -287,6 +304,7 @@ interface Interaction {
 
 export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
   const run = useArcadeRun("bridge-builder");
+  const muted = useAudioStore((s) => s.mixer.muted);
   const juice = useJuice();
   const runRef = React.useRef(run);
   runRef.current = run;
@@ -305,7 +323,7 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
   const [tool, setTool] = React.useState<Tool>("build");
   const [stressView, setStressView] = React.useState(true);
   const [showHint, setShowHint] = React.useState(false);
-  const [muted, setMuted] = React.useState(false);
+  const [paused, setPaused] = React.useState(false);
   const [toast, setToast] = React.useState<{ text: string; id: number } | null>(null);
 
   const materialRef = React.useRef(material);
@@ -314,6 +332,8 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
   toolRef.current = tool;
   const stressRef = React.useRef(stressView);
   stressRef.current = stressView;
+  const pausedRef = React.useRef(paused);
+  pausedRef.current = paused;
 
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const wrapRef = React.useRef<HTMLDivElement | null>(null);
@@ -335,6 +355,27 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
   React.useEffect(() => {
     setProgress(readProgress());
     return () => bridgeAudio.setEngine(false);
+  }, []);
+
+  // Bridge Builder still synthesises through its own AudioContext, so the
+  // global mute the shell's button drives is mirrored into it. Unmuting
+  // mid-test brings the engine hum back rather than leaving it silent.
+  React.useEffect(() => {
+    bridgeAudio.setMuted(muted);
+    const s = stateRef.current!;
+    if (!muted && s.mode === "test" && !s.result && !pausedRef.current) {
+      bridgeAudio.setEngine(true, 0.6);
+    }
+  }, [muted]);
+
+  // Paused, the simulation freezes (the loop below skips its update) and the
+  // engine hum stops; resuming a test that was still running restarts it.
+  const onPauseChange = React.useCallback((next: boolean) => {
+    pausedRef.current = next;
+    setPaused(next);
+    const s = stateRef.current!;
+    if (next) bridgeAudio.setEngine(false);
+    else if (s.mode === "test" && !s.result) bridgeAudio.setEngine(true, 0.6);
   }, []);
 
   const flash = React.useCallback((text: string) => {
@@ -441,6 +482,7 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
     const loop = new GameLoop(
       {
         update: (dt) => {
+          if (pausedRef.current) return;
           timeRef.current += dt;
           const s = stateRef.current!;
           if (s.mode === "test") {
@@ -460,7 +502,7 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
           draw();
           // Live numbers during a test, a few times a second, not every frame.
           frame += 1;
-          if (stateRef.current?.mode === "test" && frame % 8 === 0) refresh();
+          if (!pausedRef.current && stateRef.current?.mode === "test" && frame % 8 === 0) refresh();
         },
       },
       { runWhileHidden: false }
@@ -629,12 +671,6 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
     setTool("build");
   }, []);
 
-  const toggleMute = () => {
-    const next = !muted;
-    setMuted(next);
-    bridgeAudio.setMuted(next);
-  };
-
   /* ---- Pointer input ---------------------------------------------------- */
 
   const worldFromEvent = (e: React.PointerEvent | React.MouseEvent): Point => {
@@ -764,6 +800,8 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
   React.useEffect(() => {
     if (screen !== "play") return;
     const onKey = (e: KeyboardEvent) => {
+      // The pause menu is up: Space must not run a test behind it.
+      if (pausedRef.current) return;
       const target = e.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
       const mod = e.ctrlKey || e.metaKey;
@@ -783,8 +821,6 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
       if (k === " " || k === "enter") {
         e.preventDefault();
         toggleTest();
-      } else if (k === "escape") {
-        cancelChain();
       } else if (k >= "1" && k <= "4") {
         pickMaterial(MATERIAL_ORDER[Number(k) - 1]!);
       } else if (k === "d" || k === "x" || k === "delete" || k === "backspace") {
@@ -799,6 +835,14 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [screen, cancelChain, doRedo, doUndo, pickMaterial, toggleMirror, toggleTest]);
+
+  // Escape cancels a beam being drawn; with nothing to cancel, the shell
+  // takes it and pauses.
+  const onEscape = React.useCallback(() => {
+    if (screen !== "play" || !ix.current.from) return false;
+    cancelChain();
+    return true;
+  }, [screen, cancelChain]);
 
   /* ---- Render ----------------------------------------------------------- */
 
@@ -832,42 +876,43 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
         ? "Road alone will sag. Pick Wood (2) and brace each road joint down to the lower anchors."
         : null;
 
+  const exit = onExit ?? (() => window.history.back());
+  const shell = {
+    gameId: "bridge-builder",
+    title: "Bridge Builder",
+    onExit: exit,
+    // Designs save as they are drawn and stars as they are earned, so leaving
+    // never throws anything away and needs no confirmation.
+    matchInProgress: false,
+    paused,
+    onPauseChange,
+    onEscape,
+  } as const;
+
   if (screen === "levels") {
     const totalStars = LEVELS.reduce((n, l) => n + (progress[l.id]?.stars ?? 0), 0);
     return (
-      <div className="relative flex h-full w-full flex-col overflow-hidden rounded-2xl border border-white/15 bg-gradient-to-b from-[#0b2540] via-[#0a1d33] to-[#06111f] text-white shadow-2xl sm:rounded-3xl">
-        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-6">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-sky-300/80">
-              Structural engineering
-            </p>
-            <h2 className="font-display text-xl font-black sm:text-2xl">Bridge Builder</h2>
+      <GameShell
+        {...shell}
+        subtitle="Structural engineering"
+        autoPauseOnHidden={false}
+        status={
+          <div className="flex h-8 items-center gap-1.5 rounded-full border border-reward/40 bg-reward/10 px-3 text-sm font-bold">
+            <Star className="h-4 w-4 fill-badge-top text-reward" aria-hidden />
+            <span className="font-mono-num">
+              {totalStars}/{LEVELS.length * 3}
+            </span>
+            <span className="sr-only">stars</span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 rounded-xl border border-amber-400/30 bg-amber-500/10 px-3 py-1.5 text-sm font-black text-amber-200">
-              <Star className="h-4 w-4 fill-amber-400 text-amber-400" aria-hidden />
-              <span className="tabular-nums">
-                {totalStars}/{LEVELS.length * 3}
-              </span>
-            </div>
-            {onExit && (
-              <button
-                type="button"
-                onClick={onExit}
-                className="rounded-xl border border-white/15 px-3 py-1.5 text-sm font-bold text-white/80 hover:bg-white/10"
-              >
-                Exit
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-          <p className="mb-4 max-w-2xl text-sm text-white/65">
+        }
+      >
+        <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
+          <p className="mb-5 max-w-2xl text-sm text-muted-foreground">
             Get the vehicle to the flag. Lay road between the anchors, brace it with wood, steel and
             cable, then run a test and watch the stress. Stars for crossing, staying under the
             target budget, and keeping stress low.
           </p>
-          <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4 lg:gap-4">
             {LEVELS.map((l, i) => {
               const unlocked = isUnlocked(progress, i);
               const p = progress[l.id];
@@ -878,31 +923,33 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
                   disabled={!unlocked}
                   onClick={() => openLevel(i)}
                   className={cn(
-                    "group relative flex flex-col items-start gap-2 rounded-2xl border p-4 text-left transition-all",
+                    "group relative flex flex-col items-start gap-2 rounded-xl border p-4 text-left",
+                    "transition-[transform,box-shadow,border-color] duration-hover ease-out-expo",
+                    focusRingClass,
                     unlocked
-                      ? "border-white/12 bg-white/[0.05] hover:-translate-y-0.5 hover:border-sky-400/50 hover:bg-white/[0.09]"
-                      : "cursor-not-allowed border-white/5 bg-white/[0.02] opacity-55"
+                      ? "border-border bg-card shadow-card hover:-translate-y-0.5 hover:shadow-card-hover"
+                      : "cursor-not-allowed border-border/50 bg-card/40 opacity-60"
                   )}
                 >
                   <div className="flex w-full items-center justify-between">
-                    <span className="font-display text-2xl font-black text-white/90 tabular-nums">
+                    <span className="font-mono-num text-2xl font-bold text-foreground/90">
                       {i + 1}
                     </span>
                     {unlocked ? (
                       <Stars count={p?.stars ?? 0} size="h-4 w-4" />
                     ) : (
-                      <Lock className="h-4 w-4 text-white/50" aria-label="Locked" />
+                      <Lock className="h-4 w-4 text-muted-foreground" aria-label="Locked" />
                     )}
                   </div>
                   <div>
-                    <p className="font-bold leading-tight">{l.name}</p>
-                    <p className="mt-0.5 text-xs leading-snug text-white/55">{l.lesson}</p>
+                    <p className="font-bold leading-tight text-foreground">{l.name}</p>
+                    <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{l.lesson}</p>
                   </div>
-                  <div className="mt-auto flex w-full items-center justify-between pt-1 text-[11px] font-semibold text-white/50">
+                  <div className="mt-auto flex w-full items-center justify-between pt-1 text-[11px] font-semibold text-muted-foreground">
                     <span>
                       {l.vehicle.name} · {l.vehicle.mass} t
                     </span>
-                    <span className="tabular-nums">
+                    <span className="font-mono-num">
                       {p ? `best ${money(p.bestCost)}` : money(l.targetBudget)}
                     </span>
                   </div>
@@ -911,70 +958,35 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
             })}
           </div>
         </div>
-      </div>
+      </GameShell>
     );
   }
 
   const fail = done && !result!.success ? failureCopy(s) : null;
 
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#081a2c] text-white shadow-2xl sm:rounded-3xl">
-      {/* Header */}
-      <div className="flex items-center gap-2 border-b border-white/10 px-2 py-2 sm:gap-3 sm:px-4">
-        <button
-          type="button"
-          onClick={() => {
-            editBridge();
-            setScreen("levels");
-          }}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] hover:bg-white/[0.12]"
-          aria-label="Level select"
-          title="Levels"
-        >
-          <LayoutGrid className="h-4 w-4" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-sky-300/80">
-            Level {levelIndex + 1} · {level.vehicle.name} {level.vehicle.mass} t
-          </p>
-          <h2 className="truncate font-display text-base font-black leading-tight sm:text-xl">
-            {level.name}
-          </h2>
-        </div>
-        <ArcadeHud run={run} className="hidden md:flex" />
-        <button
-          type="button"
+    <GameShell
+      {...shell}
+      subtitle={`Level ${levelIndex + 1}: ${level.name} · ${level.vehicle.name} ${level.vehicle.mass} t`}
+      status={<ArcadeHud run={run} size="sm" />}
+      onBack={() => {
+        editBridge();
+        setScreen("levels");
+      }}
+      backLabel="Levels"
+      // Only a running test is worth pausing for; a half-drawn design waits
+      // without help, and a pause menu on every tab switch would nag.
+      autoPauseOnHidden={testing && !done}
+      actions={
+        <ShellIconButton
+          label="Hint"
+          pressed={showHint}
           onClick={() => setShowHint((v) => !v)}
-          className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl hover:bg-white/[0.12]",
-            showHint ? "bg-amber-500/25 text-amber-200" : "bg-white/[0.06]"
-          )}
-          aria-label="Hint"
-          aria-pressed={showHint}
-          title="Hint"
         >
-          <Lightbulb className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={toggleMute}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] hover:bg-white/[0.12]"
-          aria-label={muted ? "Unmute" : "Mute"}
-          title={muted ? "Unmute" : "Mute"}
-        >
-          {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-        </button>
-        {onExit && (
-          <button
-            type="button"
-            onClick={onExit}
-            className="hidden h-9 shrink-0 rounded-xl border border-white/15 px-3 text-sm font-bold text-white/80 hover:bg-white/10 sm:block"
-          >
-            Exit
-          </button>
-        )}
-      </div>
-
+          <Lightbulb className="h-5 w-5" aria-hidden />
+        </ShellIconButton>
+      }
+    >
       {/* Stage */}
       <div
         ref={wrapRef}
@@ -1103,7 +1115,7 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
                         +{scoreFor(s).toLocaleString("en-US")} points
                       </p>
                     </div>
-                    <Stars count={result.stars} size="h-7 w-7" />
+                    <Stars count={result.stars} size="h-7 w-7" tone="onDark" />
                   </div>
                   <ul className="mt-2.5 grid gap-1 text-[13px]">
                     {(
@@ -1189,7 +1201,7 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 bg-[#07121f] px-2 py-2 sm:px-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-surface px-2 py-2 sm:px-4">
         <div
           className="flex min-w-0 items-center gap-1 sm:gap-1.5"
           role="radiogroup"
@@ -1208,21 +1220,21 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
                 onClick={() => pickMaterial(m)}
                 title={`${def.name} (${i + 1}) — ${def.blurb} Max ${def.maxLength / UNITS_PER_METRE} m`}
                 className={cn(
-                  "flex h-11 items-center gap-1.5 rounded-xl border px-2 text-left transition-colors sm:px-2.5",
+                  "flex h-11 items-center gap-1.5 rounded-lg border px-2 text-left transition-colors duration-hover ease-out-expo sm:px-2.5",
                   "disabled:cursor-not-allowed disabled:opacity-40",
                   active
-                    ? "border-sky-400 bg-sky-500/20"
-                    : "border-white/10 bg-white/[0.05] hover:bg-white/[0.1]"
+                    ? "border-primary bg-primary/15"
+                    : "border-border bg-card hover:bg-raised"
                 )}
               >
                 <span
-                  className="h-5 w-1.5 shrink-0 rounded-full ring-1 ring-black/40"
+                  className="h-5 w-1.5 shrink-0 rounded-full ring-1 ring-foreground/20"
                   style={{ background: def.color }}
                   aria-hidden
                 />
                 <span className="flex flex-col leading-none">
-                  <span className="text-xs font-black">{def.name}</span>
-                  <span className="mt-0.5 text-[10px] font-semibold text-white/50 tabular-nums">
+                  <span className="text-xs font-extrabold">{def.name}</span>
+                  <span className="mt-0.5 font-mono-num text-[10px] font-semibold text-muted-foreground">
                     {money(def.costPerUnit * UNITS_PER_METRE)}/m
                   </span>
                 </span>
@@ -1275,26 +1287,24 @@ export function BridgeBuilderView({ onExit }: { onExit?: () => void }) {
           >
             <Trash2 className="h-4 w-4" />
           </ToolButton>
-          <button
+          {/* The screen's one launch action, so it wears the green Play colour. */}
+          <Button
             type="button"
+            variant={testing ? "destructive" : "play"}
             onClick={toggleTest}
             title={testing ? "Stop (Space)" : "Run test (Space)"}
-            className={cn(
-              "ml-1 flex h-11 items-center gap-2 rounded-xl px-4 text-sm font-black shadow-lg transition-colors sm:px-5",
-              testing
-                ? "bg-rose-500 text-white hover:bg-rose-400"
-                : "bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-400 hover:to-teal-400"
-            )}
+            aria-keyshortcuts="Space"
+            className="ml-1 h-11 px-4 font-extrabold sm:px-5"
           >
             {testing ? (
-              <Square className="h-4 w-4 fill-white" />
+              <Square className="h-4 w-4 fill-current" aria-hidden />
             ) : (
-              <Play className="h-4 w-4 fill-white" />
+              <Play className="h-4 w-4 fill-current" aria-hidden />
             )}
             {testing ? "Stop" : "Test"}
-          </button>
+          </Button>
         </div>
       </div>
-    </div>
+    </GameShell>
   );
 }

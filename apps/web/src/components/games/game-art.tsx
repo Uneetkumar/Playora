@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import type { GameId } from "@playora/game-types";
+import { GAME_META } from "../../lib/games/meta";
 
 /**
  * Premium authored cover art & thumbnails for all catalog games.
@@ -13,7 +14,10 @@ export interface GameArt {
   background: string;
   /** High-fidelity vector illustration in 160x120 aspect ratio. */
   Art: (props: { className?: string }) => React.ReactElement;
-  /** Photorealistic 3D thumbnail image URL */
+  /**
+   * Cover image URL. Read from `GAME_META[id].covers` rather than written out
+   * here, so the card, the share image and the hero all use the same file.
+   */
   imageUrl?: string;
 }
 
@@ -22,7 +26,7 @@ export interface GameArt {
 // ─────────────────────────────────────────────────────────────────────────────
 const chess: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #3d2c1d 0%, #1c140d 60%, #0c0805 100%)",
-  imageUrl: "/games/chess-hero.jpg",
+  imageUrl: GAME_META.chess.covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <defs>
@@ -109,7 +113,7 @@ const chess: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const uno: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #8B1A1A 0%, #3D0808 65%, #180303 100%)",
-  imageUrl: "/games/uno-hero.jpg",
+  imageUrl: GAME_META.uno.covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <defs>
@@ -209,7 +213,7 @@ const uno: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const unoNoMercy: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #400505 0%, #1C0101 65%, #050000 100%)",
-  imageUrl: "/games/uno-no-mercy-hero.jpg",
+  imageUrl: GAME_META["uno-no-mercy"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <defs>
@@ -280,7 +284,7 @@ const unoNoMercy: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const carRace: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #2a0b4d 0%, #110524 60%, #06010d 100%)",
-  imageUrl: "/games/car-race-hero.jpg",
+  imageUrl: GAME_META["car-race"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <polygon points="58,60 102,60 148,120 12,120" fill="#1E0A3C" />
@@ -296,7 +300,7 @@ const carRace: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const bikeRace: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #0b2d45 0%, #051421 60%, #02070d 100%)",
-  imageUrl: "/games/bike-race-hero.jpg",
+  imageUrl: GAME_META["bike-race"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <polygon points="62,65 98,65 142,120 18,120" fill="#082236" />
@@ -312,7 +316,7 @@ const bikeRace: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const ropeRescue: GameArt = {
   background: "radial-gradient(ellipse at 50% 30%, #1e1b4b 0%, #0f172a 60%, #020617 100%)",
-  imageUrl: "/games/rope-rescue-thumb.jpg",
+  imageUrl: GAME_META["rope-rescue"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <circle cx="80" cy="60" r="40" fill="#38bdf8" />
@@ -325,7 +329,7 @@ const ropeRescue: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const antAttack: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #14532d 0%, #052e16 60%, #022c22 100%)",
-  imageUrl: "/games/ant-attack-thumb.jpg",
+  imageUrl: GAME_META["ant-attack"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <circle cx="80" cy="60" r="40" fill="#15803d" />
@@ -338,7 +342,7 @@ const antAttack: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const bombPass: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #450a0a 0%, #1c0505 60%, #0c0202 100%)",
-  imageUrl: "/games/bomb-pass-thumb.jpg",
+  imageUrl: GAME_META["bomb-pass"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <circle cx="80" cy="60" r="40" fill="#dc2626" />
@@ -351,7 +355,7 @@ const bombPass: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const colorRush: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #2e1065 0%, #17072e 60%, #0b0217 100%)",
-  imageUrl: "/games/color-rush-thumb.jpg",
+  imageUrl: GAME_META["color-rush"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <circle cx="80" cy="60" r="40" fill="#a855f7" />
@@ -364,7 +368,7 @@ const colorRush: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const fallingFloor: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #311042 0%, #180824 60%, #0c0412 100%)",
-  imageUrl: "/games/falling-floor-thumb.jpg",
+  imageUrl: GAME_META["falling-floor"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <circle cx="80" cy="60" r="40" fill="#7c3aed" />
@@ -377,7 +381,7 @@ const fallingFloor: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const pinPuzzle: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #1e293b 0%, #0f172a 60%, #020617 100%)",
-  imageUrl: "/games/pin-puzzle-thumb.jpg",
+  imageUrl: GAME_META["pin-puzzle"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <circle cx="80" cy="60" r="40" fill="#d97706" />
@@ -390,7 +394,7 @@ const pinPuzzle: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const targetRush: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #3b0764 0%, #1e053a 60%, #0f021f 100%)",
-  imageUrl: "/games/target-rush-thumb.jpg",
+  imageUrl: GAME_META["target-rush"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <circle cx="80" cy="60" r="40" fill="#dc2626" />
@@ -403,7 +407,7 @@ const targetRush: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const hotPotato: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #451a03 0%, #270d02 60%, #120501 100%)",
-  imageUrl: "/games/hot-potato-thumb.jpg",
+  imageUrl: GAME_META["hot-potato"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <circle cx="80" cy="60" r="40" fill="#ea580c" />
@@ -416,7 +420,7 @@ const hotPotato: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const bridgeBuilder: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #0c4a6e 0%, #082f49 60%, #031524 100%)",
-  imageUrl: "/games/bridge-builder-thumb.jpg",
+  imageUrl: GAME_META["bridge-builder"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <circle cx="80" cy="60" r="40" fill="#0284c7" />
@@ -429,7 +433,7 @@ const bridgeBuilder: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const iceBreaker: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #0369a1 0%, #075985 60%, #082f49 100%)",
-  imageUrl: "/games/ice-breaker-thumb.jpg",
+  imageUrl: GAME_META["ice-breaker"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <circle cx="80" cy="60" r="40" fill="#0284c7" />
@@ -442,7 +446,7 @@ const iceBreaker: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const ticTacToe: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #2a0845 0%, #17072b 60%, #0d021a 100%)",
-  imageUrl: "/games/tic-tac-toe-thumb.svg",
+  imageUrl: GAME_META["tic-tac-toe"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <defs>
@@ -477,7 +481,7 @@ const ticTacToe: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const connectFour: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #0f2b5c 0%, #071530 60%, #030814 100%)",
-  imageUrl: "/games/connect-four-thumb.svg",
+  imageUrl: GAME_META["connect-four"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <rect x="25" y="25" width="110" height="75" rx="10" fill="#1e40af" stroke="#3b82f6" strokeWidth="2.5" />
@@ -503,7 +507,7 @@ const connectFour: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const ludo: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #3b1443 0%, #1f0b24 60%, #0f0512 100%)",
-  imageUrl: "/games/ludo-thumb.svg",
+  imageUrl: GAME_META.ludo.covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       {/* Quadrants */}
@@ -531,7 +535,7 @@ const ludo: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const snakeLadder: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #064e3b 0%, #022c22 60%, #01140f 100%)",
-  imageUrl: "/games/snake-ladder-thumb.svg",
+  imageUrl: GAME_META["snake-ladder"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       {/* Board squares */}
@@ -556,7 +560,7 @@ const snakeLadder: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const checkers: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #422006 0%, #1c0d02 60%, #0d0501 100%)",
-  imageUrl: "/games/checkers-thumb.svg",
+  imageUrl: GAME_META.checkers.covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       {/* Board Skew */}
@@ -586,7 +590,7 @@ const checkers: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const battleship: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #083344 0%, #031c26 60%, #010a0e 100%)",
-  imageUrl: "/games/battleship-thumb.svg",
+  imageUrl: GAME_META.battleship.covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       {/* Radar Circles */}
@@ -609,7 +613,7 @@ const battleship: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const memoryMatch: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #4c1d95 0%, #2e1065 60%, #170738 100%)",
-  imageUrl: "/games/memory-match-thumb.svg",
+  imageUrl: GAME_META["memory-match"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       {/* Card 1 */}
@@ -629,7 +633,7 @@ const memoryMatch: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const game2048: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #713f12 0%, #422006 60%, #1a0c02 100%)",
-  imageUrl: "/games/game-2048-thumb.svg",
+  imageUrl: GAME_META["game-2048"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       <rect x="25" y="15" width="110" height="90" rx="8" fill="#1e1b18" stroke="#854d0e" strokeWidth="2" />
@@ -650,7 +654,7 @@ const game2048: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const minesweeper: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #334155 0%, #1e293b 60%, #0f172a 100%)",
-  imageUrl: "/games/minesweeper-thumb.svg",
+  imageUrl: GAME_META.minesweeper.covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       {/* Grid cells */}
@@ -678,7 +682,7 @@ const minesweeper: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const wordGuess: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #14532d 0%, #052e16 60%, #021a0c 100%)",
-  imageUrl: "/games/word-guess-thumb.svg",
+  imageUrl: GAME_META["word-guess"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       {/* Row 1 */}
@@ -702,7 +706,7 @@ const wordGuess: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const flappyBird: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #042f2e 0%, #082020 60%, #031010 100%)",
-  imageUrl: "/games/flappy-bird-thumb.svg",
+  imageUrl: GAME_META["flappy-bird"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       {/* Neon Pipes */}
@@ -725,7 +729,7 @@ const flappyBird: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const retroSnake: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #064e3b 0%, #022c22 60%, #01140f 100%)",
-  imageUrl: "/games/retro-snake-thumb.svg",
+  imageUrl: GAME_META["retro-snake"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       {/* Grid dots */}
@@ -749,7 +753,7 @@ const retroSnake: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const pong: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #1e1b4b 0%, #0f0d2b 60%, #060514 100%)",
-  imageUrl: "/games/pong-thumb.svg",
+  imageUrl: GAME_META.pong.covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       {/* Center Dotted Divider */}
@@ -770,7 +774,7 @@ const pong: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const brickBreaker: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #3b0764 0%, #1e0338 60%, #0d011a 100%)",
-  imageUrl: "/games/brick-breaker-thumb.svg",
+  imageUrl: GAME_META["brick-breaker"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       {/* Bricks */}
@@ -804,7 +808,7 @@ const brickBreaker: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const whackAMole: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #701a75 0%, #4a044e 60%, #240226 100%)",
-  imageUrl: "/games/whack-a-mole-thumb.svg",
+  imageUrl: GAME_META["whack-a-mole"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       {/* Holes */}
@@ -832,7 +836,7 @@ const whackAMole: GameArt = {
 // ─────────────────────────────────────────────────────────────────────────────
 const simonSays: GameArt = {
   background: "radial-gradient(ellipse at 50% 35%, #1e293b 0%, #0f172a 60%, #020617 100%)",
-  imageUrl: "/games/simon-says-thumb.svg",
+  imageUrl: GAME_META["simon-says"].covers.landscape,
   Art: ({ className }) => (
     <svg viewBox="0 0 160 120" className={className} aria-hidden focusable="false">
       {/* 4 Quadrants Circle */}

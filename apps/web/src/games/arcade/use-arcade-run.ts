@@ -42,6 +42,53 @@ export interface ArcadeRun {
   reset: () => void;
 }
 
+/** The part of a run that scoring changes: what `hit`, `miss` and `bank` touch. */
+export interface RunTally {
+  score: number;
+  combo: number;
+  bestCombo: number;
+}
+
+export type RunTallyAction =
+  | { type: "hit"; basePoints: number }
+  | { type: "miss" }
+  | { type: "bank"; points: number }
+  | { type: "reset" };
+
+export const INITIAL_RUN_TALLY: RunTally = { score: 0, combo: 0, bestCombo: 0 };
+
+/**
+ * Every scoring rule of a run, as one pure function.
+ *
+ * `hit` used to add to the score from inside a `setCombo` updater. React
+ * calls updaters twice under StrictMode to flush out exactly that kind of side
+ * effect, so in development every hit scored double. Here the next tally is
+ * computed from the previous one and nothing else, so calling it twice with
+ * the same input is harmless, and the rules can be tested without a renderer.
+ */
+export function runTallyReducer(state: RunTally, action: RunTallyAction): RunTally {
+  switch (action.type) {
+    case "hit": {
+      const combo = state.combo + 1;
+      return {
+        score: state.score + pointsFor(action.basePoints, combo),
+        combo,
+        bestCombo: Math.max(state.bestCombo, combo),
+      };
+    }
+    case "miss":
+      return state.combo === 0 ? state : { ...state, combo: 0 };
+    case "bank":
+      return {
+        ...state,
+        score: state.score + Math.max(0, Math.round(action.points)),
+        combo: 0,
+      };
+    case "reset":
+      return INITIAL_RUN_TALLY;
+  }
+}
+
 /**
  * Score, combo, difficulty and a personal best, for an arcade run.
  *
@@ -55,9 +102,7 @@ export interface ArcadeRun {
  * the difficulty curve is the same on a 144Hz monitor as on a throttled tab.
  */
 export function useArcadeRun(gameId: GameId | string): ArcadeRun {
-  const [score, setScore] = React.useState(0);
-  const [combo, setCombo] = React.useState(0);
-  const [bestCombo, setBestCombo] = React.useState(0);
+  const [tally, setTally] = React.useState<RunTally>(INITIAL_RUN_TALLY);
   const [best, setBest] = React.useState(0);
   const [isNewBest, setIsNewBest] = React.useState(false);
   const [elapsed, setElapsed] = React.useState(0);
@@ -75,29 +120,35 @@ export function useArcadeRun(gameId: GameId | string): ArcadeRun {
     return () => clearInterval(timer);
   }, [running]);
 
-  // Held in a ref as well as state so `end` can commit the final score without
-  // depending on a render having flushed first.
-  const scoreRef = React.useRef(0);
+  /*
+   * The tally lives in a ref, and state is a copy of it for rendering. Each
+   * action runs the reducer once, in the event handler that caused it, and
+   * hands React the finished value rather than an updater — so there is
+   * nothing for StrictMode to repeat. The ref is also what lets `end` commit
+   * the final score in the same tick as the last `hit` or `bank`, before any
+   * render has flushed; several hits in one tick each build on the last.
+   */
+  const tallyRef = React.useRef<RunTally>(INITIAL_RUN_TALLY);
   const endedRef = React.useRef(false);
 
-  const hit = React.useCallback((basePoints: number) => {
-    setCombo((c) => {
-      const next = c + 1;
-      setBestCombo((b) => (next > b ? next : b));
-      const gained = pointsFor(basePoints, next);
-      scoreRef.current += gained;
-      setScore(scoreRef.current);
-      return next;
-    });
+  const dispatch = React.useCallback((action: RunTallyAction) => {
+    const next = runTallyReducer(tallyRef.current, action);
+    if (next === tallyRef.current) return;
+    tallyRef.current = next;
+    setTally(next);
   }, []);
 
-  const miss = React.useCallback(() => setCombo(0), []);
+  const hit = React.useCallback(
+    (basePoints: number) => dispatch({ type: "hit", basePoints }),
+    [dispatch],
+  );
 
-  const bank = React.useCallback((points: number) => {
-    scoreRef.current += Math.max(0, Math.round(points));
-    setScore(scoreRef.current);
-    setCombo(0);
-  }, []);
+  const miss = React.useCallback(() => dispatch({ type: "miss" }), [dispatch]);
+
+  const bank = React.useCallback(
+    (points: number) => dispatch({ type: "bank", points }),
+    [dispatch],
+  );
 
   const end = React.useCallback(() => {
     // Idempotent: a game-over can be reached from several places at once — a
@@ -106,21 +157,18 @@ export function useArcadeRun(gameId: GameId | string): ArcadeRun {
     if (endedRef.current) return;
     endedRef.current = true;
     setRunning(false);
-    setIsNewBest(commitBestScore(gameId, scoreRef.current));
+    setIsNewBest(commitBestScore(gameId, tallyRef.current.score));
   }, [gameId]);
 
   const reset = React.useCallback(() => {
     endedRef.current = false;
-    scoreRef.current = 0;
-    setScore(0);
-    setCombo(0);
-    setBestCombo(0);
+    dispatch({ type: "reset" });
     setElapsed(0);
     setIsNewBest(false);
     setRunning(true);
     // Re-read: the run that just finished may have raised it.
     setBest(readBestScore(gameId));
-  }, [gameId]);
+  }, [dispatch, gameId]);
 
   const spawnInterval = React.useCallback(
     (baseMs: number) => spawnIntervalAt(baseMs, elapsed),
@@ -128,9 +176,9 @@ export function useArcadeRun(gameId: GameId | string): ArcadeRun {
   );
 
   return {
-    score,
-    combo,
-    bestCombo,
+    score: tally.score,
+    combo: tally.combo,
+    bestCombo: tally.bestCombo,
     best,
     isNewBest,
     elapsed,

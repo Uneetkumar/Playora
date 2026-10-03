@@ -55,7 +55,7 @@ export default function AchievementsPage() {
                   </span>
                 </p>
               </div>
-              <p className="numeric text-sm text-muted-foreground">
+              <p className="numeric font-bold text-sm text-muted-foreground">
                 {progress.unlockedIds.length} of {ACHIEVEMENTS.length} unlocked
               </p>
             </div>
@@ -78,7 +78,7 @@ export default function AchievementsPage() {
                     />
                     <span className="text-muted-foreground">
                       {TIER_STYLES[tier].label}{" "}
-                      <span className="numeric">
+                      <span className="numeric font-bold">
                         {have}/{total}
                       </span>
                     </span>

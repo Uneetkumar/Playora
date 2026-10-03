@@ -3,13 +3,22 @@ import "./globals.css";
 import * as React from "react";
 import { QueryProvider } from "../lib/query/query-provider";
 import { AnalyticsProvider } from "../lib/observability/analytics-provider";
-import { Poppins, Inter } from "next/font/google";
+import { Sora, Inter, JetBrains_Mono } from "next/font/google";
 import { AnimatedBackground } from "../components/shell/animated-background";
+import { Toaster, TooltipProvider } from "@playora/ui";
 import { THEME_BOOTSTRAP } from "../lib/theme";
 import { SITE_NAME, SITE_TAGLINE, SITE_DESCRIPTION, siteUrl, siteJsonLd } from "../lib/seo";
 
-// Self-hosted by next/font: no external request, no layout shift.
-const display = Poppins({
+/*
+ * Self-hosted by next/font: no external request, no layout shift. Each one
+ * becomes a CSS variable that Tailwind's `font-display` / `font-sans` /
+ * `font-mono` and globals.css read (docs/DESIGN_SYSTEM.md, "Type").
+ *
+ * Sora for headings, Inter for everything else (variable, so any weight),
+ * JetBrains Mono for clocks and room codes, where every character must take
+ * the same width and 0/O must not be confusable.
+ */
+const display = Sora({
   subsets: ["latin"],
   weight: ["600", "700", "800"],
   variable: "--font-display",
@@ -19,6 +28,13 @@ const display = Poppins({
 const body = Inter({
   subsets: ["latin"],
   variable: "--font-body",
+  display: "swap",
+});
+
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["500", "700"],
+  variable: "--font-mono",
   display: "swap",
 });
 
@@ -75,7 +91,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
      */
     <html
       lang="en"
-      className={`dark ${display.variable} ${body.variable}`}
+      className={`dark ${display.variable} ${body.variable} ${mono.variable}`}
       suppressHydrationWarning
     >
       <head>
@@ -94,9 +110,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AnimatedBackground />
         <QueryProvider>
           <AnalyticsProvider>
-            <AppShell>{children}</AppShell>
+            {/* One provider for the app, so tooltips share a delay group:
+                once one has opened, moving to the next opens it at once. */}
+            <TooltipProvider>
+              <AppShell>{children}</AppShell>
+            </TooltipProvider>
           </AnalyticsProvider>
         </QueryProvider>
+        {/* The only toaster; `toast()` from anywhere renders here. */}
+        <Toaster />
       </body>
     </html>
   );

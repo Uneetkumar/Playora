@@ -111,7 +111,7 @@ export default function FriendsPage() {
           >
             <t.icon className="h-3.5 w-3.5" aria-hidden />
             {t.label}
-            {t.count > 0 && <span className="numeric text-xs">({t.count})</span>}
+            {t.count > 0 && <span className="numeric font-bold text-xs">({t.count})</span>}
           </button>
         ))}
       </div>
@@ -233,7 +233,7 @@ function FriendRow({ friend, onRemove }: { friend: FriendProfile; onRemove: () =
           {friend.displayName}
         </Link>
         <p className="truncate text-xs text-muted-foreground">
-          @{friend.username} · Level <span className="numeric">{friend.level}</span>
+          @{friend.username} · Level <span className="numeric font-bold">{friend.level}</span>
         </p>
       </div>
 

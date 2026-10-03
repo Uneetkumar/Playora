@@ -29,7 +29,7 @@ function StatTile({
         <Icon className="h-4 w-4" aria-hidden />
         <span className="text-xs font-semibold uppercase tracking-wider">{label}</span>
       </div>
-      <div className="numeric mt-2 text-3xl text-foreground">{value}</div>
+      <div className="numeric font-bold mt-2 text-3xl text-foreground">{value}</div>
       {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
     </Card>
   );
@@ -47,7 +47,7 @@ function RatingCard({ rating }: { rating: GameRating }) {
           </Badge>
         </div>
         <div className="text-right">
-          <div className="numeric text-2xl text-foreground">{rating.rating}</div>
+          <div className="numeric font-bold text-2xl text-foreground">{rating.rating}</div>
           <div className="text-[11px] text-muted-foreground">Peak {rating.peakRating}</div>
         </div>
       </div>
@@ -60,14 +60,14 @@ function RatingCard({ rating }: { rating: GameRating }) {
         ].map(([label, value]) => (
           <div key={String(label)} className="rounded-lg bg-muted/40 py-2">
             <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</dt>
-            <dd className="numeric text-base text-foreground">{value}</dd>
+            <dd className="numeric font-bold text-base text-foreground">{value}</dd>
           </div>
         ))}
       </dl>
 
       {rating.toNextRank && (
         <p className="mt-3 text-xs text-muted-foreground">
-          <span className="numeric text-foreground">{rating.toNextRank.needed}</span> rating to{" "}
+          <span className="numeric font-bold text-foreground">{rating.toNextRank.needed}</span> rating to{" "}
           {rating.toNextRank.tier.label}
         </p>
       )}
@@ -129,9 +129,9 @@ export default function ProfilePage() {
               <div className="mt-5">
                 <div className="flex items-baseline justify-between">
                   <span className="font-display text-sm font-bold text-foreground">
-                    Level <span className="numeric text-primary-accent">{level.level}</span>
+                    Level <span className="numeric font-bold text-primary-accent">{level.level}</span>
                   </span>
-                  <span className="numeric text-xs text-muted-foreground">
+                  <span className="numeric font-bold text-xs text-muted-foreground">
                     {level.xpIntoLevel} / {level.xpForNextLevel} XP
                   </span>
                 </div>

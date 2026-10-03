@@ -3,6 +3,7 @@
 import * as React from "react";
 import { cn } from "@playora/ui";
 import { Flame, Trophy } from "lucide-react";
+import { GameResultPanel } from "../../components/games/game-shell";
 import { formatScore } from "./scoring";
 import type { ArcadeRun } from "./use-arcade-run";
 
@@ -16,63 +17,122 @@ import type { ArcadeRun } from "./use-arcade-run";
  * The personal best sits next to the live score on purpose. A score with
  * nothing beside it is just a number; a score beside the one to beat is a goal,
  * and that is the whole difference between one round and five.
+ *
+ * Numbers are in the mono face so a score that ticks up does not shuffle the
+ * boxes sideways. `size="sm"` is a single-line strip for GameShell's top bar;
+ * the default stacks label over number for laying over the play field.
  */
-export function ArcadeHud({ run, className }: { run: ArcadeRun; className?: string }) {
+export function ArcadeHud({
+  run,
+  className,
+  size = "md",
+}: {
+  run: ArcadeRun;
+  className?: string;
+  size?: "md" | "sm";
+}) {
   const chasing = run.best > 0 && run.score < run.best;
+  const compact = size === "sm";
 
   return (
-    <div className={cn("flex items-center gap-2 sm:gap-3", className)}>
-      <div className="rounded-xl border border-white/15 bg-black/55 px-3 py-1.5 backdrop-blur-md">
-        <div className="text-[9px] font-bold uppercase tracking-widest text-white/50">Score</div>
-        <div className="numeric text-lg font-black leading-none text-white tabular-nums sm:text-xl">
-          {formatScore(run.score)}
-        </div>
-      </div>
+    <div className={cn("flex items-center", compact ? "gap-1.5" : "gap-2 sm:gap-3", className)}>
+      <HudCell label="Score" compact={compact}>
+        {formatScore(run.score)}
+      </HudCell>
 
       {run.best > 0 && (
-        <div
-          className={cn(
-            "rounded-xl border px-3 py-1.5 backdrop-blur-md transition-colors",
-            chasing
-              ? "border-white/15 bg-black/55"
-              : // Passed it mid-run: say so immediately rather than saving the
-                // news for the result screen.
-                "border-amber-400/60 bg-amber-500/20",
-          )}
+        <HudCell
+          label={chasing ? "Best" : "Ahead"}
+          icon={<Trophy className="h-2.5 w-2.5 text-reward" aria-hidden />}
+          compact={compact}
+          // Passed it mid-run: say so immediately rather than saving the news
+          // for the result screen.
+          className={chasing ? undefined : "border-reward/60 bg-reward/15"}
         >
-          <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-white/50">
-            <Trophy className="h-2.5 w-2.5" aria-hidden />
-            {chasing ? "Best" : "Ahead"}
-          </div>
-          <div className="numeric text-lg font-black leading-none text-white tabular-nums sm:text-xl">
-            {formatScore(run.best)}
-          </div>
-        </div>
+          {formatScore(run.best)}
+        </HudCell>
       )}
 
       {run.combo >= 2 && (
         <div
-          className="flex items-center gap-1 rounded-xl border border-orange-400/60 bg-orange-500/20 px-3 py-1.5 backdrop-blur-md"
+          className={cn(
+            "flex items-center gap-1 border border-streak/60 bg-streak/15 backdrop-blur-md",
+            compact ? "h-8 rounded-full px-2.5" : "rounded-xl px-3 py-1.5",
+          )}
           // Announced politely: a combo counter that interrupts a screen reader
           // on every hit is unusable.
           aria-live="polite"
         >
-          <Flame className="h-3.5 w-3.5 text-orange-300" aria-hidden />
-          <span className="numeric text-lg font-black leading-none text-orange-200 tabular-nums sm:text-xl">
+          <Flame className="h-3.5 w-3.5 text-streak" aria-hidden />
+          <span
+            className={cn(
+              "font-mono-num font-bold leading-none text-foreground",
+              compact ? "text-sm" : "text-lg sm:text-xl",
+            )}
+          >
             {run.combo}
           </span>
-          <span className="text-[10px] font-black text-orange-300/80">CHAIN</span>
+          <span className="text-tag uppercase text-muted-foreground">Chain</span>
         </div>
       )}
     </div>
   );
 }
 
+function HudCell({
+  label,
+  icon,
+  compact,
+  className,
+  children,
+}: {
+  label: string;
+  icon?: React.ReactNode;
+  compact: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  if (compact) {
+    return (
+      <div
+        className={cn(
+          "flex h-8 items-center gap-1.5 rounded-full border border-border bg-card/70 px-2.5",
+          className,
+        )}
+      >
+        <span className="flex items-center gap-1 text-tag uppercase text-muted-foreground">
+          {icon}
+          {label}
+        </span>
+        <span className="font-mono-num text-sm font-bold leading-none text-foreground">{children}</span>
+      </div>
+    );
+  }
+  return (
+    <div
+      className={cn(
+        "rounded-xl border border-border/70 bg-background/70 px-3 py-1.5 backdrop-blur-md transition-colors duration-hover ease-out-expo",
+        className,
+      )}
+    >
+      <div className="flex items-center gap-1 text-tag uppercase text-muted-foreground">
+        {icon}
+        {label}
+      </div>
+      <div className="font-mono-num text-lg font-bold leading-none text-foreground sm:text-xl">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /**
- * The end-of-run panel every arcade game shares.
+ * The end-of-run panel every arcade game shares, as the shared GameResultPanel.
  *
  * Leads with whether the best was beaten, because that is the only question a
- * player has at the end of a run.
+ * player has at the end of a run: a beaten best turns the icon into a gold
+ * trophy with a NEW BEST badge above the title, so the title can still say
+ * how the run ended.
  */
 export function ArcadeResult({
   run,
@@ -86,52 +146,16 @@ export function ArcadeResult({
   title?: string;
 }) {
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-3xl border border-white/15 bg-[#0d1020] p-6 text-center shadow-2xl">
-        {run.isNewBest ? (
-          <>
-            <Trophy className="mx-auto h-10 w-10 text-amber-400" aria-hidden />
-            <p className="mt-2 font-display text-2xl font-black text-amber-300">NEW BEST!</p>
-          </>
-        ) : (
-          <p className="font-display text-2xl font-black text-white">{title}</p>
-        )}
-
-        <div className="numeric mt-4 text-5xl font-black text-white tabular-nums">
-          {formatScore(run.score)}
-        </div>
-
-        {!run.isNewBest && run.best > 0 && (
-          <p className="mt-1 text-xs text-white/60">
-            Best {formatScore(run.best)} — {formatScore(run.best - run.score)} to beat it
-          </p>
-        )}
-
-        {run.bestCombo >= 2 && (
-          <p className="mt-3 text-xs font-semibold text-orange-300">
-            Longest chain {run.bestCombo}
-          </p>
-        )}
-
-        <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-          <button
-            type="button"
-            onClick={onRestart}
-            className="flex-1 rounded-xl bg-primary px-4 py-2.5 text-sm font-bold text-white transition-transform active:scale-95"
-          >
-            Play again
-          </button>
-          {onExit && (
-            <button
-              type="button"
-              onClick={onExit}
-              className="flex-1 rounded-xl border border-white/20 px-4 py-2.5 text-sm font-bold text-white/80 transition-colors hover:bg-white/10"
-            >
-              Back
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    <GameResultPanel
+      outcome="score"
+      title={title}
+      score={run.score}
+      formatScore={formatScore}
+      best={run.best}
+      isNewBest={run.isNewBest}
+      stats={run.bestCombo >= 2 ? [{ label: "Longest chain", value: run.bestCombo }] : undefined}
+      onPlayAgain={onRestart}
+      onBack={onExit}
+    />
   );
 }

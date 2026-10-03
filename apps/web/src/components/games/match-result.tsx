@@ -1,17 +1,25 @@
 "use client";
 
 import * as React from "react";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import Link from "next/link";
+import { SPRING } from "@playora/animation";
 import { Button, Badge, buttonVariants, cn } from "@playora/ui";
 import { ACHIEVEMENTS_BY_ID, levelProgress, rankForRating } from "@playora/progression";
 import type { PlayerProgressionPayload } from "@playora/protocol";
 import type { GameResult, Player } from "@playora/game-types";
-import { Trophy, Handshake, Flag, RotateCcw, Home, Flame, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { Trophy, RotateCcw, Home, Flame, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { useAudio } from "../../lib/audio/use-audio";
+import { useCountUp, useReducedMotionPref } from "../../lib/motion";
 import { AchievementBadge } from "./achievement-badge";
+import {
+  RESULT_ICON,
+  RESULT_SOUND,
+  RESULT_TONE,
+  type MatchOutcome,
+} from "./game-shell/game-result";
 
-export type MatchOutcome = "win" | "loss" | "draw";
+export type { MatchOutcome };
 
 interface MatchResultProps {
   result: GameResult;
@@ -57,29 +65,9 @@ function formatDuration(seconds: number): string {
  * Counts up to a number, because a rating change that simply appears reads as a
  * label rather than something the player earned.
  */
-function CountUp({ to, from = 0, duration = 0.9 }: { to: number; from?: number; duration?: number }) {
-  const reduced = useReducedMotion();
-  const [value, setValue] = React.useState(reduced ? to : from);
-
-  React.useEffect(() => {
-    if (reduced) {
-      setValue(to);
-      return;
-    }
-    const start = performance.now();
-    let frame = 0;
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / (duration * 1000));
-      // Ease-out: fast at first, settles on the final number.
-      const eased = 1 - Math.pow(1 - t, 3);
-      setValue(Math.round(from + (to - from) * eased));
-      if (t < 1) frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [to, from, duration, reduced]);
-
-  return <span className="numeric tabular-nums">{value}</span>;
+function CountUp({ to, from = 0 }: { to: number; from?: number }) {
+  const value = useCountUp(to, { from, durationMs: 900 });
+  return <span className="font-mono-num">{Math.round(value)}</span>;
 }
 
 export function MatchResult({
@@ -93,7 +81,7 @@ export function MatchResult({
   onExit,
   exitHref,
 }: MatchResultProps) {
-  const reduced = useReducedMotion();
+  const reduced = useReducedMotionPref();
   const outcome = outcomeFor(result, currentUserId);
   const copy = OUTCOME_COPY[outcome];
   const mine = progression?.[currentUserId] ?? null;
@@ -102,7 +90,8 @@ export function MatchResult({
   // right moment for the fanfare. Keyed on the session so a rematch re-fires it.
   const play = useAudio();
   React.useEffect(() => {
-    play(outcome === "win" ? "match.victory" : outcome === "loss" ? "match.defeat" : "match.draw");
+    const id = RESULT_SOUND[outcome];
+    if (id) play(id);
   }, [play, outcome]);
 
   // Ids come from the server; anything the client does not recognise is simply
@@ -123,22 +112,12 @@ export function MatchResult({
     return () => clearTimeout(timer);
   }, [levelledUp, play]);
 
-  const accent =
-    outcome === "win" ? "text-success" : outcome === "loss" ? "text-destructive" : "text-warning";
-  const glow =
-    outcome === "win"
-      ? "from-success/25"
-      : outcome === "loss"
-        ? "from-destructive/20"
-        : "from-warning/20";
-
-  const Icon = outcome === "win" ? Trophy : outcome === "draw" ? Handshake : Flag;
+  const { text: accent, glow } = RESULT_TONE[outcome];
+  const Icon = RESULT_ICON[outcome];
 
   const ordered = [...(result.scores ?? [])].sort((a, b) => a.rank - b.rank);
 
-  const spring = reduced
-    ? { duration: 0 }
-    : { type: "spring" as const, stiffness: 220, damping: 22 };
+  const spring = reduced ? { duration: 0 } : SPRING.panel;
 
   return (
     <motion.div
@@ -148,7 +127,7 @@ export function MatchResult({
       initial={reduced ? false : { opacity: 0, y: 16, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={spring}
-      className="relative mx-auto w-full max-w-lg overflow-hidden rounded-3xl border border-border bg-card shadow-2xl"
+      className="relative mx-auto w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-card text-card-foreground shadow-overlay"
     >
       <div
         className={cn(
@@ -164,14 +143,14 @@ export function MatchResult({
           animate={{ scale: 1, rotate: 0, opacity: 1 }}
           transition={reduced ? { duration: 0 } : { ...spring, delay: 0.08 }}
           className={cn(
-            "mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-background/60",
+            "mx-auto flex h-16 w-16 items-center justify-center rounded-xl border border-border bg-background/60",
             accent,
           )}
         >
           <Icon className="h-8 w-8" aria-hidden />
         </motion.div>
 
-        <h2 className={cn("mt-4 font-display text-4xl font-black tracking-tight", accent)}>
+        <h2 className={cn("mt-4 font-display text-4xl font-extrabold tracking-tight", accent)}>
           {copy.title}
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">{copy.sub}</p>
@@ -202,7 +181,7 @@ export function MatchResult({
                 )}
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="numeric w-5 text-sm text-muted-foreground">{score.rank}</span>
+                  <span className="font-mono-num w-5 text-sm text-muted-foreground">{score.rank}</span>
                   <span className="truncate text-sm font-medium text-foreground">
                     {player?.displayName ?? "Player"}
                     {isMe && <span className="ml-1.5 text-xs text-muted-foreground">(you)</span>}
@@ -213,7 +192,7 @@ export function MatchResult({
                 {theirs?.rated ? (
                   <RatingDelta payload={theirs} />
                 ) : (
-                  <span className="numeric text-sm text-muted-foreground">{score.score}</span>
+                  <span className="font-mono-num text-sm font-bold text-foreground">{score.score}</span>
                 )}
               </motion.li>
             );
@@ -246,7 +225,7 @@ export function MatchResult({
 
           {unlocked.length > 0 && (
             <div className="mt-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <p className="mb-2 text-tag uppercase text-muted-foreground">
                 {unlocked.length === 1 ? "Achievement unlocked" : "Achievements unlocked"}
               </p>
               <ul className="space-y-2">
@@ -279,7 +258,7 @@ export function MatchResult({
 
       <div className="flex flex-col gap-2 border-t border-border px-6 py-4 sm:flex-row">
         {onRematch && (
-          <Button className="flex-1 gap-2" onClick={onRematch} disabled={rematchPending}>
+          <Button variant="play" className="flex-1" onClick={onRematch} disabled={rematchPending}>
             <RotateCcw className="h-4 w-4" aria-hidden />
             {rematchPending ? "Waiting for opponent…" : rematchLabel}
           </Button>
@@ -287,14 +266,14 @@ export function MatchResult({
         {exitHref ? (
           <Link
             href={exitHref}
-            className={cn(buttonVariants({ variant: "outline" }), "flex-1 gap-2")}
+            className={cn(buttonVariants({ variant: "outline" }), "flex-1")}
           >
             <Home className="h-4 w-4" aria-hidden />
             Back to games
           </Link>
         ) : (
           onExit && (
-            <Button variant="outline" className="flex-1 gap-2" onClick={onExit}>
+            <Button variant="outline" className="flex-1" onClick={onExit}>
               <Home className="h-4 w-4" aria-hidden />
               Back
             </Button>
@@ -313,14 +292,14 @@ function RatingDelta({ payload }: { payload: PlayerProgressionPayload }) {
   return (
     <div className="flex items-center gap-2 text-right">
       <div className="leading-tight">
-        <div className="numeric text-sm font-semibold text-foreground">
+        <div className="text-sm font-semibold text-foreground">
           <CountUp from={payload.ratingBefore} to={payload.ratingAfter} />
         </div>
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{tier.label}</div>
+        <div className="text-tag uppercase text-muted-foreground">{tier.label}</div>
       </div>
       <span
         className={cn(
-          "numeric inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-bold",
+          "font-mono-num inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-bold",
           flat
             ? "bg-muted text-muted-foreground"
             : up
@@ -342,7 +321,7 @@ function RatingDelta({ payload }: { payload: PlayerProgressionPayload }) {
 }
 
 function XpBar({ payload }: { payload: PlayerProgressionPayload }) {
-  const reduced = useReducedMotion();
+  const reduced = useReducedMotionPref();
   const before = levelProgress(payload.xpBefore);
   const after = levelProgress(payload.xpAfter);
   const levelledUp = payload.levelAfter > payload.levelBefore;
@@ -355,10 +334,10 @@ function XpBar({ payload }: { payload: PlayerProgressionPayload }) {
   return (
     <div>
       <div className="mb-1.5 flex items-baseline justify-between text-xs">
-        <span className="font-semibold uppercase tracking-wider text-muted-foreground">
+        <span className="text-tag uppercase text-muted-foreground">
           Level {payload.levelBefore}
         </span>
-        <span className="numeric text-muted-foreground">
+        <span className="font-mono-num text-muted-foreground">
           {after.xpIntoLevel} / {after.xpForNextLevel} XP
         </span>
       </div>
@@ -389,14 +368,14 @@ function Stat({
     <div className="rounded-xl border border-border/60 px-2 py-2">
       <div
         className={cn(
-          "numeric flex items-center justify-center gap-1 text-sm font-bold",
+          "font-mono-num flex items-center justify-center gap-1 text-sm font-bold",
           highlight ? "text-success" : "text-foreground",
         )}
       >
         {icon}
         {value}
       </div>
-      <div className="mt-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+      <div className="mt-0.5 text-tag uppercase text-muted-foreground">
         {label}
       </div>
     </div>

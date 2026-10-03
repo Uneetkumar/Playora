@@ -100,7 +100,7 @@ export default function MatchDetailPage() {
                     )}
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <span className="numeric w-5 text-sm text-muted-foreground">{p.rank}</span>
+                      <span className="numeric font-bold w-5 text-sm text-muted-foreground">{p.rank}</span>
                       <span className="truncate text-sm font-medium text-foreground">
                         {p.displayName}
                         {isMe && <span className="ml-1.5 text-xs text-muted-foreground">(you)</span>}
@@ -108,7 +108,7 @@ export default function MatchDetailPage() {
                       {p.isBot && <Bot className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />}
                       {p.isWinner && <Trophy className="h-3.5 w-3.5 text-warning" aria-hidden />}
                     </div>
-                    <span className="numeric text-sm text-muted-foreground">{p.score}</span>
+                    <span className="numeric font-bold text-sm text-muted-foreground">{p.score}</span>
                   </li>
                 );
               })}
@@ -119,7 +119,7 @@ export default function MatchDetailPage() {
             <span className="inline-flex items-center gap-1">
               <Hash className="h-3 w-3" aria-hidden />
               {/* Useful when reporting a disputed result. */}
-              <span className="numeric">{match.sessionId.slice(0, 8)}</span>
+              <span className="numeric font-bold">{match.sessionId.slice(0, 8)}</span>
             </span>
             <Link
               href={`/play?game=${match.gameSlug}`}

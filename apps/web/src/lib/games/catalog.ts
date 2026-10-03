@@ -1,9 +1,14 @@
 import type { GameId } from "@playora/game-types";
 import { isGameImplemented } from "../play/modes";
+import { GAME_META } from "./meta";
 
 export interface CatalogGame {
   id: GameId;
   name: string;
+  /**
+   * The original free-text category, kept for the pages and SEO tags that
+   * still read it. Browsing groups by `GAME_META[id].genre` instead.
+   */
   category: string;
   minPlayers: number;
   maxPlayers: number;
@@ -589,11 +594,23 @@ export function isPlayable(game: CatalogGame): boolean {
   return isGameImplemented(game.id);
 }
 
+const BY_ID: ReadonlyMap<GameId, CatalogGame> = new Map(GAME_CATALOG.map((g) => [g.id, g]));
+
+export function getCatalogGame(id: GameId): CatalogGame | undefined {
+  return BY_ID.get(id);
+}
+
+/** Narrows a route param or query value to a game the catalog knows. */
+export function isGameId(value: unknown): value is GameId {
+  return typeof value === "string" && BY_ID.has(value as GameId);
+}
+
 /**
  * Ranked search over the catalog.
  *
  * Playable games win ties, so a search never leads with something you cannot
- * actually start.
+ * actually start. The browse genre counts as much as the older category, so
+ * searching "party" finds everything the Party chip shows.
  */
 export function searchGames(query: string): CatalogGame[] {
   const q = query.trim().toLowerCase();
@@ -606,7 +623,11 @@ export function searchGames(query: string): CatalogGame[] {
     if (name === q) score = 100;
     else if (name.startsWith(q)) score = 80;
     else if (name.includes(q)) score = 60;
-    else if (game.category.toLowerCase().includes(q)) score = 40;
+    else if (
+      game.category.toLowerCase().includes(q) ||
+      GAME_META[game.id].genre.toLowerCase().includes(q)
+    )
+      score = 40;
     else if (game.tags.some((t) => t.includes(q))) score = 30;
     else if (game.description.toLowerCase().includes(q)) score = 10;
 

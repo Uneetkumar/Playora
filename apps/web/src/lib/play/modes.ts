@@ -242,6 +242,45 @@ export function getPlayModes(gameId: GameId): PlayMode[] {
   return list;
 }
 
+/** The one-word summary of a way to play, as cards and filters show it. */
+export type PlayModeChipId = "online" | "ai" | "local" | "solo" | "career";
+
+export interface PlayModeChip {
+  id: PlayModeChipId;
+  label: string;
+}
+
+/** Display order is this order. */
+export const PLAY_MODE_CHIPS: readonly PlayModeChip[] = [
+  { id: "online", label: "Online" },
+  { id: "ai", label: "vs Bot" },
+  { id: "local", label: "Local" },
+  { id: "solo", label: "Solo" },
+  { id: "career", label: "Career" },
+];
+
+/**
+ * The modes a game offers, summarised to chips for a card or a filter.
+ *
+ * Read from the capability table, so a chip is shown only for something that
+ * can be serviced — the same rule `getPlayModes` follows. "Local" means two
+ * people on one device, which is why racing does not get it: its offline
+ * entry is a time trial, not a shared pad. "Solo" marks a game that is only
+ * ever played alone, so it never appears beside "vs Bot".
+ */
+export function modeChipsFor(gameId: GameId): PlayModeChip[] {
+  const caps = capabilitiesFor(gameId);
+  if (!caps) return [];
+  const has: Record<PlayModeChipId, boolean> = {
+    online: caps.online,
+    ai: caps.ai,
+    local: caps.passAndPlay,
+    solo: isSoloGame(gameId),
+    career: caps.career,
+  };
+  return PLAY_MODE_CHIPS.filter((chip) => has[chip.id]);
+}
+
 export function readyModes(gameId: GameId): PlayMode[] {
   return getPlayModes(gameId).filter((m) => m.status === "ready");
 }

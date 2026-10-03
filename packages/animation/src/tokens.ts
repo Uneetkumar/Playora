@@ -49,6 +49,19 @@ export const SPRING = {
   bouncy: { type: "spring", stiffness: 320, damping: 14, mass: 0.9 },
   /** Slow and weighted. Large surfaces: sheets, full-screen panels. */
   heavy: { type: "spring", stiffness: 120, damping: 30, mass: 1.4 },
+
+  // The design system's three (docs/DESIGN_SYSTEM.md, "Motion"). New code
+  // reaches for these first; the four above stay for what already uses them.
+
+  /**
+   * Press, toggle, hover lift. Quick, and the slight overshoot it has
+   * (damping ratio ~0.67) is too small on a 3% scale change to read as bounce.
+   */
+  micro: { type: "spring", stiffness: 500, damping: 30, mass: 1 },
+  /** Sheets, drawers, popovers, a sliding tab indicator. Near-critical: no overshoot. */
+  panel: { type: "spring", stiffness: 300, damping: 32, mass: 1 },
+  /** Decorative drift: hero art, background glows. Soft and slow to settle. */
+  ambient: { type: "spring", stiffness: 120, damping: 20, mass: 1 },
 } as const;
 
 export type SpringToken = keyof typeof SPRING;
@@ -64,6 +77,46 @@ export const EASE = {
 } as const;
 
 export type EaseToken = keyof typeof EASE;
+
+/**
+ * The same curves as CSS `transition-timing-function` values, derived rather
+ * than retyped so the two forms cannot disagree. `EASE_CSS.out` is the
+ * Tailwind `ease-out-expo` class.
+ */
+export const EASE_CSS = {
+  out: `cubic-bezier(${EASE.out.join(", ")})`,
+  in: `cubic-bezier(${EASE.in.join(", ")})`,
+  inOut: `cubic-bezier(${EASE.inOut.join(", ")})`,
+} as const;
+
+/**
+ * Interaction timings, by what is being interacted with rather than by size.
+ *
+ * Separate from `DURATION_MS` because that is a ladder of emphasis (each step
+ * longer than the last), and these are not: a press is faster than any of it.
+ * The CSS side of the same numbers is `motion.duration` in @playora/ui's
+ * tokens and the Tailwind `duration-press` / `duration-hover` /
+ * `duration-sheet` / `duration-sheet-exit` classes; change them together.
+ */
+export const INTERACTION_MS = {
+  /** Press feedback: the scale-down on tap. */
+  press: 80,
+  /** Hover and focus states. The spec allows 180–220ms. */
+  hover: 200,
+  /** Sheets, drawers, dialogs arriving. The spec allows 280–360ms. */
+  sheet: 320,
+  /** The same leaving: exits run a little faster than entrances. */
+  sheetExit: 280,
+} as const;
+
+export const INTERACTION_S = {
+  press: INTERACTION_MS.press / 1000,
+  hover: INTERACTION_MS.hover / 1000,
+  sheet: INTERACTION_MS.sheet / 1000,
+  sheetExit: INTERACTION_MS.sheetExit / 1000,
+} as const;
+
+export type InteractionToken = keyof typeof INTERACTION_MS;
 
 /**
  * Whether this device has asked for less motion.

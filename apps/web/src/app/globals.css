@@ -2,85 +2,369 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens.
+ *
+ * These blocks mirror packages/ui/src/tokens.ts by hand. They are not
+ * generated, so a change goes in both places. To check that the two agree,
+ * print what tokens.ts expects (pass "light" for the .light block) and
+ * compare it with the variables below:
+ *
+ *   node --experimental-strip-types -e 'import("./packages/ui/src/tokens.ts").then((t) => console.log(t.cssVariables("dark").join("\n")))'
+ *
+ * Colours are bare HSL triplets, as shadcn writes them, so Tailwind opacity
+ * modifiers such as `bg-primary/20` work. docs/DESIGN_SYSTEM.md says which
+ * token to use for what.
+ */
 @layer base {
   :root {
-    /* Playora tokens. Generated from packages/ui/src/tokens.ts -- edit there. */
-    --background: 232 21% 6%;
-    --foreground: 0 0% 100%;
-    --card: 231 24% 11%;
-    --card-foreground: 0 0% 100%;
-    /* Chrome — the sidebar, header and mobile nav. Distinct from both the page
-       background and a card, so the frame reads as frame in either theme. */
-    --surface: 231 23% 7%;
-    --surface-foreground: 0 0% 100%;
-    --popover: 230 22% 15%;
-    --popover-foreground: 0 0% 100%;
-    --primary: 248 57% 60%;
-    --primary-foreground: 0 0% 100%;
-    /* Primary as *text* on a surface, which is a different job from primary as
-       a fill: 57% lightness is right for a button and measures 3.9:1 as label
-       text on the near-black page. This is the legible sibling. */
-    --primary-accent: 270 91% 65%;
-    --secondary: 198 93% 60%;
-    --secondary-foreground: 232 21% 6%;
-    --muted: 230 22% 15%;
-    --muted-foreground: 240 5% 65%;
-    --accent: 188 86% 53%;
-    --accent-foreground: 232 21% 6%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --success: 142 71% 45%;
-    --warning: 38 92% 50%;
-    --pink: 338 100% 65%;
-    --border: 230 18% 20%;
-    --input: 230 18% 20%;
-    --ring: 248 57% 60%;
+    color-scheme: dark;
+
+    /* Surfaces, darkest to lightest. `surface` is the chrome (sidebar,
+       header, bottom nav), between page and card so the frame reads as frame.
+       `raised` is for floating surfaces: menus, popovers, toasts. */
+    --background: 231.4 24.1% 5.7%;
+    --foreground: 230 37.5% 96.9%;
+    --surface: 233.3 22% 8%;
+    --surface-foreground: 230 37.5% 96.9%;
+    --card: 231.4 24.1% 11.4%;
+    --card-foreground: 230 37.5% 96.9%;
+    --raised: 230 23.1% 15.3%;
+    --popover: 230 23.1% 15.3%;
+    --popover-foreground: 230 37.5% 96.9%;
+
+    /* Brand violet. `primary-accent` is primary as *text*: the fill colour
+       is too dark to read as a label on the near-black page, so text gets
+       this lighter sibling. Labels on the fill are the page ink, not white:
+       white on #7C6CF2 is 3.97:1, short of the 4.5:1 a button label needs. */
+    --primary: 247.2 83.7% 68.6%;
+    --primary-foreground: 231.4 24.1% 5.7%;
+    --primary-hover: 246.6 100% 75.1%;
+    --primary-pressed: 247 69% 60.8%;
+    --primary-accent: 247.2 100% 80.4%;
+
+    --secondary: 187.9 85.7% 53.3%;
+    --secondary-foreground: 231.4 24.1% 5.7%;
+    --muted: 230 23.1% 15.3%;
+    --muted-foreground: 228 15.7% 68.8%;
+    --subtle-foreground: 229.7 11.9% 47.6%;
+    --accent: 187.9 85.7% 53.3%;
+    --accent-foreground: 231.4 24.1% 5.7%;
+
+    /* Launch green: the one primary Play action per screen, nothing else. */
+    --play: 146.8 69.4% 55.1%;
+    --play-foreground: 140 69.2% 7.6%;
+
+    --destructive: 355.1 85.1% 60.4%;
+    --destructive-foreground: 231.4 24.1% 5.7%;
+    --success: 142.1 70.6% 45.3%;
+    --success-foreground: 231.4 24.1% 5.7%;
+    --warning: 37 91.3% 55.1%;
+    --warning-foreground: 231.4 24.1% 5.7%;
+    /* Status colours as text on their own 15% tint (status badges). */
+    --success-ink: 142.1 70.6% 45.3%;
+    --warning-ink: 37 91.3% 55.1%;
+    --destructive-ink: 355.5 100% 71%;
+    /* Rewards and streaks on page surfaces. Unlike the badge colours below,
+       these change with the theme. */
+    --reward: 43.3 96.4% 56.3%;
+    --streak: 9.2 100% 61.8%;
+    /* Legacy social/reward accent, kept for the screens that use it. */
+    --pink: 338.4 100% 65.1%;
+
+    --border: 229.1 20.8% 20.8%;
+    --input: 229.1 20.8% 20.8%;
+    --ring: 247.2 83.7% 68.6%;
+
+    /* Catalogue badges. Defined once, here: they sit on cover art, and the
+       art does not change with the theme. */
+    --badge-live: 142.1 70.6% 45.3%;
+    --badge-new: 187.9 85.7% 53.3%;
+    --badge-hot: 9.2 100% 61.8%;
+    --badge-updated: 247.2 100% 80.4%;
+    --badge-top: 43.3 96.4% 56.3%;
+    --badge-soon: 228.9 18.9% 28%;
+    --badge-foreground: 231.4 24.1% 5.7%;
+    --badge-soon-foreground: 229.1 25.6% 91.6%;
+
     --radius: 12px;
-    --radius-lg: 16px;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-card-hover: 0 16px 32px -12px rgb(0 0 0 / 0.7);
+    --shadow-raised: 0 8px 24px -8px rgb(0 0 0 / 0.6);
+    --shadow-overlay: 0 24px 48px -12px rgb(0 0 0 / 0.7);
+
+    /* Overlay scrims (`bg-scrim`), and the hover filter for fills that have
+       no hover token (`hover:brightness-hover`). */
+    --scrim-opacity: 0.7;
+    --hover-brightness: 1.1;
   }
 
-  /* Light is designed, not an inverted dark (design brief). Surfaces stay cool
-     and the purple darkens so it holds contrast on white. */
+  /* Light is designed, not an inverted dark (design brief). Chrome, card and
+     floating surfaces are all white: on a near-white page the border and
+     shadow do the separating, where a grey bar would read as disabled.
+     Hover darkens rather than lightens, and bright cyan becomes a deep teal
+     because cyan on white has no contrast. */
   .light {
-    --background: 240 20% 99%;
-    --foreground: 232 21% 10%;
-    --card: 0 0% 100%;
-    --card-foreground: 232 21% 10%;
-    /* White chrome on the near-white page: the border does the separating,
-       rather than a grey bar that reads as disabled. */
+    color-scheme: light;
+
+    --background: 228 38.5% 97.5%;
+    --foreground: 232.5 18.2% 8.6%;
     --surface: 0 0% 100%;
-    --surface-foreground: 232 21% 10%;
+    --surface-foreground: 232.5 18.2% 8.6%;
+    --card: 0 0% 100%;
+    --card-foreground: 232.5 18.2% 8.6%;
+    --raised: 0 0% 100%;
     --popover: 0 0% 100%;
-    --popover-foreground: 232 21% 10%;
-    --primary: 248 52% 50%;
+    --popover-foreground: 232.5 18.2% 8.6%;
+
+    --primary: 247 69% 60.8%;
     --primary-foreground: 0 0% 100%;
-    --primary-accent: 248 52% 45%;
-    --secondary: 198 85% 42%;
+    --primary-hover: 247 60% 54.9%;
+    --primary-pressed: 246.7 53.4% 49.6%;
+    --primary-accent: 247 58.8% 54.3%;
+
+    --secondary: 192.9 82.3% 31%;
     --secondary-foreground: 0 0% 100%;
-    --muted: 240 12% 95%;
-    --muted-foreground: 240 6% 40%;
-    --accent: 188 70% 40%;
+    --muted: 225 28.6% 94.5%;
+    --muted-foreground: 228 12.2% 40.2%;
+    --subtle-foreground: 227.5 10.4% 45.1%;
+    --accent: 192.9 82.3% 31%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 72% 48%;
+
+    --play: 150.7 68.2% 38.2%;
+    --play-foreground: 140 69.2% 7.6%;
+
+    --destructive: 354.2 66.4% 49%;
     --destructive-foreground: 0 0% 100%;
-    --success: 142 64% 36%;
-    --warning: 38 88% 42%;
+    --success: 142.4 71.8% 29.2%;
+    --success-foreground: 0 0% 100%;
+    --warning: 34.9 100% 31.4%;
+    --warning-foreground: 0 0% 100%;
+    --success-ink: 142.8 64.2% 24.1%;
+    --warning-ink: 32.6 100% 27.1%;
+    --destructive-ink: 353.4 69.4% 38.4%;
+    --reward: 35.5 91.7% 32.9%;
+    --streak: 17.5 88.3% 40.4%;
     --pink: 338 78% 52%;
-    --border: 240 12% 88%;
-    --input: 240 12% 88%;
-    --ring: 248 52% 50%;
+
+    --border: 225 26.1% 91%;
+    /* Darker than border: an input's edge is its affordance. */
+    --input: 223.3 20% 82.4%;
+    --ring: 247 69% 60.8%;
+
+    --shadow-card: 0 1px 2px rgb(18 19 26 / 0.06), 0 1px 3px rgb(18 19 26 / 0.06);
+    --shadow-card-hover: 0 16px 32px -12px rgb(18 19 26 / 0.22);
+    --shadow-raised: 0 8px 24px -8px rgb(18 19 26 / 0.18);
+    --shadow-overlay: 0 24px 48px -12px rgb(18 19 26 / 0.28);
+
+    --scrim-opacity: 0.4;
+    --hover-brightness: 0.95;
   }
 
   * {
     @apply border-border;
   }
 
+  html {
+    /* The standard property, honoured by Firefox and Chrome 121+. Chrome
+       ignores the ::-webkit-scrollbar rules below once this is set; they are
+       there for Safari. Both read tokens, so scrollbars follow the theme. */
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-body), Inter, system-ui, sans-serif;
+    font-family: theme(fontFamily.sans);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
+  }
+
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: theme(fontFamily.display);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  /*
+   * A visible keyboard focus everywhere by default: 2px of --ring, offset 2px
+   * so it clears the element's own edge. An outline rather than a box-shadow
+   * ring so it neither fights an element's elevation shadow nor disappears in
+   * forced-colours mode. Components that draw their own (shadcn's
+   * `focus-visible:ring-2`) remove it with `focus-visible:outline-none`.
+   */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /* Animations must be fast, purposeful and interruptible -- and skippable. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /*
+   * Forced from Settings, in addition to the system preference. Restored on
+   * every load by THEME_BOOTSTRAP (lib/theme.ts). The iteration count matters:
+   * an infinite animation squeezed to 0.01ms does not stop, it strobes.
+   */
+  .reduce-motion *,
+  .reduce-motion *::before,
+  .reduce-motion *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /*
+   * Cinematic guard.
+   *
+   * GSAP is loaded on demand, so for the frame between mount and the timeline
+   * setting its opening state, a participating element would otherwise paint at
+   * its final position and then snap back. This hides them for exactly that
+   * frame. `runCinematic` clears the attribute on every path it can take —
+   * success, reduced motion, load failure, timeout and unmount — so nothing
+   * here can leave content permanently invisible.
+   */
+  [data-cinematic="pending"] [data-cine] {
+    opacity: 0;
+  }
+
+  /*
+   * Someone who asked for less motion never reaches the JavaScript that clears
+   * the guard on a slow device before first paint, so the preference disables
+   * the guard outright rather than relying on timing.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    [data-cinematic="pending"] [data-cine] {
+      opacity: 1;
+    }
+  }
+
+  .reduce-motion [data-cinematic="pending"] [data-cine] {
+    opacity: 1;
+  }
+}
+
+/* Scrollbars, for engines without `scrollbar-color` (see html above). */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.35);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.55);
+}
+
+/* A slimmer, brand-tinted scrollbar for panels that scroll inside the page. */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary) / 0.4) transparent;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: hsl(var(--foreground) / 0.06);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.4);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.7);
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/*
+ * Design-system utilities. In the utilities layer so variants work
+ * (`md:scrim-left`, `group-hover:game-accent`) and unused ones are purged.
+ * `text-balance` is not here because Tailwind 3.4 ships it.
+ */
+@layer utilities {
+  /* Scores, ratings and counters: Inter with tabular figures, so a number
+     that ticks does not jitter sideways. Weight is left to the caller. */
+  .numeric {
+    font-family: theme(fontFamily.sans);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "cv11", "tnum";
+  }
+
+  /* Clocks, room codes and big HUD scores: read character by character, so
+     every glyph gets the same width and 0/O, 1/l are unmistakable. */
+  .font-mono-num {
+    font-family: theme(fontFamily.mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Keeps a title legible over cover art. Uses the page colour, so in light
+     theme the scrim lightens the art and dark text reads on it. */
+  .scrim-bottom {
+    background-image: linear-gradient(
+      to top,
+      hsl(var(--background) / 0.92),
+      hsl(var(--background) / 0.2) 55%,
+      transparent
+    );
+  }
+
+  /* The hero's text column: heavier, because a title, a meta line and three
+     actions sit on it rather than a single line of text. */
+  .scrim-left {
+    background-image: linear-gradient(
+      to right,
+      hsl(var(--background) / 0.95),
+      hsl(var(--background) / 0.7) 35%,
+      hsl(var(--background) / 0.15) 65%,
+      transparent
+    );
+  }
+
+  /* For an element that removes the default outline and needs it back. The
+     extra pseudo-class out-ranks a plain `outline-none`. */
+  .focus-ring:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  /*
+   * Per-game accent. A component sets `style={{ "--game-accent": game.accent }}`
+   * on its root and never hard-codes the hex; this class, or the
+   * `game-accent` Tailwind colour (`border-game-accent`, `bg-game-accent-soft`),
+   * reads it back. Falls back to brand primary outside a game.
+   */
+  .game-accent {
+    color: var(--game-accent, hsl(var(--primary)));
   }
 }
 
@@ -106,118 +390,6 @@
 
 .animate-float-fade {
   animation: floatFade 2.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-}
-
-/* Custom scrollbars */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #0b1120;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #334155;
-}
-
-@layer base {
-  h1,
-  h2,
-  h3,
-  .font-display {
-    font-family: var(--font-display), Poppins, system-ui, sans-serif;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-  }
-
-  /* Ratings, scores, timers and XP read as figures, not prose. */
-  .numeric {
-    font-family: var(--font-display), Poppins, system-ui, sans-serif;
-    font-variant-numeric: tabular-nums;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-  }
-
-  /* Animations must be fast, purposeful and interruptible -- and skippable. */
-  @media (prefers-reduced-motion: reduce) {
-    *,
-    *::before,
-    *::after {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-      scroll-behavior: auto !important;
-    }
-  }
-}
-
-@layer base {
-  /* Forced from Settings, in addition to the system preference. */
-  .reduce-motion *,
-  .reduce-motion *::before,
-  .reduce-motion *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
-@layer base {
-  /*
-   * Cinematic guard.
-   *
-   * GSAP is loaded on demand, so for the frame between mount and the timeline
-   * setting its opening state, a participating element would otherwise paint at
-   * its final position and then snap back. This hides them for exactly that
-   * frame. `runCinematic` clears the attribute on every path it can take —
-   * success, reduced motion, load failure, timeout and unmount — so nothing
-   * here can leave content permanently invisible.
-   */
-  [data-cinematic="pending"] [data-cine] {
-    opacity: 0;
-  }
-
-  /*
-   * Someone who asked for less motion never reaches the JavaScript that clears
-   * the guard on a slow device before first paint, so the preference disables
-   * the guard outright rather than relying on timing.
-   */
-  @media (prefers-reduced-motion: reduce) {
-    [data-cinematic="pending"] [data-cine] {
-      opacity: 1;
-    }
-  }
-}
-
-/* Global Modern Custom Scrollbar */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 9999px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(124, 58, 237, 0.4);
-  border-radius: 9999px;
-}
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(147, 51, 234, 0.7);
-}
-
-.scrollbar-none::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-none {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
 }
 
 @keyframes shake {

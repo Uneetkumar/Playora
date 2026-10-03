@@ -212,7 +212,7 @@ export function RaceStandings({ rows }: { rows: StandingRow[] }) {
           />
           <span className="min-w-0 flex-1 truncate font-semibold">{row.name}</span>
           {!row.isMe && (
-            <span className="numeric shrink-0 text-[10px] tabular-nums text-white/50">
+            <span className="numeric font-bold shrink-0 text-[10px] tabular-nums text-white/50">
               {row.finished ? "FIN" : formatGap(row.gap)}
             </span>
           )}

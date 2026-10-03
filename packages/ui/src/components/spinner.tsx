@@ -4,16 +4,21 @@ import { cn } from "../lib/utils.js";
  * The platform's loading mark.
  *
  * A ring rather than a generic spinner so a wait still looks like part of the
- * product. Sized in ems so it inherits from whatever it sits inside, and
- * labelled for screen readers — a silent spinner tells a non-sighted user
- * nothing at all.
+ * product. Labelled for screen readers — a silent spinner tells a non-sighted
+ * user nothing at all.
+ *
+ * Under reduced motion the ring holds still: globals.css runs every animation
+ * once, instantly, for both the OS setting and the in-app one.
  */
 export function Spinner({
   size = "md",
+  tone = "primary",
   className,
   label = "Loading",
 }: {
   size?: "xs" | "sm" | "md" | "lg";
+  /** `current` draws in the text colour, for a spinner inside a filled button. */
+  tone?: "primary" | "current";
   className?: string;
   label?: string;
 }) {
@@ -28,7 +33,8 @@ export function Spinner({
     <span role="status" aria-live="polite" className={cn("inline-flex", className)}>
       <span
         className={cn(
-          "animate-spin rounded-full border-primary/25 border-t-primary",
+          "animate-spin rounded-full",
+          tone === "primary" ? "border-primary/25 border-t-primary" : "border-current border-r-transparent",
           dims,
         )}
         aria-hidden
@@ -66,18 +72,5 @@ export function LoadingState({
         {hint && <p className="mt-1 text-sm text-muted-foreground">{hint}</p>}
       </div>
     </div>
-  );
-}
-
-/**
- * Skeleton block for content whose shape is known ahead of time.
- * Preferable to a spinner where it avoids the layout jumping on arrival.
- */
-export function Skeleton({ className }: { className?: string }) {
-  return (
-    <div
-      aria-hidden
-      className={cn("animate-pulse rounded-lg bg-muted/50", className)}
-    />
   );
 }

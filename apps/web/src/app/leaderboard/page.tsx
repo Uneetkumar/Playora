@@ -219,10 +219,10 @@ function Row({ entry }: { entry: LeaderboardEntry }) {
           {entry.isMe && <span className="text-xs text-muted-foreground">(you)</span>}
         </div>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          <span className="numeric">{entry.wins}</span>W ·{" "}
-          <span className="numeric">{entry.losses}</span>L ·{" "}
-          <span className="numeric">{entry.draws}</span>D over{" "}
-          <span className="numeric">{entry.gamesPlayed}</span>
+          <span className="numeric font-bold">{entry.wins}</span>W ·{" "}
+          <span className="numeric font-bold">{entry.losses}</span>L ·{" "}
+          <span className="numeric font-bold">{entry.draws}</span>D over{" "}
+          <span className="numeric font-bold">{entry.gamesPlayed}</span>
         </p>
       </div>
 

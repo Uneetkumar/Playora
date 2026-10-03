@@ -121,9 +121,9 @@ export function HomeDashboard() {
             <>
               <div className="flex items-baseline justify-between">
                 <span className="font-display text-sm font-bold text-foreground">
-                  Level <span className="numeric text-primary-accent">{progression.level.level}</span>
+                  Level <span className="numeric font-bold text-primary-accent">{progression.level.level}</span>
                 </span>
-                <span className="numeric text-xs text-muted-foreground">
+                <span className="numeric font-bold text-xs text-muted-foreground">
                   {progression.level.xpIntoLevel} / {progression.level.xpForNextLevel} XP
                 </span>
               </div>
@@ -151,7 +151,7 @@ export function HomeDashboard() {
                     <dt className="text-[10px] uppercase tracking-wider text-muted-foreground">
                       {label}
                     </dt>
-                    <dd className="numeric text-lg text-foreground">{value}</dd>
+                    <dd className="numeric font-bold text-lg text-foreground">{value}</dd>
                   </div>
                 ))}
               </dl>
@@ -177,7 +177,7 @@ export function HomeDashboard() {
                   <div className="group rounded-lg border border-border bg-muted/20 p-4 transition-colors hover:border-primary">
                     <div className="font-display font-bold text-foreground">{r.gameName}</div>
                     <div className="mt-1 flex items-center gap-2">
-                      <span className="numeric text-lg text-primary-accent">{r.rating}</span>
+                      <span className="numeric font-bold text-lg text-primary-accent">{r.rating}</span>
                       <Badge variant="secondary" className="text-[10px]">
                         {r.rank.label}
                       </Badge>

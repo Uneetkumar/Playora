@@ -2,27 +2,24 @@
 
 import { create } from "zustand";
 import {
-  AudioEngine,
   DEFAULT_MIXER,
+  getAudioEngine,
   type AudioBus,
   type MixerState,
   type SoundId,
 } from "@playora/audio";
 
 /**
- * One AudioEngine for the whole app.
+ * One AudioEngine for the whole app: the package's shared instance, which is
+ * also what `useSfx` (lib/audio/use-sfx.ts) plays games and loops through, so
+ * the mute and sliders this store drives reach every sound on the page.
  *
- * Created at module scope on purpose: the engine does not touch Web Audio until
- * something is played, and its storage read is guarded, so importing it on the
- * server is inert. What it must never be is per-component — several engines
- * would each hold their own AudioContext, and browsers cap how many a page gets.
+ * The engine does not touch Web Audio until something is played, and its
+ * storage read is guarded, so reaching it on the server is inert. What it must
+ * never be is per-component — several engines would each hold their own
+ * AudioContext, and browsers cap how many a page gets.
  */
-let engine: AudioEngine | null = null;
-
-function getEngine(): AudioEngine {
-  engine ??= new AudioEngine();
-  return engine;
-}
+const getEngine = getAudioEngine;
 
 interface AudioStoreState {
   mixer: MixerState;

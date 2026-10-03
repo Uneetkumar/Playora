@@ -7,7 +7,9 @@ import {
   isSoloGame,
   capabilitiesFor,
   isInstantlyPlayable,
+  modeChipsFor,
 } from "../modes";
+import { GAME_CATALOG } from "../../games/catalog";
 
 const NETWORKED: GameId[] = ["chess", "uno", "uno-no-mercy", "car-race", "bike-race"];
 const SOLO_TITLES: GameId[] = [
@@ -111,5 +113,33 @@ describe("play modes follow what a game can actually do", () => {
     expect(modes).toHaveLength(1);
     expect(modes[0]!.status).toBe("coming-soon");
     expect(readyModes("not-a-game" as GameId)).toHaveLength(0);
+  });
+});
+
+/**
+ * The chips on a card are a summary of the mode list on the detail page, so
+ * they must never promise a mode the list does not offer, or hide one it does.
+ */
+describe("mode chips summarise the mode list", () => {
+  it("shows each chip exactly when the matching mode is offered", () => {
+    for (const { id } of GAME_CATALOG) {
+      const chips = modeChipsFor(id).map((c) => c.id);
+      const modes = getPlayModes(id).map((m) => m.id);
+      expect(chips.includes("online"), id).toBe(modes.includes("online-random"));
+      expect(chips.includes("ai"), id).toBe(modes.includes("offline-ai"));
+      expect(chips.includes("career"), id).toBe(modes.includes("offline-career"));
+      expect(chips.includes("solo"), id).toBe(modes.includes("solo"));
+      if (chips.includes("local")) expect(modes, id).toContain("offline-local");
+    }
+  });
+
+  it("does not call racing's time trial a local multiplayer mode", () => {
+    expect(getPlayModes("car-race").map((m) => m.id)).toContain("offline-local");
+    expect(modeChipsFor("car-race").map((c) => c.id)).not.toContain("local");
+  });
+
+  it("gives every catalog game at least one chip, and an unknown game none", () => {
+    for (const { id } of GAME_CATALOG) expect(modeChipsFor(id).length, id).toBeGreaterThan(0);
+    expect(modeChipsFor("not-a-game" as GameId)).toEqual([]);
   });
 });

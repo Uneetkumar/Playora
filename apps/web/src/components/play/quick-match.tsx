@@ -88,12 +88,12 @@ export function QuickMatch({
 
           <div className="mt-6 flex items-center justify-center gap-6 text-sm">
             <div>
-              <div className="numeric text-xl text-foreground">{formatElapsed(mm.waitingSeconds)}</div>
+              <div className="numeric font-bold text-xl text-foreground">{formatElapsed(mm.waitingSeconds)}</div>
               <div className="text-xs text-muted-foreground">Waiting</div>
             </div>
             <div className="h-8 w-px bg-border" aria-hidden />
             <div>
-              <div className="numeric text-xl text-foreground">{mm.poolSize}</div>
+              <div className="numeric font-bold text-xl text-foreground">{mm.poolSize}</div>
               <div className="text-xs text-muted-foreground">In queue</div>
             </div>
           </div>
@@ -137,12 +137,12 @@ export function QuickMatch({
               <div className="mt-2 text-sm font-semibold text-foreground">
                 {opponent?.displayName ?? "Opponent"}
               </div>
-              <div className="numeric text-xs text-muted-foreground">{opponent?.rating ?? "—"}</div>
+              <div className="numeric font-bold text-xs text-muted-foreground">{opponent?.rating ?? "—"}</div>
             </div>
           </div>
 
           <p className="mt-6 text-sm text-muted-foreground">
-            Starting in <span className="numeric text-foreground">{Math.max(0, countdown)}</span>…
+            Starting in <span className="numeric font-bold text-foreground">{Math.max(0, countdown)}</span>…
           </p>
         </>
       )}
