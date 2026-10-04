@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Button, cn } from "@playora/ui";
-import type { VehicleSpec } from "@playora/game-engine";
+import { vehicleById, type VehicleSpec } from "@playora/game-engine";
 import type { GameId } from "@playora/game-types";
 import {
   Car,
@@ -222,24 +222,18 @@ export function VehicleSelect({
     setCustomPaint(null);
   };
 
-  // Convert currentItem to VehicleSpec for 3D showroom
+  // The engine's record for this car (the showroom's legacy ids map onto the
+  // roster), keeping the showroom's own id and colour so its model lookup is
+  // unchanged.
   const activeVehicleSpec: VehicleSpec = React.useMemo(() => {
     return {
+      ...vehicleById(gameId, currentItem.id),
       id: currentItem.id,
       name: currentItem.name,
       blurb: currentItem.blurb,
-      kind: isBike ? "bike" : "car",
       colour: customPaint !== null ? customPaint : currentItem.colour,
-      modifiers: {
-        maxSpeed: currentItem.specs.topSpeed / 8.5,
-        acceleration: currentItem.specs.acceleration / 8.0,
-        steerRate: currentItem.specs.handling / 8.0,
-        centrifugal: 1.0,
-        nitroMultiplier: currentItem.specs.nitro / 8.0,
-        crashPenalty: 1.0,
-      },
     };
-  }, [currentItem, customPaint, isBike]);
+  }, [currentItem, customPaint, gameId]);
 
   const filteredItems = React.useMemo(() => {
     if (activeFilter === "owned") return rosterData.filter((v) => v.owned);

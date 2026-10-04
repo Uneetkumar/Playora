@@ -16,11 +16,13 @@ import { resolvePaint, vehicleById, vehiclesFor } from "./garage.js";
 import { steerToward } from "./racing-line.js";
 import {
   GRAVITY,
+  SHIFT_UP_AT,
   deriveTuning,
   engineTorque,
   maxSteerTan,
   overallRatio,
   tractionLimit,
+  tractionTrim,
   wheelRpm,
   type VehicleTuning,
 } from "./vehicle-physics.js";
@@ -56,12 +58,7 @@ import {
   type ZoneKind,
 } from "./types.js";
 
-export type { VehicleTuning } from "./vehicle-physics.js";
-
 const MAX_TICKS_PER_ACTION = 20;
-
-/** Steering rack: fraction of full lock per second. Fast, but not instant. */
-const STEER_RACK_RATE = 6;
 
 /** Nitro: a full gauge burns in four seconds for +45% power. */
 const NITRO_BURN_PER_SECOND = 0.25;
@@ -76,7 +73,7 @@ const NEAR_MISS_FILL = 0.06;
 
 /** Slipstream: drag falls by up to a third within this window behind a car. */
 const DRAFT_MAX_GAP = 30;
-const DRAFT_DRAG_CUT = 0.35;
+const DRAFT_DRAG_CUT = 0.3;
 
 /** Mini-turbo tiers: charge (seconds of good drift) needed, boost ticks and power. */
 const MINI_TURBO_CHARGE = [0, 0.9, 1.9, 3.0];
@@ -86,6 +83,8 @@ const MINI_TURBO_POWER = [0, 0.3, 0.45, 0.6];
 const DRIFT_RESPONSE = 3.2;
 /** Beyond this slip angle the car has gone round. */
 const SPIN_SLIP = 1.35;
+/** A shove can twist a car this far before the next tick decides whether it spins. */
+const SHOVE_SLIP_LIMIT = 1.6;
 
 /** Jump start: creeping this far before lights out is a false start. */
 const JUMP_START_METRES = 0.3;
@@ -114,8 +113,21 @@ const OFF_TRACK_GRACE_TICKS = 45;
 /** Ticks after which the penalty escalates — about two seconds. */
 const OFF_TRACK_PENALTY_TICKS = 120;
 
-/** Finishing positions that decide a race. */
-const PODIUM_PLACES = 3;
+/**
+ * Once the first car takes the flag, the rest of the field has this long to
+ * finish before the race is closed and they are placed by running order —
+ * the chequered flag a real race waves at everyone behind the winner. Long
+ * enough to finish a lap you are halfway round, short enough that one car
+ * parked in a wall cannot hold an online room hostage.
+ */
+const FINISH_WINDOW_TICKS = TICK_RATE * 45;
+
+/**
+ * Average speed assumed when sizing the default time limit, m/s (about 50
+ * km/h): slow enough that only a car that has genuinely stopped racing runs
+ * out of time.
+ */
+const TIME_LIMIT_PACE = 14;
 
 /** How long a coin magnet lasts, in ticks. */
 const MAGNET_TICKS = TICK_RATE * 6;
@@ -308,7 +320,15 @@ export abstract class RacingEngine extends AbstractGameEngine<
       };
     }
 
-    const timeLimit = Math.max(30, config.timeLimitSeconds ?? 240);
+    /*
+     * The race stops regardless at this point, so one stuck car cannot hang a
+     * room. Sized to the race by default: a flat four minutes ended a three-lap
+     * race on a 3 km circuit before anyone had finished it.
+     */
+    const timeLimit = Math.max(
+      30,
+      config.timeLimitSeconds ?? Math.max(240, Math.round((laps * track.length) / TIME_LIMIT_PACE) + 120),
+    );
     const decisive = (config.decisive ?? players.filter((p) => !p.isBot).map((p) => p.userId)).filter(
       (id) => order.includes(id),
     );
@@ -339,6 +359,7 @@ export abstract class RacingEngine extends AbstractGameEngine<
       collectedPickups: [],
       winnerId: null,
       hardStopTick: lightsOutTick + timeLimit * TICK_RATE,
+      closingTick: null,
     };
   }
 
@@ -517,20 +538,17 @@ export abstract class RacingEngine extends AbstractGameEngine<
     const finishedCount = finishers.length;
     const everyoneHome = finishedCount >= state.playerOrder.length;
     /*
-     * Once the podium is settled the race is decided, and watching the last
-     * car trundle home decides nothing. Capped at the field size so a
-     * two-player race still has to finish properly rather than ending the
-     * moment nobody can reach third.
-     */
-    const podiumSettled = finishedCount >= Math.min(PODIUM_PLACES, state.playerOrder.length);
-    /*
-     * And once every human is home, nobody is left to watch. This replaces a
+     * Once every human is home, nobody is left to watch. This replaces a
      * hardcoded "local-you" check: the engine knows who the bots are.
      */
     const decisiveHome =
       state.decisive.length > 0 && state.decisive.every((id) => vehicles[id]?.finishedAtTick !== null);
     const outOfTime = tick >= state.hardStopTick;
-    const raceOver = racingPhase === "racing" && (everyoneHome || podiumSettled || decisiveHome || outOfTime);
+    // The flag falls for everyone a fixed time after the winner crosses.
+    const closingTick =
+      state.closingTick ?? (finishedCount > 0 ? Math.min(state.hardStopTick, tick + FINISH_WINDOW_TICKS) : null);
+    const closed = closingTick !== null && tick >= closingTick;
+    const raceOver = racingPhase === "racing" && (everyoneHome || decisiveHome || outOfTime || closed);
 
     const base = {
       ...state,
@@ -543,6 +561,7 @@ export abstract class RacingEngine extends AbstractGameEngine<
       raceOrder,
       collectedCoins,
       collectedPickups,
+      closingTick,
     };
 
     if (raceOver) {
@@ -614,7 +633,7 @@ export abstract class RacingEngine extends AbstractGameEngine<
     v.brake = c.brake;
     // Presses during the lights are spent on nothing, not banked for the launch.
     v.nitroSeqUsed = c.nitroSeq;
-    v.steerApplied += clamp(c.steer - v.steerApplied, -STEER_RACK_RATE * TICK_SECONDS, STEER_RACK_RATE * TICK_SECONDS);
+    v.steerApplied += clamp(c.steer - v.steerApplied, -t.steerRate * TICK_SECONDS, t.steerRate * TICK_SECONDS);
     v.steerAngle = v.steerApplied * t.steerLock;
 
     const creeping = armed && !v.jumpStart && c.throttle > 0.5 && c.brake < 0.3;
@@ -694,7 +713,7 @@ export abstract class RacingEngine extends AbstractGameEngine<
       }
     }
 
-    v.steerApplied += clamp(steerIn - v.steerApplied, -STEER_RACK_RATE * dt, STEER_RACK_RATE * dt);
+    v.steerApplied += clamp(steerIn - v.steerApplied, -t.steerRate * dt, t.steerRate * dt);
     steerIn = v.steerApplied;
 
     // ------------------------------------------------------------ surface
@@ -765,7 +784,7 @@ export abstract class RacingEngine extends AbstractGameEngine<
     let shiftTicks = Math.max(0, prev.shiftTicks - 1);
     const lockedRpm = wheelRpm(t, speed, gear);
     if (shiftTicks === 0 && speed >= 1) {
-      const upAt = t.redlineRpm * (throttleIn > 0.6 ? 0.97 : 0.62 + (0.35 * throttleIn) / 0.6);
+      const upAt = t.redlineRpm * (throttleIn > 0.6 ? SHIFT_UP_AT : 0.62 + (0.35 * throttleIn) / 0.6);
       if (gear < gears && lockedRpm >= upAt && throttleIn > 0.05) {
         gear += 1;
         shiftTicks = t.shiftTicks;
@@ -799,12 +818,10 @@ export abstract class RacingEngine extends AbstractGameEngine<
     const lateralUse = Math.abs(prev.latAccel) / Math.max(0.5, grip);
     const traction = tractionLimit(t, normalAccel, mu, lateralUse);
     const driveRequested = drive;
-    let wheelspin = 0;
-    if (drive > traction) {
-      wheelspin = clamp((drive - traction) / Math.max(1, traction), 0, 1);
-      // Traction control trims the torque; without it the tyres spin and lose a little more.
-      drive = traction * (1 - 0.12 * (1 - t.tractionControl) * Math.min(1, wheelspin * 2));
-    }
+    // Traction control trims the torque; without it the tyres spin and lose a little more.
+    const trimmed = tractionTrim(t, drive, traction);
+    drive = trimmed.drive;
+    const wheelspin = trimmed.wheelspin;
     v.rpm = clamp(engineRpm + wheelspin * (t.redlineRpm - engineRpm) * 0.5, t.idleRpm, t.redlineRpm * (1 + t.overrev));
 
     // Engine braking off throttle, through the gears.
@@ -827,8 +844,8 @@ export abstract class RacingEngine extends AbstractGameEngine<
     let drifting = prev.drifting;
     let driftDir = prev.driftDir;
     let slip = prev.slip;
-    let aLat = 0;
-    let scrub = 0;
+    let aLat: number;
+    let scrub: number;
     let understeer = 0;
     let driftEnded: "clean" | "lost" | null = null;
 
@@ -840,15 +857,23 @@ export abstract class RacingEngine extends AbstractGameEngine<
       const demand = speed * speed * (tanDelta / t.wheelbase);
       const latMax = grip * Math.sqrt(Math.max(0.15, 1 - 0.85 * longUse * longUse));
       const rearLoad = driveRequested / Math.max(1, traction);
+      /*
+       * Power oversteer: more torque than the rear tyres can hold while they
+       * are already cornering hard. Stability control catches it on a modern
+       * car, so it is the muscle car's party trick — nobody else's. The rest
+       * drift when the driver asks (handbrake), on a slick, or when shoved.
+       */
       const powerSlide =
         t.drivetrain !== "FWD" &&
         (t.drivetrain === "RWD" || t.looseness > 0.5) &&
+        t.tractionControl < 0.5 &&
         throttleIn > 0.7 &&
         speed > 6 &&
         speed < 55 &&
-        gear <= (t.looseness > 0.8 ? 4 : 3) &&
-        rearLoad > 0.9 - 0.3 * t.looseness &&
-        Math.abs(demand) > latMax * (1 - 0.3 * t.looseness);
+        // Torque multiplication only overwhelms the tyres in the low gears.
+        gear <= 2 &&
+        rearLoad > 1.05 - 0.1 * t.looseness &&
+        Math.abs(demand) > latMax * (1 - 0.1 * t.looseness);
       const handbrakeTurn = handbrake && speed > 9 && Math.abs(steerIn) > 0.25;
       const slickSlide = zone === "slick" && speed > 10 && Math.abs(demand) > latMax * 0.85;
       const shoved = Math.abs(slip) > 0.25 && speed > 8;
@@ -862,12 +887,20 @@ export abstract class RacingEngine extends AbstractGameEngine<
       }
     }
 
+    /*
+     * The chassis does not answer the wheel instantly: lateral force builds
+     * over `turnIn` seconds as the car yaws and loads its tyres. This lag is
+     * most of what makes a heavy car feel heavy.
+     */
+    const response = Math.min(1, dt / Math.max(dt, t.turnIn));
+
     if (!drifting) {
       const tanDelta = steerIn * tanMax;
       v.steerAngle = datan(tanDelta);
       const demand = speed * speed * (tanDelta / t.wheelbase);
       const latMax = grip * Math.sqrt(Math.max(0.15, 1 - 0.85 * longUse * longUse));
-      aLat = clamp(demand, -latMax, latMax);
+      const lagged = prev.latAccel + (demand - prev.latAccel) * response;
+      aLat = clamp(lagged, -latMax, latMax);
       understeer = Math.max(0, Math.abs(demand) - latMax) / Math.max(0.5, latMax);
       // Front tyres scrubbing across the road cost speed.
       scrub = Math.min(0.35, understeer * 0.3) * grip;
@@ -882,23 +915,44 @@ export abstract class RacingEngine extends AbstractGameEngine<
           : t.drivetrain === "AWD"
             ? (throttleIn - 0.6) * 0.25
             : -throttleIn * 0.4;
-      let target = t.driftMaxSlip * (0.25 + 0.75 * Math.max(0, into) + 0.25 * Math.min(0, into) + throttleBias);
-      if (handbrake) target += 0.3 * t.driftMaxSlip;
-      target = clamp(target, 0, t.driftMaxSlip * 1.25);
-      slip += (driftDir * target - slip) * Math.min(1, DRIFT_RESPONSE * dt);
+      /*
+       * The angle the slide settles at. Steering into it and power (on a
+       * rear-driven car) hold it open; counter-steering closes it whatever
+       * the right foot is doing — the one input every player reaches for to
+       * catch a slide must always work.
+       */
+      const towards = Math.max(0, into);
+      const against = Math.max(0, -into);
+      let base = 0.3 + 0.7 * towards - 0.6 * against + throttleBias * (1 - against);
+      if (handbrake) base += 0.3;
+      const slipGoal = t.driftMaxSlip * clamp(base, 0, 1.25);
+      // Closing a slide is quicker than opening one: grip comes back faster
+      // than it lets go.
+      const closing = Math.abs(slipGoal) < Math.abs(slip);
+      slip += (driftDir * slipGoal - slip) * Math.min(1, (closing ? DRIFT_RESPONSE * 1.6 : DRIFT_RESPONSE) * dt);
 
-      // Wheels show the driver's hands: counter-steer reads as counter-steer.
-      v.steerAngle = steerIn * Math.min(t.steerLock, 0.45);
+      /*
+       * The front wheels point roughly down the road the car is actually
+       * travelling, which in a drift is opposite lock: that is what a held
+       * slide looks like from outside, whatever the player's thumb is doing.
+       */
+      v.steerAngle = clamp(-slip * 0.85 + steerIn * 0.15, -t.steerLock, t.steerLock);
       const absSlip = Math.abs(slip);
       const slide = grip * t.slideMu;
-      // Sliding tyres pull the velocity round towards where the car points,
-      // and drive along the body adds a push the same way.
-      aLat = driftDir * slide * clamp(absSlip / 0.22, 0.45, 1) + (drive / t.mass) * dsin(slip);
+      /*
+       * Sliding tyres pull the velocity round towards where the car points,
+       * and drive along the body adds a push the same way. Steering into the
+       * slide tightens the arc; easing off (or counter-steering) opens it
+       * out — a drift is something a driver places, not a ride.
+       */
+      const tighten = 0.55 + 0.45 * clamp(into, -1, 1);
+      const target = driftDir * slide * clamp(absSlip / 0.22, 0.45, 1) * tighten + (drive / t.mass) * dsin(slip);
+      aLat = prev.latAccel + (target - prev.latAccel) * response;
       scrub = slide * Math.abs(dsin(slip)) * 0.55;
 
       if (absSlip > SPIN_SLIP) {
         driftEnded = "lost";
-      } else if (speed < 5 || driftDir * slip < -0.02 || (absSlip < 0.045 && target < 0.12 * t.driftMaxSlip)) {
+      } else if (speed < 5 || driftDir * slip < -0.02 || (absSlip < 0.045 && slipGoal < 0.12 * t.driftMaxSlip)) {
         driftEnded = speed < 5 ? "lost" : "clean";
       }
 
@@ -925,7 +979,7 @@ export abstract class RacingEngine extends AbstractGameEngine<
     const sDot = (newSpeed * dcos(course)) / denom;
     const turnRate = newSpeed > 0.05 ? aLat / Math.max(newSpeed, 0.5) : 0;
     let newCourse = wrapAngle(course + (turnRate - kappa * sDot) * dt);
-    let newDistance = prev.distance + sDot * dt;
+    const newDistance = prev.distance + sDot * dt;
     let newLateral = prev.lateral + (newSpeed * dsin(newCourse) * dt) / ROAD_HALF_WIDTH;
 
     // ------------------------------------------------------------ the barrier
@@ -948,8 +1002,11 @@ export abstract class RacingEngine extends AbstractGameEngine<
         if (!prev.wallContact && into > 0.8) {
           events.push({ type: "CRASHED", playerId: v.playerId, strength: clamp(into / 15, 0, 1), value: into });
         }
-        if (into > 7) {
-          crashTicks = Math.max(crashTicks, Math.round(t.crashStunTicks * clamp((into - 7) / 10, 0.3, 1)));
+        // A fragile car (a single-seater's exposed wheels, a bike) is out of
+        // control after a much lighter touch.
+        const stunAt = 7 / t.fragility;
+        if (into > stunAt) {
+          crashTicks = Math.max(crashTicks, Math.round(t.crashStunTicks * clamp((into - stunAt) / 10, 0.3, 1)));
         }
       }
     }
@@ -1339,13 +1396,17 @@ export abstract class RacingEngine extends AbstractGameEngine<
               me.crashTicks = Math.max(me.crashTicks, Math.round(10 * tm.fragility));
             }
             if (!previous.has(key) && impact > 0.5) {
+              const strength = clamp(impact / 12, 0, 1);
               events.push({
                 type: "COLLISION",
                 playerId: me.playerId,
                 otherId: other.playerId,
-                strength: clamp(impact / 12, 0, 1),
+                strength,
                 value: impact,
               });
+              // The same contact for listeners that only know CRASHED. It carries
+              // `otherId`, so one that handles COLLISION can skip it.
+              events.push({ type: "CRASHED", playerId: me.playerId, otherId: other.playerId, strength, value: impact });
             }
           }
         }
@@ -1360,8 +1421,9 @@ export abstract class RacingEngine extends AbstractGameEngine<
     const speed = Math.max(0, Math.sqrt(along * along + across * across) - scrub);
     const course = datan2(across, along);
     v.speed = speed;
-    // The shove moves the velocity, not the body: the difference is slip.
-    v.slip = clamp(wrapAngle(v.heading - course), -SPIN_SLIP, SPIN_SLIP);
+    // The shove moves the velocity, not the body: the difference is slip. A
+    // hard enough hit leaves more slip than a car can catch, and it spins.
+    v.slip = clamp(wrapAngle(v.heading - course), -SHOVE_SLIP_LIMIT, SHOVE_SLIP_LIMIT);
   }
 
   /**
@@ -1496,6 +1558,7 @@ export abstract class RacingEngine extends AbstractGameEngine<
       standings,
       collectedCoins: state.collectedCoins,
       winnerId: state.winnerId,
+      closingTick: state.closingTick ?? null,
       sequenceNumber: state.sequenceNumber,
       updatedAt: state.updatedAt,
     };
@@ -1642,6 +1705,7 @@ export function hashRacingState(state: RacingGameState): string {
     state.raceOrder.join(","),
     state.collectedCoins.length,
     state.collectedPickups.join(","),
+    state.closingTick ?? -1,
   ];
   for (const id of state.playerOrder) {
     const v = state.vehicles[id];

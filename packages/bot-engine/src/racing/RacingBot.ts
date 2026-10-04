@@ -1,12 +1,16 @@
 import {
   CarRaceEngine,
+  cornerGripOf,
+  distanceAhead,
   planCorner,
   sampleTrack,
+  steerToward,
   type RacingAction,
   type RacingEngine,
   type RacingGameState,
   type TrackObstacle,
   type VehicleState,
+  type VehicleTuning,
 } from "@playora/game-engine";
 import type { GameId } from "@playora/game-types";
 
@@ -112,36 +116,31 @@ export class RacingBot implements BotEngine<RacingGameState, RacingAction> {
     }
 
     const profile = PROFILES[level];
-    const tuning = this.engine.vehicleTuning();
+    // The car this seat is actually driving: the roster's cars differ in grip,
+    // brakes and top speed, and a bot planning with someone else's numbers
+    // brakes for corners its own car could take flat.
+    const tuning = this.engine.vehicleTuningFor(vehicle.vehicleId);
 
     // A lapse is a moment of inattention: the driver keeps its foot in but
     // stops correcting. That drifts it wide, which is what a weak driver does.
     if (this.random() < profile.lapseChance) {
-      return this.action(playerId, { steer: vehicle.input.steer * 0.5, throttle: true, brake: false });
+      return this.action(playerId, { steer: vehicle.input.steer * 0.5, throttle: 1, brake: 0 });
     }
 
-    const targetLateral = this.chooseLane(state, vehicle, profile);
-    const { curvature } = sampleTrack(state.track, vehicle.distance);
+    const targetLateral = this.chooseLane(state, vehicle, profile, tuning);
 
-    // Steering has two jobs: hold the line against the corner, and close the
-    // gap to where it wants to be.
-    const holdCorner = curvature * 26;
-    const closeGap = (targetLateral - vehicle.lateral) * profile.correction;
-    const steer = clamp(holdCorner + closeGap, -1, 1);
+    /*
+     * Steering sets a yaw rate in this engine, not a sideways speed, so the
+     * bot aims its course at the line and takes the aim off as it arrives
+     * (steerToward). A weaker driver closes the gap more lazily.
+     */
+    const steer = steerToward(tuning, vehicle, state.track, targetLateral, 2.6 / profile.correction);
 
     /*
      * Corner approach, from braking distance rather than from "am I over the
-     * limit right now".
-     *
-     * The old rule braked only once the vehicle was already too fast for the
-     * sharpest bend in sight, which is the one thing a driver must not do —
-     * by then the corner is already being taken badly. `planCorner` works out
-     * the speed the corner allows and how much road it takes to get there, so
-     * braking begins before the corner rather than at it.
-     *
-     * `cornerSpeed` is applied as *grip* rather than as a speed cap: a weaker
-     * driver behaves as though the car has less grip, so it corners slower
-     * everywhere for a physical reason instead of being handed a lower number.
+     * limit right now". `cornerSpeed` is applied as *grip* rather than as a
+     * speed cap: a weaker driver behaves as though the car has less grip, so
+     * it corners slower everywhere for a physical reason.
      */
     const lookahead = Math.max(profile.lookahead, vehicle.speed * 2.2);
     const plan = planCorner({
@@ -149,19 +148,14 @@ export class RacingBot implements BotEngine<RacingGameState, RacingAction> {
       distance: vehicle.distance,
       speed: vehicle.speed,
       maxSpeed: tuning.maxSpeed,
-      // A weaker driver uses less of the car's steering authority, so it
-      // needs a lower speed to hold the same corner. Same physics, less skill.
-      handling: {
-        steerRate: tuning.steerRate * profile.cornerSpeed,
-        centrifugal: tuning.centrifugal,
-      },
+      grip: cornerGripOf(tuning, profile.cornerSpeed * 0.92),
       brakingPower: tuning.brakePower,
       lookahead,
       margin: profile.brakeMargin,
     });
 
     const worstCurve = this.sharpestCurveAhead(state, vehicle, profile.lookahead);
-    const nitro = this.wantsNitro(state, vehicle, profile, worstCurve);
+    const nitro = this.wantsNitro(state, vehicle, profile, worstCurve, tuning);
 
     // A slower driver lifts off once it reaches its own pace, rather than
     // being handed different physics.
@@ -170,8 +164,8 @@ export class RacingBot implements BotEngine<RacingGameState, RacingAction> {
 
     return this.action(playerId, {
       steer,
-      throttle: plan.throttle > 0.25 && !atPace,
-      brake: plan.brake > 0.15,
+      throttle: atPace ? 0 : plan.throttle,
+      brake: plan.brake,
       nitro,
     });
   }
@@ -188,6 +182,7 @@ export class RacingBot implements BotEngine<RacingGameState, RacingAction> {
     state: RacingGameState,
     vehicle: VehicleState,
     profile: LevelProfile,
+    tuning: VehicleTuning,
   ): number {
     const { curvature } = sampleTrack(state.track, vehicle.distance + 30);
     // The inside of a bend is the shorter way round, so it is where to be.
@@ -197,12 +192,13 @@ export class RacingBot implements BotEngine<RacingGameState, RacingAction> {
       return racingLine + (this.random() - 0.5) * profile.sloppiness * 2;
     }
 
-    const horizon = vehicle.distance + Math.max(30, profile.lookahead);
-    const ahead = state.track.obstacles.filter(
-      (o) => o.distance > vehicle.distance && o.distance < horizon,
-    );
+    // Lap-local: object positions are within one lap, the car's distance is
+    // the whole race, and comparing the two raw stops working after lap one.
+    const horizon = Math.max(30, profile.lookahead);
+    const aheadOf = (at: number) => distanceAhead(state.track, vehicle.distance, at);
+    const ahead = state.track.obstacles.filter((o) => aheadOf(o.distance) > 0 && aheadOf(o.distance) < horizon);
     const coins = profile.collectsCoins
-      ? state.track.coins.filter((c) => c.distance > vehicle.distance && c.distance < horizon)
+      ? state.track.coins.filter((c) => aheadOf(c.distance) > 0 && aheadOf(c.distance) < horizon)
       : [];
 
     let best = racingLine;
@@ -214,9 +210,9 @@ export class RacingBot implements BotEngine<RacingGameState, RacingAction> {
       // Blocked lanes are not merely worse, they are disqualifying — weighted
       // by how soon the obstacle arrives, so a distant one still leaves room
       // to plan rather than swerving immediately.
-      const blocker = this.blockingObstacle(ahead, lane);
+      const blocker = this.blockingObstacle(ahead, lane, tuning);
       if (blocker) {
-        const gap = blocker.distance - vehicle.distance;
+        const gap = aheadOf(blocker.distance);
         score -= 220 - Math.min(180, gap * 1.6);
       }
 
@@ -238,8 +234,7 @@ export class RacingBot implements BotEngine<RacingGameState, RacingAction> {
     return clamp(best + (this.random() - 0.5) * profile.sloppiness, -0.95, 0.95);
   }
 
-  private blockingObstacle(obstacles: TrackObstacle[], lane: number): TrackObstacle | null {
-    const tuning = this.engine.vehicleTuning();
+  private blockingObstacle(obstacles: TrackObstacle[], lane: number, tuning: VehicleTuning): TrackObstacle | null {
     for (const obstacle of obstacles) {
       if (Math.abs(obstacle.lateral - lane) < obstacle.halfWidth + tuning.halfWidth + 0.06) {
         return obstacle;
@@ -273,19 +268,20 @@ export class RacingBot implements BotEngine<RacingGameState, RacingAction> {
     vehicle: VehicleState,
     profile: LevelProfile,
     worstCurve: number,
+    tuning: VehicleTuning,
   ): boolean {
-    if (vehicle.nitroCharges <= 0 || vehicle.crashTicks > 0) return false;
+    if (vehicle.nitro <= 0.05 || vehicle.crashTicks > 0) return false;
     if (!profile.usesNitroWell) return this.random() < 0.004;
 
     const straightAhead = worstCurve < 0.008;
-    const nearFullSpeed = vehicle.speed > this.engine.vehicleTuning().maxSpeed * 0.7;
+    const nearFullSpeed = vehicle.speed > tuning.maxSpeed * 0.7;
     const clearRoad = !this.blockingObstacle(
-      state.track.obstacles.filter(
-        (o) => o.distance > vehicle.distance && o.distance < vehicle.distance + 120,
-      ),
+      state.track.obstacles.filter((o) => distanceAhead(state.track, vehicle.distance, o.distance) < 120),
       vehicle.lateral,
+      tuning,
     );
-    const runningOutOfRoad = state.track.length - vehicle.distance < 400;
+    const remaining = state.laps * state.track.length - vehicle.distance;
+    const runningOutOfRoad = remaining < 400;
 
     return straightAhead && clearRoad && (nearFullSpeed || runningOutOfRoad);
   }

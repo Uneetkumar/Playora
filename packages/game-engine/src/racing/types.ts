@@ -77,7 +77,11 @@ export interface VehicleInput {
   brake: number | boolean;
   /** Held nitro: the gauge burns while this is true. */
   nitro: boolean;
-  /** Rear brake. At speed with steering, it starts a drift. */
+  /**
+   * Rear brake. At speed with steering, it starts a drift. A held control like
+   * the pedals: an input that does not mention it leaves it as it was, so a
+   * client sends `false` to let go.
+   */
   handbrake?: boolean;
   /**
    * Monotonic count of nitro presses. Each increment is latched until a tick
@@ -418,6 +422,11 @@ export interface RacingGameState extends BaseGameState {
   winnerId: string | null;
   /** Tick after which the race ends regardless, so one stuck car cannot hang it. */
   hardStopTick: number;
+  /**
+   * Set when the first car finishes: the tick the race closes for everyone
+   * still running, who are then placed by running order. Null until then.
+   */
+  closingTick: number | null;
 }
 
 export type RacingActionType = "SET_INPUT" | "TICK";
@@ -517,6 +526,8 @@ export interface RacingPlayerView {
   standings: RacingStanding[];
   collectedCoins: string[];
   winnerId: string | null;
+  /** When the race closes for the cars still running (first finisher + 45 s); null until someone finishes. */
+  closingTick: number | null;
   sequenceNumber: number;
   updatedAt: number;
 }
@@ -535,7 +546,10 @@ export type RacingEventType =
   | "LAUNCH"
   | "PERFECT_LAUNCH"
   | "COIN_COLLECTED"
-  /** Wall, obstacle or spin; strength 0..1. */
+  /**
+   * Wall, obstacle or spin; strength 0..1. Also fired once per new car-to-car
+   * contact alongside COLLISION, with `otherId` set, for older listeners.
+   */
   | "CRASHED"
   /** Car-to-car contact, once per new contact; otherId, strength 0..1, value = impact m/s. */
   | "COLLISION"

@@ -21,6 +21,7 @@ import {
 } from "./sounds.js";
 import { LOOPS, type LoopId, type LoopParamName, type LoopParamValues, type LoopSpec } from "./loops.js";
 import { LoopPlayer, type LoopHandle, type LoopHost } from "./loop-player.js";
+import { scheduleLayer, whiteNoise } from "./synth.js";
 
 /** Where gesture listeners go. `window` in a browser; a stub in tests. */
 export type GestureTarget = Pick<EventTarget, "addEventListener" | "removeEventListener">;
@@ -46,9 +47,6 @@ export interface AudioOutput {
 }
 
 const STORAGE_KEY = "playora.audio";
-
-/** Seconds of the shared noise buffer. Long enough that its loop point is inaudible. */
-const NOISE_SECONDS = 2;
 
 /** Time constant for mixer changes, so dragging a volume slider does not zipper. */
 const MIXER_SMOOTHING = 0.015;
@@ -435,69 +433,16 @@ export class AudioEngine implements LoopHost {
     params: ResolvedPlayParams,
     destination: AudioNode,
   ): void {
-    const begin = startTime + layer.delay;
-    const end = begin + layer.duration;
-    const peak = Math.max(0.0001, layer.gain * params.gain);
-
-    const gain = context.createGain();
-    gain.gain.setValueAtTime(0.0001, begin);
-    gain.gain.exponentialRampToValueAtTime(peak, begin + Math.max(0.001, layer.attack));
-    // Exponential to near-zero rather than to zero: a ramp to exactly 0 is
-    // undefined for exponential curves and clicks audibly.
-    gain.gain.exponentialRampToValueAtTime(0.0001, end);
-
-    let source: AudioNode;
-    if (layer.kind === "noise") {
-      const buffer = this.noiseBuffer(context);
-      const node = context.createBufferSource();
-      node.buffer = buffer;
-      // A random window of the shared buffer: two noise layers of one sound
-      // must not be the same samples, or they sum into one louder layer.
-      const room = Math.max(0, NOISE_SECONDS - layer.duration);
-      if (layer.duration >= NOISE_SECONDS) node.loop = true;
-      node.start(begin, Math.random() * room);
-      node.stop(end);
-      source = node;
-    } else {
-      const osc = context.createOscillator();
-      osc.type = layer.waveform ?? "sine";
-      osc.frequency.setValueAtTime((layer.frequency ?? 440) * params.pitch, begin);
-      if (layer.endFrequency !== undefined) {
-        osc.frequency.exponentialRampToValueAtTime(Math.max(1, layer.endFrequency * params.pitch), end);
-      }
-      osc.start(begin);
-      osc.stop(end);
-      source = osc;
-    }
-
-    if (layer.filter !== undefined) {
-      const filter = context.createBiquadFilter();
-      filter.type = layer.filterType ?? "lowpass";
-      // Pitch moves the filter with the tone, so a sound pitched up keeps its
-      // character instead of getting duller.
-      filter.frequency.setValueAtTime(clampHz(layer.filter * params.pitch), begin);
-      if (layer.endFilter !== undefined) {
-        filter.frequency.exponentialRampToValueAtTime(clampHz(layer.endFilter * params.pitch), end);
-      }
-      if (layer.q !== undefined) filter.Q.setValueAtTime(layer.q, begin);
-      source.connect(filter);
-      filter.connect(gain);
-    } else {
-      source.connect(gain);
-    }
-
-    gain.connect(destination);
+    scheduleLayer(context, layer, startTime, params, destination, this.noiseBuffer(context));
   }
 
-  /** White noise, made once per context and shared by every sound and loop. */
+  /**
+   * White noise, made once per context and shared by every sound, loop and
+   * hand-built graph on it (see `whiteNoise` in synth.ts).
+   */
   private noiseBuffer(context: AudioContext): AudioBuffer {
-    if (this.noise) return this.noise;
-    const frames = Math.max(1, Math.floor(context.sampleRate * NOISE_SECONDS));
-    const buffer = context.createBuffer(1, frames, context.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < frames; i++) data[i] = Math.random() * 2 - 1;
-    this.noise = buffer;
-    return buffer;
+    this.noise ??= whiteNoise(context);
+    return this.noise;
   }
 }
 
@@ -505,7 +450,6 @@ export class AudioEngine implements LoopHost {
 const SILENT_LOOP: LoopSpec = { bus: "sfx", voices: [], params: {}, mappings: [] };
 
 const clamp01 = (n: number): number => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
-const clampHz = (hz: number): number => Math.min(20000, Math.max(20, hz));
 
 function safeLocalStorage(): Pick<Storage, "getItem" | "setItem"> | null {
   try {

@@ -1,5 +1,5 @@
 import { createRng, seedFromString } from "../lib/rng.js";
-import { datan2, dcos, dsin } from "./dmath.js";
+import { datan2, dcos, dsin, dtan } from "./dmath.js";
 import type {
   BoostPad,
   TrackObject,
@@ -19,36 +19,34 @@ const POINT_STEP = 10;
 const CHECKPOINT_COUNT = 4;
 
 /**
- * The tightest corner that can be driven at all.
+ * The tightest corner the generator may produce, as a curvature (1/radius).
  *
- * This was 0.028 — a 36m radius — chosen as the tightest bend holdable *at top
- * speed*. That was the right bound for a game where nothing required braking
- * and the wrong one once corners are meant to.
- *
- * The threshold matters and was measured rather than guessed: this car holds
- * anything above about a 28m radius flat out, so 0.033 (30m) still produced
- * zero braking points on a lap. 0.045 is a 22m radius, taken at roughly
- * 43 m/s against a top speed of 78 — which needs about 106m of braking, and is
- * therefore an actual corner.
- *
- * `tame` pulls anything tighter than this back, so it is a real bound rather
- * than an aspiration.
+ * 0.05 is a 20 m radius: a proper hairpin, taken at 55-70 km/h depending on
+ * the car's grip. Corners are generated with radii of at least
+ * `MIN_CORNER_RADIUS`, comfortably inside this, and a generated circuit that
+ * breaks it anyway (smoothing, rounding) is rejected and redrawn.
  */
 export const MAX_CURVATURE = 0.05;
+
+/** Smallest corner radius drawn, metres. */
+const MIN_CORNER_RADIUS = 23;
+/** Shortest straight left between two corners, metres. */
+const MIN_STRAIGHT = 20;
+/**
+ * Closest two unrelated parts of the circuit may come, centreline to
+ * centreline: two road widths plus room for kerbs, run-off and a barrier.
+ */
+const MIN_CLEARANCE = 4 * 8 + 4;
+/** Below this a segment counts as straight (a 500 m radius is flat for every car). */
+const STRAIGHT_CURVATURE = 0.002;
 
 /**
  * Builds a closed race circuit from a seed.
  *
  * A circuit, not a ribbon with two ends. Laps need the road to come back to
- * where it started, and the previous point-to-point generator could not do
- * that: it walked curvature forward and hoped, which spiralled into its own
- * path and left the start and the finish in unrelated places.
- *
- * The shape is a closed polar curve — a circle with a few low harmonics added
- * to its radius. That closes by construction rather than by correction, and
- * gives long straights and distinct corners instead of a road that wanders.
- * Everything else is derived from it: the centreline is that curve resampled at
- * even distances, and curvature is the turn from one sample to the next.
+ * where it started, and everything else is derived from that loop: the
+ * centreline is sampled at even distances, and curvature is the turn from one
+ * sample to the next.
  *
  * Deterministic, so the server sends only the seed and every client rebuilds
  * the identical circuit. No geometry crosses the network. The trigonometry is
@@ -66,8 +64,7 @@ export function buildTrack(seedSource: string | number, length: number): TrackSp
    * Curvature is stored right-positive: the same sign as `lateral` and
    * steering, so "positive curves right" is literally true. Point headings
    * grow when the road turns *left* (heading = atan2(dx, dz) with the driver's
-   * right at -x), so the sign is flipped here, once. It was not, before — and
-   * the old physics pushed cars towards the inside of every corner as a result.
+   * right at -x), so the sign is flipped here, once.
    */
   const segments: TrackSegment[] = points.map((point, i) => {
     const next = points[(i + 1) % points.length]!;
@@ -103,145 +100,87 @@ export function buildTrack(seedSource: string | number, length: number): TrackSp
   };
 }
 
+interface Vec {
+  x: number;
+  z: number;
+}
+
+/** One corner of the circuit: a polygon vertex rounded off by an arc. */
+interface Corner {
+  /** Polygon vertex, unit scale. */
+  at: Vec;
+  /** Heading into and out of the corner. */
+  headingIn: number;
+  headingOut: number;
+  /** Signed heading change through the corner. */
+  turn: number;
+  /** Arc radius, metres. */
+  radius: number;
+}
+
+/** Heading of a direction, in the track's convention (atan2(dx, dz)). */
+function headingOf(dx: number, dz: number): number {
+  return datan2(dx, dz);
+}
+
 /**
- * The closed centreline, sampled at even distances.
+ * The circuit's layout: straights joined by constant-radius corners.
  *
- * Built in polar form and then resampled by arc length, because a curve that is
- * even in angle is not even in distance — the outside of a bend would get fewer
- * points than the inside, and the road would be built from stretched quads
- * exactly where it turns.
+ * The old generator traced a circle with a few sine waves added to its
+ * radius. That closes by construction, but it can only make one kind of
+ * road — a constant wander of medium bends — and once the cars had real tyres
+ * a 1 km lap of it was a single 100 km/h corner: nowhere to use the power,
+ * nowhere to brake, nothing to tell a supercar from a hatchback.
+ *
+ * Real circuits are straights and corners. So: scatter a star-shaped polygon
+ * around a centre (star-shaped, so it cannot cross itself), give every vertex
+ * a corner whose radius suits how far it turns — hairpins tight, kinks fast —
+ * and round each vertex off with that arc. A filleted polygon is still closed
+ * exactly, the straights between corners are where speed and braking live,
+ * and an inward vertex between two outward ones makes an S-bend for free.
+ *
+ * The scale is solved so the lap is exactly the requested length, a few
+ * metres of smoothing turn the hard joins between straight and arc into short
+ * transitions (as real kerbs do), and any layout that comes too close to
+ * itself or bends too tightly is thrown away and redrawn from the same RNG.
  */
-/** One pass of the radial curve, at a given harmonic amplitude scale. */
-function traceHarmonics(
-  harmonics: Array<{ k: number; amplitude: number; phase: number }>,
-  scaleAmplitude: number,
-  targetLength: number,
-): Array<{ x: number; z: number }> {
-  const radiusAt = (theta: number) =>
-    1 +
-    harmonics.reduce(
-      (sum, h) => sum + h.amplitude * scaleAmplitude * dsin(h.k * theta + h.phase),
-      0,
-    );
-
-  const FINE = 8192;
-  const fine: Array<{ x: number; z: number }> = [];
-  for (let i = 0; i < FINE; i++) {
-    const theta = (i / FINE) * Math.PI * 2;
-    const r = radiusAt(theta);
-    fine.push({ x: dcos(theta) * r, z: dsin(theta) * r });
-  }
-
-  const cumulative: number[] = [0];
-  for (let i = 1; i <= FINE; i++) {
-    const a = fine[i - 1]!;
-    const b = fine[i % FINE]!;
-    const dx = b.x - a.x;
-    const dz = b.z - a.z;
-    cumulative.push(cumulative[i - 1]! + Math.sqrt(dx * dx + dz * dz));
-  }
-  const perimeter = cumulative[FINE]!;
-  const scale = targetLength / perimeter;
-
-  const count = Math.max(24, Math.round(targetLength / POINT_STEP));
-  const spacingInCurveUnits = perimeter / count;
-
-  const raw: Array<{ x: number; z: number }> = [];
-  let cursor = 0;
-  for (let i = 0; i < count; i++) {
-    const target = i * spacingInCurveUnits;
-    while (cursor < FINE - 1 && cumulative[cursor + 1]! < target) cursor++;
-
-    const span = cumulative[cursor + 1]! - cumulative[cursor]!;
-    const t = span > 0 ? (target - cumulative[cursor]!) / span : 0;
-    const a = fine[cursor]!;
-    const b = fine[(cursor + 1) % FINE]!;
-    raw.push({
-      x: (a.x + (b.x - a.x) * t) * scale,
-      z: (a.z + (b.z - a.z) * t) * scale,
-    });
-  }
-
-  return raw;
-}
-
-/** The tightest bend in a traced curve, as a curvature. */
-function peakCurvature(raw: Array<{ x: number; z: number }>): number {
-  let worst = 0;
-  for (let i = 0; i < raw.length; i++) {
-    const a = raw[i]!;
-    const b = raw[(i + 1) % raw.length]!;
-    const c = raw[(i + 2) % raw.length]!;
-    const h1 = datan2(b.x - a.x, b.z - a.z);
-    const h2 = datan2(c.x - b.x, c.z - b.z);
-    worst = Math.max(worst, Math.abs(angleDelta(h1, h2)) / POINT_STEP);
-  }
-  return worst;
-}
-
 function buildCentreline(rng: () => number, targetLength: number): TrackPoint[] {
-  /*
-   * Harmonics strong enough to make corners.
-   *
-   * These were [2,3,4,5] at (0.05 + r * 0.13) / (k * 0.55), and measured across
-   * generated tracks the tightest bend that produced was a 103m radius. This
-   * car holds anything above about a 28m radius flat out, so *no corner on any
-   * track required braking* — which is why racing felt flat and why the AI
-   * never had a reason to lift.
-   */
-  const harmonics = [2, 3, 4, 5, 6, 7].map((k) => ({
-    k,
-    amplitude: (0.1 + rng() * 0.2) / (k * 0.5),
-    phase: rng() * Math.PI * 2,
-  }));
+  const length = Math.round(targetLength / POINT_STEP) * POINT_STEP;
+  const count = length / POINT_STEP;
 
-  /*
-   * Corners kept inside the drivable limit by reducing amplitude, not by
-   * dragging points around afterwards.
-   *
-   * The old `tame` pulled every point toward the mean radius whenever a bend
-   * was too tight. That does not preserve closure: on one seed it left the lap
-   * 3.4m short of joining itself, which is a visible kink in a 16m-wide road.
-   * A radial curve of this form is closed at *any* amplitude, so turning the
-   * amplitude down and re-tracing keeps the loop exact for free.
-   */
-  let amplitude = 1;
-  let raw = traceHarmonics(harmonics, amplitude, targetLength);
-  for (let pass = 0; pass < 8; pass++) {
-    const peak = peakCurvature(raw);
-    // 0.94 of the limit: this estimates curvature from three consecutive
-    // points while the segment table measures it between consecutive heading
-    // deltas, and the two differ by a percent or two on the tightest bends.
-    const ceiling = MAX_CURVATURE * 0.94;
-    if (peak <= ceiling) break;
-    amplitude *= Math.max(0.55, Math.sqrt(ceiling / peak));
-    raw = traceHarmonics(harmonics, amplitude, targetLength);
+  let loop: Vec[] | null = null;
+  for (let attempt = 0; attempt < 24 && !loop; attempt++) {
+    loop = layout(rng, length, count, false);
   }
+  // A regular hexagon with medium corners always fits; it is the circuit of
+  // last resort rather than a failure to build one.
+  loop ??= layout(rng, length, count, true)!;
 
   /*
    * Gentle elevation, periodic so there is no step at the join.
    *
-   * Capped so the steepest grade stays near 9%: gradient is real now (g sin
-   * theta on every car), and the same 14 m of hill that is a rolling crest on
-   * a 3 km lap is a 20% wall on a 900 m one.
+   * Capped so the steepest grade stays near 9%: gradient is real (g sin theta
+   * on every car), and the same 14 m of hill that is a rolling crest on a 3 km
+   * lap is a 20% wall on a 900 m one.
    */
   const hillPhase = rng() * Math.PI * 2;
-  const hillAmplitude = Math.min(5 + rng() * 9, (0.09 * targetLength) / (Math.PI * 4));
+  const hillAmplitude = Math.min(5 + rng() * 9, (0.09 * length) / (Math.PI * 4));
 
+  const raw = loop;
   const points: TrackPoint[] = raw.map((point, i) => {
     const next = raw[(i + 1) % raw.length]!;
     return {
       x: point.x,
       y: dsin((i / raw.length) * Math.PI * 4 + hillPhase) * hillAmplitude,
       z: point.z,
-      heading: datan2(next.x - point.x, next.z - point.z),
+      heading: headingOf(next.x - point.x, next.z - point.z),
       distance: i * POINT_STEP,
     };
   });
 
-  // Start on the straightest part, so the grid, the countdown and the finish
-  // line all sit somewhere a driver can use.
-  const startIndex = straightestIndex(points);
+  // The start line goes part-way down the longest straight, leaving room
+  // behind it for the grid and room ahead of it for a launch.
+  const startIndex = startLineIndex(points);
   const rotated = [...points.slice(startIndex), ...points.slice(0, startIndex)];
   rotated.forEach((point, i) => {
     point.distance = i * POINT_STEP;
@@ -250,26 +189,277 @@ function buildCentreline(rng: () => number, targetLength: number): TrackPoint[] 
   return rotated;
 }
 
-/** The index whose surrounding stretch turns least. */
-function straightestIndex(points: TrackPoint[]): number {
-  let best = 0;
-  let bestTurn = Infinity;
+/**
+ * One attempt at a layout, as `count` points spaced `POINT_STEP` apart, or
+ * null when this draw does not make a usable circuit.
+ */
+function layout(rng: () => number, length: number, count: number, fallback: boolean): Vec[] | null {
+  const n = fallback ? 6 : Math.min(12, Math.max(5, 4 + Math.floor(length / 550) + Math.floor(rng() * 3)));
 
-  for (let i = 0; i < points.length; i++) {
-    let turn = 0;
-    for (let j = 0; j < 8; j++) {
-      const a = points[(i + j) % points.length]!;
-      const b = points[(i + j + 1) % points.length]!;
-      turn += Math.abs(angleDelta(a.heading, b.heading));
-    }
-    if (turn < bestTurn) {
-      bestTurn = turn;
-      best = i;
+  // A star-shaped polygon: angles in order, radii varied, the odd vertex
+  // pulled in to make an S-bend. Never two inward in a row, which is where a
+  // star polygon starts to fold back on itself.
+  const vertices: Vec[] = [];
+  let pulledLast = false;
+  for (let i = 0; i < n; i++) {
+    const theta = fallback ? (i / n) * Math.PI * 2 : ((i + (rng() - 0.5) * 0.7) / n) * Math.PI * 2;
+    let r = fallback ? 1 : 0.62 + rng() * 0.62;
+    const pull: boolean = !fallback && !pulledLast && i > 0 && rng() < 0.3;
+    if (pull) r *= 0.55;
+    pulledLast = pull;
+    vertices.push({ x: dcos(theta) * r, z: dsin(theta) * r });
+  }
+
+  const edges: number[] = [];
+  let perimeter = 0;
+  for (let i = 0; i < n; i++) {
+    const a = vertices[i]!;
+    const b = vertices[(i + 1) % n]!;
+    const e = Math.sqrt((b.x - a.x) * (b.x - a.x) + (b.z - a.z) * (b.z - a.z));
+    edges.push(e);
+    perimeter += e;
+  }
+
+  const corners: Corner[] = vertices.map((at, i) => {
+    const prev = vertices[(i - 1 + n) % n]!;
+    const next = vertices[(i + 1) % n]!;
+    const headingIn = headingOf(at.x - prev.x, at.z - prev.z);
+    const headingOut = headingOf(next.x - at.x, next.z - at.z);
+    const turn = angleDelta(headingIn, headingOut);
+    const severity = Math.abs(turn);
+    // Radius by how far the corner turns: a hairpin is slow, a kink is fast.
+    const radius = fallback
+      ? 60
+      : severity >= 2
+        ? MIN_CORNER_RADIUS + rng() * 12
+        : severity >= 1.3
+          ? 28 + rng() * 32
+          : severity >= 0.7
+            ? 40 + rng() * 70
+            : 70 + rng() * 160;
+    return { at, headingIn, headingOut, turn, radius };
+  });
+
+  // Solve the scale for the exact lap length, shrinking any pair of corners
+  // that would leave no straight between them.
+  const tangent = (c: Corner) => c.radius * dtan(Math.abs(c.turn) / 2);
+  let scale = 0;
+  let fits = false;
+  for (let iteration = 0; iteration < 40 && !fits; iteration++) {
+    let extra = 0;
+    for (const c of corners) extra += 2 * tangent(c) - c.radius * Math.abs(c.turn);
+    scale = (length + extra) / perimeter;
+    fits = true;
+    for (let i = 0; i < n; i++) {
+      const a = corners[i]!;
+      const b = corners[(i + 1) % n]!;
+      const room = scale * edges[i]! - MIN_STRAIGHT;
+      const need = tangent(a) + tangent(b);
+      if (need <= room) continue;
+      fits = false;
+      const shrink = room > 0 ? Math.max(0.5, room / need) : 0.5;
+      a.radius = Math.max(MIN_CORNER_RADIUS, a.radius * shrink);
+      b.radius = Math.max(MIN_CORNER_RADIUS, b.radius * shrink);
     }
   }
-  return best;
+  if (!fits) return null;
+
+  const dense = traceLoop(corners, scale, length);
+  smoothLoop(dense, 6, 2);
+  const loop = resample(dense, count, length);
+  return acceptable(loop) ? loop : null;
 }
 
+/**
+ * The filleted polygon as points one metre apart.
+ *
+ * Each corner is an arc from the point `T = r tan(turn / 2)` before its
+ * vertex to the point `T` after it, tangent to both edges; between arcs the
+ * road is straight. Evaluated in closed form along the arc rather than
+ * integrated, so the loop meets itself exactly.
+ */
+function traceLoop(corners: Corner[], scale: number, length: number): Vec[] {
+  type Piece =
+    | { kind: "arc"; from: Vec; heading: number; sign: number; radius: number; length: number }
+    | { kind: "straight"; from: Vec; heading: number; length: number };
+
+  const pieces: Piece[] = [];
+  const n = corners.length;
+  for (let i = 0; i < n; i++) {
+    const c = corners[i]!;
+    const next = corners[(i + 1) % n]!;
+    const t = c.radius * dtan(Math.abs(c.turn) / 2);
+    const vx = c.at.x * scale;
+    const vz = c.at.z * scale;
+    const from = { x: vx - dsin(c.headingIn) * t, z: vz - dcos(c.headingIn) * t };
+    pieces.push({
+      kind: "arc",
+      from,
+      heading: c.headingIn,
+      sign: c.turn >= 0 ? 1 : -1,
+      radius: c.radius,
+      length: c.radius * Math.abs(c.turn),
+    });
+    const exit = { x: vx + dsin(c.headingOut) * t, z: vz + dcos(c.headingOut) * t };
+    const tNext = next.radius * dtan(Math.abs(next.turn) / 2);
+    const nx = next.at.x * scale - dsin(next.headingIn) * tNext;
+    const nz = next.at.z * scale - dcos(next.headingIn) * tNext;
+    pieces.push({
+      kind: "straight",
+      from: exit,
+      heading: c.headingOut,
+      length: Math.sqrt((nx - exit.x) * (nx - exit.x) + (nz - exit.z) * (nz - exit.z)),
+    });
+  }
+
+  const total = pieces.reduce((sum, p) => sum + p.length, 0);
+  const samples = Math.max(64, Math.round(length));
+  const step = total / samples;
+  const out: Vec[] = [];
+  let piece = 0;
+  let start = 0;
+  for (let k = 0; k < samples; k++) {
+    const u = k * step;
+    while (piece < pieces.length - 1 && start + pieces[piece]!.length < u) {
+      start += pieces[piece]!.length;
+      piece += 1;
+    }
+    const p = pieces[piece]!;
+    const along = Math.min(p.length, Math.max(0, u - start));
+    if (p.kind === "straight") {
+      out.push({ x: p.from.x + dsin(p.heading) * along, z: p.from.z + dcos(p.heading) * along });
+    } else {
+      // Heading grows by sign/radius per metre: x = x0 + s r (cos h0 - cos h),
+      // z = z0 + s r (sin h - sin h0).
+      const h = p.heading + (p.sign * along) / p.radius;
+      out.push({
+        x: p.from.x + p.sign * p.radius * (dcos(p.heading) - dcos(h)),
+        z: p.from.z + p.sign * p.radius * (dsin(h) - dsin(p.heading)),
+      });
+    }
+  }
+  return out;
+}
+
+/** A centred moving average around the loop, applied `passes` times. */
+function smoothLoop(points: Vec[], halfWidth: number, passes: number): void {
+  const n = points.length;
+  const window = halfWidth * 2 + 1;
+  for (let pass = 0; pass < passes; pass++) {
+    const xs = points.map((p) => p.x);
+    const zs = points.map((p) => p.z);
+    for (let i = 0; i < n; i++) {
+      let sx = 0;
+      let sz = 0;
+      for (let k = -halfWidth; k <= halfWidth; k++) {
+        const j = (i + k + n) % n;
+        sx += xs[j]!;
+        sz += zs[j]!;
+      }
+      points[i] = { x: sx / window, z: sz / window };
+    }
+  }
+}
+
+/**
+ * `count` points at even arc length around a closed polyline, scaled so the
+ * loop is exactly `length` metres. Smoothing shortens a loop by a fraction of
+ * a percent; scaling it back keeps a lap the length it says it is.
+ */
+function resample(points: Vec[], count: number, length: number): Vec[] {
+  const n = points.length;
+  const cumulative: number[] = [0];
+  for (let i = 1; i <= n; i++) {
+    const a = points[i - 1]!;
+    const b = points[i % n]!;
+    cumulative.push(cumulative[i - 1]! + Math.sqrt((b.x - a.x) * (b.x - a.x) + (b.z - a.z) * (b.z - a.z)));
+  }
+  const perimeter = cumulative[n]!;
+  const scale = length / perimeter;
+  const out: Vec[] = [];
+  let cursor = 0;
+  for (let i = 0; i < count; i++) {
+    const target = (i / count) * perimeter;
+    while (cursor < n - 1 && cumulative[cursor + 1]! < target) cursor++;
+    const span = cumulative[cursor + 1]! - cumulative[cursor]!;
+    const t = span > 0 ? (target - cumulative[cursor]!) / span : 0;
+    const a = points[cursor]!;
+    const b = points[(cursor + 1) % n]!;
+    out.push({ x: (a.x + (b.x - a.x) * t) * scale, z: (a.z + (b.z - a.z) * t) * scale });
+  }
+  return out;
+}
+
+/**
+ * Whether a sampled loop is a circuit worth racing on: no bend tighter than
+ * the limit, no part of the road within a barrier's reach of another, and a
+ * straight long enough for a grid.
+ */
+function acceptable(loop: Vec[]): boolean {
+  const n = loop.length;
+  const headings = loop.map((p, i) => {
+    const next = loop[(i + 1) % n]!;
+    return headingOf(next.x - p.x, next.z - p.z);
+  });
+  let straightRun = 0;
+  let longest = 0;
+  for (let i = 0; i < n * 2; i++) {
+    const k = Math.abs(angleDelta(headings[i % n]!, headings[(i + 1) % n]!)) / POINT_STEP;
+    if (i < n && k > MAX_CURVATURE * 0.97) return false;
+    straightRun = k < STRAIGHT_CURVATURE ? straightRun + 1 : 0;
+    longest = Math.max(longest, Math.min(straightRun, n));
+  }
+  if (longest * POINT_STEP < Math.min(140, n * POINT_STEP * 0.12)) return false;
+
+  // Points this far apart along the road are "unrelated": anything nearer is
+  // the same corner or the same straight.
+  const skip = Math.ceil(150 / POINT_STEP);
+  const limit = MIN_CLEARANCE * MIN_CLEARANCE;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + skip; j < n; j++) {
+      if (n - (j - i) < skip) break;
+      const dx = loop[j]!.x - loop[i]!.x;
+      const dz = loop[j]!.z - loop[i]!.z;
+      if (dx * dx + dz * dz < limit) return false;
+    }
+  }
+  return true;
+}
+
+/** The start line: 45% down the longest straight, with room behind for the grid. */
+function startLineIndex(points: TrackPoint[]): number {
+  const n = points.length;
+  const straight = (i: number) =>
+    Math.abs(angleDelta(points[i % n]!.heading, points[(i + 1) % n]!.heading)) / POINT_STEP < STRAIGHT_CURVATURE;
+
+  // Begin the scan just after a bend so a straight is never split by the seam.
+  let begin = 0;
+  for (let i = 0; i < n; i++) {
+    if (!straight(i)) {
+      begin = i + 1;
+      break;
+    }
+  }
+
+  let bestStart = 0;
+  let bestLength = 0;
+  let runStart = -1;
+  for (let k = 0; k <= n; k++) {
+    const i = begin + k;
+    if (k < n && straight(i)) {
+      if (runStart < 0) runStart = i;
+      continue;
+    }
+    if (runStart >= 0 && i - runStart > bestLength) {
+      bestLength = i - runStart;
+      bestStart = runStart;
+    }
+    runStart = -1;
+  }
+
+  const into = Math.min(Math.max(Math.round(bestLength * 0.45), Math.min(7, bestLength - 1)), Math.max(0, bestLength - 2));
+  return (bestStart + into) % n;
+}
 
 /**
  * Scatters dynamic obstacles (barricades, barrels, spikes, lasers, cones).
@@ -278,8 +468,14 @@ function placeObstacles(rng: () => number, length: number): TrackObstacle[] {
   const obstacles: TrackObstacle[] = [];
   let distance = 140;
 
+  /*
+   * Spaced for racing rather than dodging: one every 120-270 m. Closer than
+   * that and, on real tyres, the fastest line around a lap is a slalom, and
+   * the race is decided by who hits the fewest barrels rather than who brakes
+   * latest.
+   */
   while (distance < length - 140) {
-    distance += 65 + rng() * 95;
+    distance += 120 + rng() * 150;
     if (distance >= length - 140) break;
 
     const roll = rng();

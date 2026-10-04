@@ -80,8 +80,6 @@ interface Entry {
   defaultPaint: string;
   heightM: number;
   engine: string;
-  /** The quoted 0-100, which a test holds the physics to. */
-  zeroTo100S: number;
   physics: VehiclePhysicsSpec;
 }
 
@@ -97,11 +95,19 @@ const NA_V12 = [0.3, 0.42, 0.56, 0.68, 0.78, 0.86, 0.93, 0.98, 1, 0.97, 0.9];
 const TURBO_FOUR = [0.35, 0.55, 0.9, 1, 1, 1, 0.98, 0.93, 0.86, 0.78, 0.68];
 const NA_V8 = [0.62, 0.74, 0.84, 0.91, 0.96, 1, 1, 0.97, 0.92, 0.86, 0.78];
 const ANTI_LAG_FOUR = [0.45, 0.7, 0.95, 1, 1, 1, 1, 0.97, 0.9, 0.8, 0.7];
-const RACE_V6 = [0.25, 0.35, 0.5, 0.66, 0.8, 0.9, 0.97, 1, 0.98, 0.94, 0.86];
+const RACE_FOUR = [0.25, 0.35, 0.5, 0.66, 0.8, 0.9, 0.97, 1, 0.98, 0.94, 0.86];
 const SCREAMER_FOUR = [0.25, 0.35, 0.48, 0.6, 0.72, 0.82, 0.9, 0.97, 1, 0.97, 0.88];
 const BIG_FOUR = [0.4, 0.55, 0.7, 0.82, 0.9, 0.96, 1, 0.99, 0.95, 0.9, 0.82];
 const TRIPLE = [0.55, 0.7, 0.85, 0.95, 1, 1, 0.97, 0.93, 0.88, 0.8, 0.72];
 
+/*
+ * The six cars. Each is a class, not a model: dimensions from real cars of
+ * that class (911, Huracan, a Group B-style hatch, Mustang, an R4 rally car,
+ * a regional single-seater), power and mass in the class's range, and tyre
+ * and aero figures that put its cornering where the class sits. The 0-100
+ * time and the garage bars are *not* written here — they are measured from
+ * these figures by the same force model the race runs.
+ */
 const CAR_ENTRIES: Entry[] = [
   {
     id: "car-gt",
@@ -112,7 +118,6 @@ const CAR_ENTRIES: Entry[] = [
     defaultPaint: "#b3122e",
     heightM: 1.3,
     engine: "3.0 L twin-turbo flat-six",
-    zeroTo100S: 3.4,
     physics: {
       kind: "car",
       drivetrain: "RWD",
@@ -131,12 +136,14 @@ const CAR_ENTRIES: Entry[] = [
       gearRatios: [3.91, 2.29, 1.65, 1.3, 1.08, 0.88, 0.71],
       shiftMs: 80,
       drivelineEfficiency: 0.88,
-      downforceArea: 0.3,
+      downforceArea: 0.35,
       rollingResistance: 0.012,
-      tyreGrip: 1.24,
+      tyreGrip: 1.18,
       slideGrip: 0.82,
       brakeG: 1.4,
       steerLockDeg: 34,
+      steerRate: 6,
+      turnInS: 0.085,
       looseness: 0.45,
       looseSurface: 0.25,
       driftAngleDeg: 34,
@@ -153,7 +160,6 @@ const CAR_ENTRIES: Entry[] = [
     defaultPaint: "#e8b400",
     heightM: 1.14,
     engine: "6.5 L naturally aspirated V12",
-    zeroTo100S: 3.1,
     physics: {
       kind: "car",
       drivetrain: "RWD",
@@ -163,8 +169,8 @@ const CAR_ENTRIES: Entry[] = [
       lengthM: 4.7,
       widthM: 2.03,
       wheelbaseM: 2.72,
-      rearShare: 0.58,
-      cgHeightM: 0.42,
+      rearShare: 0.6,
+      cgHeightM: 0.4,
       wheelRadiusM: 0.36,
       idleRpm: 1000,
       redlineRpm: 8900,
@@ -172,13 +178,15 @@ const CAR_ENTRIES: Entry[] = [
       gearRatios: [3.08, 2.19, 1.63, 1.29, 1.03, 0.84, 0.69],
       shiftMs: 60,
       drivelineEfficiency: 0.88,
-      downforceArea: 0.55,
+      downforceArea: 0.7,
       rollingResistance: 0.012,
-      tyreGrip: 1.2,
+      tyreGrip: 1.27,
       slideGrip: 0.8,
-      brakeG: 1.45,
+      brakeG: 1.5,
       steerLockDeg: 32,
-      looseness: 0.35,
+      steerRate: 5.5,
+      turnInS: 0.095,
+      looseness: 0.4,
       looseSurface: 0.15,
       driftAngleDeg: 30,
       tractionControl: 0.7,
@@ -188,23 +196,23 @@ const CAR_ENTRIES: Entry[] = [
   {
     id: "car-hatch",
     name: "Kestrel RS",
-    blurb: "A stripped, all-wheel-drive hot hatch. First off every line and every hairpin; runs out of gears on a long straight.",
+    blurb: "A stripped, all-wheel-drive hot hatch. First off every line and out of every hairpin; runs out of gears on a long straight.",
     modelId: "hatch",
     className: "Hot hatch",
     defaultPaint: "#1f6fd1",
     heightM: 1.44,
     engine: "2.0 L turbo inline-four",
-    zeroTo100S: 2.9,
     physics: {
       kind: "car",
       drivetrain: "AWD",
       massKg: 1150,
       powerKw: 300,
       topSpeedKmh: 250,
+      gearLimited: true,
       lengthM: 4.15,
       widthM: 1.8,
       wheelbaseM: 2.56,
-      rearShare: 0.4,
+      rearShare: 0.42,
       cgHeightM: 0.5,
       wheelRadiusM: 0.33,
       idleRpm: 850,
@@ -213,12 +221,14 @@ const CAR_ENTRIES: Entry[] = [
       gearRatios: [3.36, 2.24, 1.7, 1.36, 1.12, 0.94],
       shiftMs: 70,
       drivelineEfficiency: 0.85,
-      downforceArea: 0.15,
+      downforceArea: 0.2,
       rollingResistance: 0.012,
-      tyreGrip: 1.25,
-      slideGrip: 0.85,
+      tyreGrip: 1.2,
+      slideGrip: 0.86,
       brakeG: 1.35,
       steerLockDeg: 36,
+      steerRate: 7.5,
+      turnInS: 0.065,
       looseness: 0.2,
       looseSurface: 0.45,
       driftAngleDeg: 32,
@@ -235,34 +245,35 @@ const CAR_ENTRIES: Entry[] = [
     defaultPaint: "#0f3d2e",
     heightM: 1.4,
     engine: "5.0 L naturally aspirated V8",
-    zeroTo100S: 4.1,
     physics: {
       kind: "car",
       drivetrain: "RWD",
       massKg: 1720,
-      powerKw: 375,
+      powerKw: 400,
       topSpeedKmh: 290,
       lengthM: 4.81,
       widthM: 1.92,
       wheelbaseM: 2.72,
-      rearShare: 0.47,
-      cgHeightM: 0.52,
+      rearShare: 0.5,
+      cgHeightM: 0.53,
       wheelRadiusM: 0.35,
       idleRpm: 750,
       redlineRpm: 7500,
       torqueCurve: NA_V8,
       gearRatios: [3.66, 2.43, 1.69, 1.32, 1.0, 0.75],
-      shiftMs: 220,
+      shiftMs: 180,
       drivelineEfficiency: 0.86,
-      downforceArea: 0.08,
+      downforceArea: 0.05,
       rollingResistance: 0.013,
-      tyreGrip: 1.17,
-      slideGrip: 0.84,
-      brakeG: 1.3,
+      tyreGrip: 1.1,
+      slideGrip: 0.86,
+      brakeG: 1.25,
       steerLockDeg: 33,
+      steerRate: 4.5,
+      turnInS: 0.13,
       looseness: 1,
       looseSurface: 0.35,
-      driftAngleDeg: 42,
+      driftAngleDeg: 36,
       tractionControl: 0.2,
       fragility: 0.75,
     },
@@ -276,13 +287,13 @@ const CAR_ENTRIES: Entry[] = [
     defaultPaint: "#f2f2ee",
     heightM: 1.48,
     engine: "1.6 L turbo inline-four, anti-lag",
-    zeroTo100S: 3.4,
     physics: {
       kind: "car",
       drivetrain: "AWD",
       massKg: 1260,
-      powerKw: 250,
+      powerKw: 235,
       topSpeedKmh: 228,
+      gearLimited: true,
       lengthM: 4.1,
       widthM: 1.82,
       wheelbaseM: 2.57,
@@ -297,10 +308,12 @@ const CAR_ENTRIES: Entry[] = [
       drivelineEfficiency: 0.85,
       downforceArea: 0.32,
       rollingResistance: 0.013,
-      tyreGrip: 1.19,
-      slideGrip: 0.9,
+      tyreGrip: 1.15,
+      slideGrip: 0.92,
       brakeG: 1.3,
       steerLockDeg: 38,
+      steerRate: 7,
+      turnInS: 0.075,
       looseness: 0.55,
       looseSurface: 1,
       driftAngleDeg: 40,
@@ -317,31 +330,32 @@ const CAR_ENTRIES: Entry[] = [
     defaultPaint: "#e8e8e8",
     heightM: 0.98,
     engine: "1.8 L turbo inline-four",
-    zeroTo100S: 3.0,
     physics: {
       kind: "car",
       drivetrain: "RWD",
       massKg: 700,
-      powerKw: 175,
-      topSpeedKmh: 248,
+      powerKw: 170,
+      topSpeedKmh: 240,
       lengthM: 5.0,
       widthM: 1.85,
       wheelbaseM: 2.85,
       rearShare: 0.6,
-      cgHeightM: 0.32,
+      cgHeightM: 0.3,
       wheelRadiusM: 0.3,
       idleRpm: 2500,
       redlineRpm: 8750,
-      torqueCurve: RACE_V6,
+      torqueCurve: RACE_FOUR,
       gearRatios: [2.92, 2.06, 1.62, 1.33, 1.13, 0.98],
       shiftMs: 40,
       drivelineEfficiency: 0.9,
-      downforceArea: 1.8,
+      downforceArea: 1.45,
       rollingResistance: 0.014,
-      tyreGrip: 1.42,
-      slideGrip: 0.74,
-      brakeG: 2.2,
+      tyreGrip: 1.45,
+      slideGrip: 0.72,
+      brakeG: 2.4,
       steerLockDeg: 22,
+      steerRate: 8,
+      turnInS: 0.05,
       looseness: 0.25,
       looseSurface: 0,
       driftAngleDeg: 20,
@@ -361,7 +375,6 @@ const BIKE_ENTRIES: Entry[] = [
     defaultPaint: "#c8102e",
     heightM: 1.12,
     engine: "599 cc inline-four",
-    zeroTo100S: 3.2,
     physics: bikePhysics({ massKg: 270, powerKw: 88, topSpeedKmh: 262, redlineRpm: 16000, torqueCurve: SCREAMER_FOUR, tyreGrip: 1.2 }),
   },
   {
@@ -373,8 +386,7 @@ const BIKE_ENTRIES: Entry[] = [
     defaultPaint: "#111214",
     heightM: 1.14,
     engine: "999 cc inline-four",
-    zeroTo100S: 3.0,
-    physics: bikePhysics({ massKg: 282, powerKw: 150, topSpeedKmh: 299, redlineRpm: 14500, torqueCurve: BIG_FOUR, tyreGrip: 1.16, wheelbaseM: 1.44 }),
+    physics: bikePhysics({ massKg: 282, powerKw: 150, topSpeedKmh: 299, redlineRpm: 14500, torqueCurve: BIG_FOUR, tyreGrip: 1.16, wheelbaseM: 1.44, turnInS: 0.13 }),
   },
   {
     id: "bike-agile",
@@ -385,8 +397,7 @@ const BIKE_ENTRIES: Entry[] = [
     defaultPaint: "#f2c300",
     heightM: 1.08,
     engine: "399 cc inline-four",
-    zeroTo100S: 3.7,
-    physics: bikePhysics({ massKg: 240, powerKw: 60, topSpeedKmh: 222, redlineRpm: 15500, torqueCurve: SCREAMER_FOUR, tyreGrip: 1.28, wheelbaseM: 1.36 }),
+    physics: bikePhysics({ massKg: 240, powerKw: 60, topSpeedKmh: 222, redlineRpm: 15500, torqueCurve: SCREAMER_FOUR, tyreGrip: 1.28, wheelbaseM: 1.36, turnInS: 0.08 }),
   },
   {
     id: "bike-tough",
@@ -397,7 +408,6 @@ const BIKE_ENTRIES: Entry[] = [
     defaultPaint: "#f05a1a",
     heightM: 1.15,
     engine: "890 cc triple",
-    zeroTo100S: 3.3,
     physics: bikePhysics({ massKg: 272, powerKw: 87, topSpeedKmh: 240, redlineRpm: 11000, torqueCurve: TRIPLE, tyreGrip: 1.2, fragility: 0.9 }),
   },
 ];
@@ -411,6 +421,7 @@ function bikePhysics(p: {
   tyreGrip: number;
   wheelbaseM?: number;
   fragility?: number;
+  turnInS?: number;
 }): VehiclePhysicsSpec {
   return {
     kind: "bike",
@@ -436,6 +447,9 @@ function bikePhysics(p: {
     slideGrip: 0.8,
     brakeG: 1.2,
     steerLockDeg: 28,
+    steerRate: 6.5,
+    // A bike has to lean before it turns, which is the lag a rider feels.
+    turnInS: p.turnInS ?? 0.1,
     looseness: 0.3,
     looseSurface: 0.3,
     driftAngleDeg: 16,
@@ -449,24 +463,39 @@ function bar(value: number): number {
   return Math.round(Math.min(10, Math.max(1, value)) * 10) / 10;
 }
 
+/** 0..1 position of a value between two ends of a scale (either way round). */
+function along(value: number, from: number, to: number): number {
+  return Math.min(1, Math.max(0, (value - from) / (to - from)));
+}
+
+/** The stop from 100 km/h on dry tarmac, metres. */
+export function stoppingDistance100(t: VehicleTuning): number {
+  const v = 100 / 3.6;
+  return (v * v) / (2 * t.brakePower);
+}
+
 /**
  * The bars, from the physics.
  *
- * Each maps a real quantity onto 1-10 over the range the roster spans, so the
- * spread is readable: top speed (180-350 km/h), simulated 0-100 (5.0-2.5 s),
- * steady cornering at 150 km/h (1.0-2.4 g), and the shortest stop from 100
- * km/h the tyres and brakes allow (44-24 m).
+ * Each maps a measured quantity onto 1-10 over the range real cars span, so a
+ * bar means the same thing for every car and the spread is readable:
+ *
+ *   speed         top speed, 200-350 km/h
+ *   acceleration  simulated 0-100 km/h, 5.0-2.5 s
+ *   handling      steady cornering at 120 km/h (0.95-2.0 g), with a quarter
+ *                 for how quickly the chassis answers the wheel
+ *   braking       the shortest stop from 100 km/h, 42-22 m
  */
 export function statsFromTuning(t: VehicleTuning): VehicleStats {
   const kmh = t.maxSpeed * 3.6;
   const launch = simulateZeroTo100(t);
-  const cornering = lateralG(t, 150 / 3.6);
-  const stopping = (27.8 * 27.8) / (2 * t.brakePower);
+  const cornering = lateralG(t, 120 / 3.6);
+  const agility = along(t.turnIn, 0.16, 0.05);
   return {
-    speed: bar(1 + ((kmh - 180) / 170) * 9),
-    acceleration: bar(1 + ((5 - launch) / 2.5) * 9),
-    handling: bar(1 + ((cornering - 1) / 1.4) * 9),
-    braking: bar(1 + ((44 - stopping) / 20) * 9),
+    speed: bar(1 + along(kmh, 200, 350) * 9),
+    acceleration: bar(1 + along(launch, 5, 2.5) * 9),
+    handling: bar(1 + (0.75 * along(cornering, 0.95, 2) + 0.25 * agility) * 9),
+    braking: bar(1 + along(stoppingDistance100(t), 42, 22) * 9),
   };
 }
 
@@ -491,7 +520,8 @@ function build(entries: Entry[], kind: "car" | "bike"): VehicleSpec[] {
         powerKw: e.physics.powerKw,
         drivetrain: e.physics.drivetrain,
         topSpeedKmh: e.physics.topSpeedKmh,
-        zeroTo100S: e.zeroTo100S,
+        // Measured, never quoted: the figure on the card is one the car does.
+        zeroTo100S: Math.round(simulateZeroTo100(tuning) * 10) / 10,
         torqueNm: Math.round(tuning.peakTorque),
         engine: e.engine,
         gears: e.physics.gearRatios.length,
@@ -533,6 +563,16 @@ const HEX_PAINT = /^#[0-9a-f]{6}$/;
 /** A paint is any lower-case '#rrggbb'. Anything else is refused, never guessed. */
 export function isValidPaint(value: unknown): value is string {
   return typeof value === "string" && HEX_PAINT.test(value);
+}
+
+/**
+ * The finish a colour is sprayed in: the configurator's own for a listed
+ * paint, metallic for anything custom — the commonest factory finish, and the
+ * one that reads as "a car" rather than "a toy" under studio light.
+ */
+export function paintFinishOf(hex: string | null | undefined): PaintFinish {
+  const value = typeof hex === "string" ? hex.toLowerCase() : "";
+  return PAINTS.find((p) => p.hex === value)?.finish ?? "metallic";
 }
 
 /** The paint to use: the player's choice if it is a colour, else the car's own. */

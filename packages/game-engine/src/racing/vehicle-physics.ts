@@ -49,6 +49,20 @@ export interface VehiclePhysicsSpec {
   /** What the brake system alone can do, in g. Tyres usually run out first. */
   brakeG: number;
   steerLockDeg: number;
+  /** Steering rack speed: full lock per second. Quick on a single-seater, slow on a muscle car. */
+  steerRate: number;
+  /**
+   * How long the chassis takes to answer the wheel, seconds: the lag between
+   * turning in and the car actually taking the corner. Yaw inertia, roll and
+   * tyre build-up rolled into one number — the thing that makes a hatchback
+   * feel darty and a 1.7 t muscle car feel like it is thinking about it.
+   */
+  turnInS: number;
+  /**
+   * Top speed is where top gear meets the rev limiter, not where drag wins.
+   * A car built for corners runs out of gears on a long straight.
+   */
+  gearLimited?: boolean;
   /** 0 planted .. 1 loose: how readily the rear steps out under power. */
   looseness: number;
   /** 0 tarmac-only .. 1 rally: how little loose and slippery surfaces cost. */
@@ -106,6 +120,11 @@ export interface VehicleTuning {
   stoppieDecel: number;
   /** Full lock at parking speed, radians. */
   steerLock: number;
+  /** Rack speed, full lock per second. */
+  steerRate: number;
+  /** Chassis response time, seconds. */
+  turnIn: number;
+  gearLimited: boolean;
   looseness: number;
   looseSurface: number;
   driftMaxSlip: number;
@@ -133,10 +152,15 @@ export function deriveTuning(id: string, spec: VehiclePhysicsSpec): VehicleTunin
   /*
    * Gearing: top gear reaches redline a little above the quoted top speed, so
    * the car is drag-limited just under the limiter — the usual road-car
-   * arrangement — and a boost has some rev range left to use.
+   * arrangement — and a boost has some rev range left to use. A gear-limited
+   * car is geared to hit the limiter at exactly its top speed instead, with
+   * drag solved as if it could have gone 12% further: it bounces off the
+   * limiter on a long straight, the way a short-geared car does.
    */
-  const overspeed = spec.kind === "bike" ? 1.04 : 1.05;
+  const gearLimited = spec.gearLimited === true;
+  const overspeed = gearLimited ? 1 : spec.kind === "bike" ? 1.04 : 1.05;
   const finalDrive = (redlineOmega * spec.wheelRadiusM) / (maxSpeed * overspeed * topRatio);
+  const dragSpeed = gearLimited ? maxSpeed * 1.12 : maxSpeed;
 
   // Peak torque such that the curve's best torque * omega is the quoted power.
   let bestShape = 0;
@@ -149,11 +173,11 @@ export function deriveTuning(id: string, spec: VehiclePhysicsSpec): VehicleTunin
   const peakTorque = powerW / Math.max(1, bestShape);
 
   // Drag solved from the power available at the quoted top speed in top gear.
-  const rpmAtTop = (maxSpeed / spec.wheelRadiusM) * topRatio * finalDrive / RPM_TO_RAD;
-  const torqueAtTop = peakTorque * sampleCurve(spec.torqueCurve, rpmAtTop / spec.redlineRpm);
-  const powerAtTop = torqueAtTop * rpmAtTop * RPM_TO_RAD * spec.drivelineEfficiency;
+  const rpmAtTop = (dragSpeed / spec.wheelRadiusM) * topRatio * finalDrive / RPM_TO_RAD;
+  const torqueAtTop = peakTorque * sampleCurve(spec.torqueCurve, Math.min(1, rpmAtTop / spec.redlineRpm));
+  const powerAtTop = torqueAtTop * Math.min(rpmAtTop, spec.redlineRpm) * RPM_TO_RAD * spec.drivelineEfficiency;
   const rolling = spec.rollingResistance * spec.massKg * GRAVITY;
-  const dragK = Math.max(0.05, (powerAtTop / maxSpeed - rolling) / (maxSpeed * maxSpeed));
+  const dragK = Math.max(0.05, (powerAtTop / dragSpeed - rolling) / (dragSpeed * dragSpeed));
 
   const frontShare = 1 - spec.rearShare;
   const drivenShare =
@@ -194,6 +218,9 @@ export function deriveTuning(id: string, spec: VehiclePhysicsSpec): VehicleTunin
     wheelieAccel: (GRAVITY * frontShare * spec.wheelbaseM) / spec.cgHeightM,
     stoppieDecel: (GRAVITY * spec.rearShare * spec.wheelbaseM) / spec.cgHeightM,
     steerLock: (spec.steerLockDeg * PI) / 180,
+    steerRate: spec.steerRate,
+    turnIn: spec.turnInS,
+    gearLimited,
     looseness: spec.looseness,
     looseSurface: spec.looseSurface,
     driftMaxSlip: (spec.driftAngleDeg * PI) / 180,
@@ -282,9 +309,10 @@ export function bestGearFor(t: VehicleTuning, speed: number): number {
 /**
  * 0-100 km/h, simulated with the same force model the race uses.
  *
- * Flat road, full throttle from a perfect launch, shifting at the limiter.
- * The garage's acceleration bar and the spec-sheet test both read this, so a
- * figure on a card is one the car actually achieves.
+ * Flat road, full throttle, no launch bonus, shifting where the race's
+ * automatic box shifts and losing what its traction control loses. The
+ * garage's acceleration bar and the spec sheet both read this, so a figure on
+ * a card is one the car actually achieves on the track.
  */
 export function simulateZeroTo100(t: VehicleTuning): number {
   let v = 0;
@@ -292,26 +320,37 @@ export function simulateZeroTo100(t: VehicleTuning): number {
   let shift = 0;
   const dt = TICK_SECONDS;
   for (let tick = 1; tick < TICK_RATE * 20; tick++) {
+    shift = Math.max(0, shift - 1);
+    if (shift === 0 && gear < t.gearRatios.length && wheelRpm(t, v, gear) >= t.redlineRpm * SHIFT_UP_AT) {
+      gear += 1;
+      shift = t.shiftTicks;
+    }
     let drive = 0;
-    if (shift > 0) {
-      shift -= 1;
-    } else {
-      let rpm = wheelRpm(t, v, gear);
-      if (rpm >= t.redlineRpm * 0.985 && gear < t.gearRatios.length) {
-        gear += 1;
-        shift = t.shiftTicks;
-        continue;
-      }
-      rpm = Math.max(rpm, t.launchRpm);
+    if (shift === 0) {
+      const rpm = gear === 1 ? Math.max(wheelRpm(t, v, gear), t.launchRpm) : Math.max(wheelRpm(t, v, gear), t.idleRpm);
       drive = (engineTorque(t, Math.min(rpm, t.redlineRpm)) * overallRatio(t, gear) * t.drivelineEfficiency) / t.wheelRadius;
     }
-    const normal = GRAVITY + downforceAccel(t, v);
-    drive = Math.min(drive, tractionLimit(t, normal, t.mu, 0));
+    drive = tractionTrim(t, drive, tractionLimit(t, GRAVITY + downforceAccel(t, v), t.mu, 0)).drive;
     const resist = t.dragK * v * v + t.rollingResistance * t.mass * GRAVITY;
     v += ((drive - resist) / t.mass) * dt;
     if (v >= 100 / 3.6) return tick * dt;
   }
   return 20;
+}
+
+/** The automatic box changes up at this fraction of redline under full throttle. */
+export const SHIFT_UP_AT = 0.97;
+
+/**
+ * Drive force the tyres actually deliver, and how hard they are spinning.
+ *
+ * Over the traction limit, traction control trims the torque back to it; with
+ * less of it the tyres spin and deliver a little less than the limit.
+ */
+export function tractionTrim(t: VehicleTuning, drive: number, traction: number): { drive: number; wheelspin: number } {
+  if (drive <= traction) return { drive, wheelspin: 0 };
+  const wheelspin = clamp((drive - traction) / Math.max(1, traction), 0, 1);
+  return { drive: traction * (1 - 0.12 * (1 - t.tractionControl) * Math.min(1, wheelspin * 2)), wheelspin };
 }
 
 /**

@@ -4,3 +4,6 @@ export * from "./loops.js";
 export * from "./loop-player.js";
 export * from "./engine.js";
 export * from "./shared.js";
+export * from "./synth.js";
+export * from "./engine-voice.js";
+export * from "./positional.js";

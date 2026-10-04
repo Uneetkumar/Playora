@@ -18,7 +18,7 @@ export interface FakeParam {
 }
 
 export interface FakeNode {
-  kind: "gain" | "osc" | "buffer" | "filter" | "shaper" | "panner" | "destination";
+  kind: "gain" | "osc" | "buffer" | "filter" | "shaper" | "panner" | "panner3d" | "destination";
   outputs: unknown[];
   connect: ReturnType<typeof vi.fn>;
   disconnect: ReturnType<typeof vi.fn>;
@@ -49,6 +49,8 @@ export interface FakeContextOptions {
   state?: AudioContextState;
   /** Leave out createStereoPanner, as Safari before 14.1 does. */
   noPanner?: boolean;
+  /** Offer createPanner (3D), which the engine itself never uses. */
+  panner3d?: boolean;
 }
 
 export function fakeContext(options: FakeContextOptions = {}) {
@@ -101,6 +103,19 @@ export function fakeContext(options: FakeContextOptions = {}) {
     createBiquadFilter: () => node("filter", { type: "lowpass", frequency: fakeParam(350), Q: fakeParam(1) }),
     createWaveShaper: () => node("shaper", { curve: null, oversample: "none" }),
     createStereoPanner: options.noPanner ? undefined : () => node("panner", { pan: fakeParam(0) }),
+    createPanner: options.panner3d
+      ? () =>
+          node("panner3d", {
+            panningModel: "equalpower",
+            distanceModel: "inverse",
+            refDistance: 1,
+            maxDistance: 10000,
+            rolloffFactor: 1,
+            positionX: fakeParam(0),
+            positionY: fakeParam(0),
+            positionZ: fakeParam(0),
+          })
+      : undefined,
     createBuffer: (_channels: number, frames: number, rate: number) => ({
       length: frames,
       duration: frames / rate,
