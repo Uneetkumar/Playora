@@ -1,4 +1,5 @@
 import { createRng, seedFromString } from "../lib/rng.js";
+import { datan2, dcos, dsin } from "./dmath.js";
 import type {
   BoostPad,
   TrackObject,
@@ -50,7 +51,9 @@ export const MAX_CURVATURE = 0.05;
  * even distances, and curvature is the turn from one sample to the next.
  *
  * Deterministic, so the server sends only the seed and every client rebuilds
- * the identical circuit. No geometry crosses the network.
+ * the identical circuit. No geometry crosses the network. The trigonometry is
+ * the polynomial kind from dmath, because curvature feeds the physics and
+ * `Math.sin` is allowed to differ by an ulp between browsers.
  */
 export function buildTrack(seedSource: string | number, length: number): TrackSpec {
   const seed = typeof seedSource === "number" ? seedSource : seedFromString(seedSource);
@@ -59,11 +62,18 @@ export function buildTrack(seedSource: string | number, length: number): TrackSp
   const points = buildCentreline(rng, Math.max(600, length));
   const actualLength = points.length * POINT_STEP;
 
+  /*
+   * Curvature is stored right-positive: the same sign as `lateral` and
+   * steering, so "positive curves right" is literally true. Point headings
+   * grow when the road turns *left* (heading = atan2(dx, dz) with the driver's
+   * right at -x), so the sign is flipped here, once. It was not, before — and
+   * the old physics pushed cars towards the inside of every corner as a result.
+   */
   const segments: TrackSegment[] = points.map((point, i) => {
     const next = points[(i + 1) % points.length]!;
     return {
       length: POINT_STEP,
-      curvature: angleDelta(point.heading, next.heading) / POINT_STEP,
+      curvature: -angleDelta(point.heading, next.heading) / POINT_STEP,
       gradient: (next.y - point.y) / POINT_STEP,
     };
   });
@@ -110,7 +120,7 @@ function traceHarmonics(
   const radiusAt = (theta: number) =>
     1 +
     harmonics.reduce(
-      (sum, h) => sum + h.amplitude * scaleAmplitude * Math.sin(h.k * theta + h.phase),
+      (sum, h) => sum + h.amplitude * scaleAmplitude * dsin(h.k * theta + h.phase),
       0,
     );
 
@@ -119,14 +129,16 @@ function traceHarmonics(
   for (let i = 0; i < FINE; i++) {
     const theta = (i / FINE) * Math.PI * 2;
     const r = radiusAt(theta);
-    fine.push({ x: Math.cos(theta) * r, z: Math.sin(theta) * r });
+    fine.push({ x: dcos(theta) * r, z: dsin(theta) * r });
   }
 
   const cumulative: number[] = [0];
   for (let i = 1; i <= FINE; i++) {
     const a = fine[i - 1]!;
     const b = fine[i % FINE]!;
-    cumulative.push(cumulative[i - 1]! + Math.hypot(b.x - a.x, b.z - a.z));
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    cumulative.push(cumulative[i - 1]! + Math.sqrt(dx * dx + dz * dz));
   }
   const perimeter = cumulative[FINE]!;
   const scale = targetLength / perimeter;
@@ -160,8 +172,8 @@ function peakCurvature(raw: Array<{ x: number; z: number }>): number {
     const a = raw[i]!;
     const b = raw[(i + 1) % raw.length]!;
     const c = raw[(i + 2) % raw.length]!;
-    const h1 = Math.atan2(b.x - a.x, b.z - a.z);
-    const h2 = Math.atan2(c.x - b.x, c.z - b.z);
+    const h1 = datan2(b.x - a.x, b.z - a.z);
+    const h2 = datan2(c.x - b.x, c.z - b.z);
     worst = Math.max(worst, Math.abs(angleDelta(h1, h2)) / POINT_STEP);
   }
   return worst;
@@ -206,17 +218,23 @@ function buildCentreline(rng: () => number, targetLength: number): TrackPoint[] 
     raw = traceHarmonics(harmonics, amplitude, targetLength);
   }
 
-  // Gentle elevation, periodic so there is no step at the join.
+  /*
+   * Gentle elevation, periodic so there is no step at the join.
+   *
+   * Capped so the steepest grade stays near 9%: gradient is real now (g sin
+   * theta on every car), and the same 14 m of hill that is a rolling crest on
+   * a 3 km lap is a 20% wall on a 900 m one.
+   */
   const hillPhase = rng() * Math.PI * 2;
-  const hillAmplitude = 5 + rng() * 9;
+  const hillAmplitude = Math.min(5 + rng() * 9, (0.09 * targetLength) / (Math.PI * 4));
 
   const points: TrackPoint[] = raw.map((point, i) => {
     const next = raw[(i + 1) % raw.length]!;
     return {
       x: point.x,
-      y: Math.sin((i / raw.length) * Math.PI * 4 + hillPhase) * hillAmplitude,
+      y: dsin((i / raw.length) * Math.PI * 4 + hillPhase) * hillAmplitude,
       z: point.z,
-      heading: Math.atan2(next.x - point.x, next.z - point.z),
+      heading: datan2(next.x - point.x, next.z - point.z),
       distance: i * POINT_STEP,
     };
   });
@@ -485,6 +503,57 @@ function placeCoins(
 export function wrapDistance(track: TrackSpec, distance: number): number {
   const length = track.length;
   return ((distance % length) + length) % length;
+}
+
+/**
+ * How far `to` is ahead of `from` around the loop, in (-length/2, length/2].
+ *
+ * The comparison every "is that car near me" question needs. Raw total
+ * distances say a car one lap down is 2 km behind you when it is alongside,
+ * which is how lapped cars used to drive straight through each other.
+ */
+export function lapDelta(track: TrackSpec, from: number, to: number): number {
+  const length = track.length;
+  let d = wrapDistance(track, to - from);
+  if (d > length / 2) d -= length;
+  return d;
+}
+
+/** Metres from `from` forward to the lap-local point `at`, in [0, length). */
+export function distanceAhead(track: TrackSpec, from: number, at: number): number {
+  return wrapDistance(track, at - from);
+}
+
+/**
+ * Whether moving from total distance `previous` to `next` passes the lap-local
+ * point `at` — on any lap, including across the finish-line seam.
+ *
+ * Half-open (previous, next], so an object exactly under a stationary car is
+ * not struck every tick and one crossed exactly on a tick boundary is struck
+ * once.
+ */
+export function crossedOnLap(track: TrackSpec, at: number, previous: number, next: number): boolean {
+  const travelled = next - previous;
+  if (!(travelled > 0)) return false;
+  if (travelled >= track.length) return true;
+  const ahead = wrapDistance(track, at - previous);
+  return ahead > 0 && ahead <= travelled;
+}
+
+/** Whether a total distance lies within `length` metres after a lap-local start. */
+export function withinOnLap(track: TrackSpec, start: number, length: number, distance: number): boolean {
+  return wrapDistance(track, distance - start) <= length;
+}
+
+/**
+ * World yaw of a vehicle for the renderer.
+ *
+ * Vehicle angles are right-positive relative to the road; track headings grow
+ * to the left. Getting this sign wrong makes a drifting car point out of the
+ * corner, so it lives here rather than in every caller.
+ */
+export function vehicleWorldYaw(trackHeading: number, heading: number): number {
+  return trackHeading - heading;
 }
 
 /** Curvature and gradient at a distance along the circuit. */
