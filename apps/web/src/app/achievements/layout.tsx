@@ -4,7 +4,7 @@ import { pageMetadata } from "../../lib/seo";
 export const metadata: Metadata = pageMetadata(
   "Achievements",
   "All 25 Playora achievements and how to unlock them.",
-  "/achievements",
+  "/achievements"
 );
 
 export default function Layout({ children }: { children: React.ReactNode }) {

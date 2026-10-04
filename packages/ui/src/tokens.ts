@@ -141,6 +141,8 @@ const dark = {
    * white card that gold is 1.7:1 and disappears.
    */
   reward: badgeTop,
+  /** Reward as text on its own 15% tint (the lobby's Host chip). */
+  "reward-ink": badgeTop,
   streak: badgeHot,
   pink: palette.pink,
   border: palette.border,
@@ -200,6 +202,9 @@ const light = {
   "destructive-ink": "#A61E2D",
   // 4.6:1 and 4.8:1 on the page: legible as text, and well past 3:1 as an icon.
   reward: "#A16207",
+  // `reward` is 4.0:1 on its own tint, so a chip's words take this: 5.6:1
+  // on the tint over a card, 5.3:1 over the page.
+  "reward-ink": "#854D0E",
   streak: "#C2410C",
   pink: "#E4256B",
   border: "#E2E5EE",
@@ -231,6 +236,22 @@ export const badgeColors = {
 } as const;
 
 export type BadgeToken = keyof typeof badgeColors;
+
+/**
+ * Words laid straight on cover art (a game card's title and meta line) and
+ * the scrim under them. Theme-independent for the badges' reason: art is
+ * art. A scrim in the page colour turned light theme's covers into a white
+ * haze, with dark words fighting whatever showed through it; the dark-theme
+ * ink with light words reads the same over any cover in either theme.
+ * `muted-foreground` is 8.3:1 on the scrim's own colour.
+ */
+export const artColors = {
+  scrim: palette.background,
+  foreground: palette.foreground,
+  "muted-foreground": palette.mutedForeground,
+} as const;
+
+export type ArtToken = keyof typeof artColors;
 
 /** Round to one decimal and drop a trailing `.0`, as shadcn writes them. */
 function fmt(n: number): string {
@@ -274,6 +295,7 @@ export const hslTokens = {
   dark: toTriplets(themes.dark),
   light: toTriplets(themes.light),
   badge: toTriplets(badgeColors),
+  art: toTriplets(artColors),
 } as const;
 
 /**
@@ -481,7 +503,7 @@ export const motion = {
 /**
  * The custom-property declarations globals.css should hold for a theme, one
  * per line. `dark` is the `:root` block, so it also carries the theme-agnostic
- * variables (badges, radius); `light` only overrides what differs.
+ * variables (badges, art, radius); `light` only overrides what differs.
  */
 export function cssVariables(theme: ThemeName): string[] {
   const lines: string[] = [];
@@ -492,6 +514,9 @@ export function cssVariables(theme: ThemeName): string[] {
   if (theme === "dark") {
     for (const key of Object.keys(hslTokens.badge) as BadgeToken[]) {
       lines.push(`--badge-${key}: ${hslTokens.badge[key]};`);
+    }
+    for (const key of Object.keys(hslTokens.art) as ArtToken[]) {
+      lines.push(`--art-${key}: ${hslTokens.art[key]};`);
     }
     // shadcn's base radius; Tailwind's scale is fixed from `radius` above.
     lines.push(`--radius: ${radius.lg};`);

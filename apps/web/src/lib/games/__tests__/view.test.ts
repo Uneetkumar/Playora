@@ -3,7 +3,9 @@ import type { GameId } from "@playora/game-types";
 import { GAME_CATALOG } from "../catalog";
 import { GAME_META } from "../meta";
 import {
+  NEW_LIMIT,
   NEW_WINDOW_DAYS,
+  UPDATED_LIMIT,
   UPDATED_WINDOW_DAYS,
   badgeFor,
   formatPlayers,
@@ -69,6 +71,39 @@ describe("badge priority: LIVE > NEW > UPDATED > HOT > none", () => {
 
   it("accepts a Date as well as a timestamp", () => {
     expect(badgeFor(meta(), { now: new Date(at(RELEASED, 1)) })).toBe("new");
+  });
+
+  it("leaves a game out of the limit without NEW, and without UPDATED inside its NEW window", () => {
+    const m = meta({ updatedAt: "2026-01-10" });
+    const now = at("2026-01-11");
+    expect(badgeFor(m, { now }, { new: false, updated: true })).toBeNull();
+    expect(badgeFor({ ...m, featured: true }, { now }, { new: false, updated: true })).toBe("hot");
+    const later = meta({ updatedAt: "2026-03-01" });
+    expect(badgeFor(later, { now: at("2026-03-02") }, { new: true, updated: false })).toBeNull();
+  });
+});
+
+describe("badge limits across the catalogue", () => {
+  // The day after sixteen games shipped and fourteen more were updated.
+  const launch = at("2026-10-04");
+
+  it("puts NEW and UPDATED on a few games at a time, not every card", () => {
+    const views = gameViews({ now: launch });
+    const count = (badge: string) => views.filter((v) => v.badge === badge).length;
+    expect(count("new")).toBe(NEW_LIMIT);
+    expect(count("updated")).toBe(UPDATED_LIMIT);
+    expect(views.filter((v) => v.badge === null).length).toBeGreaterThan(views.length / 2);
+  });
+
+  it("breaks a tie of dates by catalogue order", () => {
+    const fresh = gameViews({ now: launch }).filter((v) => v.badge === "new").map((v) => v.id);
+    const sameDay = GAME_CATALOG.filter((g) => GAME_META[g.id].releasedAt === "2026-10-03").map((g) => g.id);
+    expect(fresh).toEqual(sameDay.slice(0, NEW_LIMIT));
+  });
+
+  it("still lets a lone recent release wear NEW", () => {
+    const chess = GAME_META.chess;
+    expect(gameView("chess", { now: at(chess.releasedAt, 1) }).badge).toBe("new");
   });
 });
 

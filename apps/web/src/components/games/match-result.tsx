@@ -4,7 +4,7 @@ import * as React from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { SPRING } from "@playora/animation";
-import { Button, Badge, buttonVariants, cn } from "@playora/ui";
+import { Button, Badge, cn } from "@playora/ui";
 import { ACHIEVEMENTS_BY_ID, levelProgress, rankForRating } from "@playora/progression";
 import type { PlayerProgressionPayload } from "@playora/protocol";
 import type { GameResult, Player } from "@playora/game-types";
@@ -12,6 +12,7 @@ import { Trophy, RotateCcw, Home, Flame, ArrowUpRight, ArrowDownRight } from "lu
 import { useAudio } from "../../lib/audio/use-audio";
 import { useCountUp, useReducedMotionPref } from "../../lib/motion";
 import { AchievementBadge } from "./achievement-badge";
+import { formatDuration } from "./match-history-row";
 import {
   RESULT_ICON,
   RESULT_SOUND,
@@ -32,6 +33,12 @@ interface MatchResultProps {
   rematchLabel?: string;
   /** Disabled while waiting on the other player to accept. */
   rematchPending?: boolean;
+  /**
+   * Why a rematch cannot start, such as an opponent having left so the game
+   * is a seat short. The button stays, disabled, with this as its label, so
+   * the screen says why rather than offering a vote the server will refuse.
+   */
+  rematchUnavailable?: string | null;
   onExit?: () => void;
   exitHref?: string;
 }
@@ -55,12 +62,6 @@ export function outcomeFor(result: GameResult, userId: string): MatchOutcome {
   return result.winnerId === userId ? "win" : "loss";
 }
 
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.round(seconds % 60);
-  return m > 0 ? `${m}m ${s}s` : `${s}s`;
-}
-
 /**
  * Counts up to a number, because a rating change that simply appears reads as a
  * label rather than something the player earned.
@@ -78,6 +79,7 @@ export function MatchResult({
   onRematch,
   rematchLabel = "Rematch",
   rematchPending = false,
+  rematchUnavailable = null,
   onExit,
   exitHref,
 }: MatchResultProps) {
@@ -101,7 +103,7 @@ export function MatchResult({
       (mine?.unlockedAchievements ?? [])
         .map((id) => ACHIEVEMENTS_BY_ID[id])
         .filter((a): a is NonNullable<typeof a> => Boolean(a)),
-    [mine],
+    [mine]
   );
 
   const levelledUp = mine !== null && mine.levelAfter > mine.levelBefore;
@@ -132,7 +134,7 @@ export function MatchResult({
       <div
         className={cn(
           "pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b to-transparent",
-          glow,
+          glow
         )}
         aria-hidden
       />
@@ -144,7 +146,7 @@ export function MatchResult({
           transition={reduced ? { duration: 0 } : { ...spring, delay: 0.08 }}
           className={cn(
             "mx-auto flex h-16 w-16 items-center justify-center rounded-xl border border-border bg-background/60",
-            accent,
+            accent
           )}
         >
           <Icon className="h-8 w-8" aria-hidden />
@@ -157,7 +159,9 @@ export function MatchResult({
 
         <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
           <Badge variant="secondary">{REASON_COPY[result.reason] ?? "Finished"}</Badge>
-          <Badge variant="outline">{formatDuration(result.durationSeconds)}</Badge>
+          <Badge variant="outline">
+            <span className="numeric">{formatDuration(result.durationSeconds)}</span>
+          </Badge>
           {mine && !mine.rated && <Badge variant="outline">Unrated</Badge>}
         </div>
       </div>
@@ -177,22 +181,31 @@ export function MatchResult({
                 transition={reduced ? { duration: 0 } : { delay: 0.15 + i * 0.07 }}
                 className={cn(
                   "flex items-center justify-between gap-3 rounded-xl border px-3 py-2",
-                  isMe ? "border-primary/40 bg-primary/5" : "border-border/60",
+                  isMe ? "border-primary/40 bg-primary/5" : "border-border/60"
                 )}
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="font-mono-num w-5 text-sm text-muted-foreground">{score.rank}</span>
-                  <span className="truncate text-sm font-medium text-foreground">
-                    {player?.displayName ?? "Player"}
-                    {isMe && <span className="ml-1.5 text-xs text-muted-foreground">(you)</span>}
+                  <span className="font-mono-num w-5 text-sm text-muted-foreground">
+                    {score.rank}
                   </span>
-                  {score.isWinner && <Trophy className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />}
+                  {/* The name gives way to a long rating column; "(you)" never does. */}
+                  <span className="flex min-w-0 items-baseline gap-1.5">
+                    <span className="truncate text-sm font-medium text-foreground">
+                      {player?.displayName ?? "Player"}
+                    </span>
+                    {isMe && <span className="shrink-0 text-xs text-muted-foreground">(you)</span>}
+                  </span>
+                  {score.isWinner && (
+                    <Trophy className="h-3.5 w-3.5 shrink-0 text-reward" aria-hidden />
+                  )}
                 </div>
 
                 {theirs?.rated ? (
                   <RatingDelta payload={theirs} />
                 ) : (
-                  <span className="font-mono-num text-sm font-bold text-foreground">{score.score}</span>
+                  <span className="font-mono-num text-sm font-bold text-foreground">
+                    {score.score}
+                  </span>
                 )}
               </motion.li>
             );
@@ -219,7 +232,9 @@ export function MatchResult({
             <Stat
               label="Win streak"
               value={mine.streak > 0 ? String(mine.streak) : "—"}
-              icon={mine.streak >= 3 ? <Flame className="h-3.5 w-3.5 text-warning" aria-hidden /> : null}
+              icon={
+                mine.streak >= 3 ? <Flame className="h-3.5 w-3.5 text-streak" aria-hidden /> : null
+              }
             />
           </div>
 
@@ -248,7 +263,7 @@ export function MatchResult({
               initial={reduced ? false : { opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={reduced ? { duration: 0 } : { ...spring, delay: 0.5 }}
-              className="mt-3 rounded-lg bg-success/10 px-3 py-2 text-center text-sm font-semibold text-success"
+              className="mt-3 rounded-lg bg-success/15 px-3 py-2 text-center text-sm font-semibold text-success-ink"
             >
               Level up — you reached level {mine.levelAfter}
             </motion.p>
@@ -256,24 +271,30 @@ export function MatchResult({
         </div>
       )}
 
+      {/* `flex-1` only in the row: in the phone's column it would set the
+          buttons' height basis to zero and squash them to their label. */}
       <div className="flex flex-col gap-2 border-t border-border px-6 py-4 sm:flex-row">
         {onRematch && (
-          <Button variant="play" className="flex-1" onClick={onRematch} disabled={rematchPending}>
+          <Button
+            variant="play"
+            className="sm:flex-1"
+            onClick={onRematch}
+            disabled={rematchPending || Boolean(rematchUnavailable)}
+          >
             <RotateCcw className="h-4 w-4" aria-hidden />
-            {rematchPending ? "Waiting for opponent…" : rematchLabel}
+            {rematchUnavailable || (rematchPending ? "Waiting for opponent…" : rematchLabel)}
           </Button>
         )}
         {exitHref ? (
-          <Link
-            href={exitHref}
-            className={cn(buttonVariants({ variant: "outline" }), "flex-1")}
-          >
-            <Home className="h-4 w-4" aria-hidden />
-            Back to games
-          </Link>
+          <Button asChild variant="outline" className="sm:flex-1">
+            <Link href={exitHref}>
+              <Home className="h-4 w-4" aria-hidden />
+              Back to games
+            </Link>
+          </Button>
         ) : (
           onExit && (
-            <Button variant="outline" className="flex-1" onClick={onExit}>
+            <Button variant="outline" className="sm:flex-1" onClick={onExit}>
               <Home className="h-4 w-4" aria-hidden />
               Back
             </Button>
@@ -303,8 +324,8 @@ function RatingDelta({ payload }: { payload: PlayerProgressionPayload }) {
           flat
             ? "bg-muted text-muted-foreground"
             : up
-              ? "bg-success/15 text-success"
-              : "bg-destructive/15 text-destructive",
+              ? "bg-success/15 text-success-ink"
+              : "bg-destructive/15 text-destructive-ink"
         )}
       >
         {!flat &&
@@ -327,7 +348,9 @@ function XpBar({ payload }: { payload: PlayerProgressionPayload }) {
   const levelledUp = payload.levelAfter > payload.levelBefore;
 
   // On a level-up the bar would have to run backwards, so it fills to the end
-  // of the old level instead and the new level is announced separately.
+  // of the old level instead and the new level is announced separately. The
+  // label says the same thing the bar does: the new level's "10 / 350" under
+  // a full bar marked with the old level read as a contradiction.
   const from = before.progress;
   const to = levelledUp ? 1 : after.progress;
 
@@ -337,9 +360,13 @@ function XpBar({ payload }: { payload: PlayerProgressionPayload }) {
         <span className="text-tag uppercase text-muted-foreground">
           Level {payload.levelBefore}
         </span>
-        <span className="font-mono-num text-muted-foreground">
-          {after.xpIntoLevel} / {after.xpForNextLevel} XP
-        </span>
+        {levelledUp ? (
+          <span className="font-semibold text-success-ink">Complete</span>
+        ) : (
+          <span className="font-mono-num text-muted-foreground">
+            {after.xpIntoLevel} / {after.xpForNextLevel} XP
+          </span>
+        )}
       </div>
       <div className="h-2.5 overflow-hidden rounded-full bg-muted">
         <motion.div
@@ -369,15 +396,13 @@ function Stat({
       <div
         className={cn(
           "font-mono-num flex items-center justify-center gap-1 text-sm font-bold",
-          highlight ? "text-success" : "text-foreground",
+          highlight ? "text-success-ink" : "text-foreground"
         )}
       >
         {icon}
         {value}
       </div>
-      <div className="mt-0.5 text-tag uppercase text-muted-foreground">
-        {label}
-      </div>
+      <div className="mt-0.5 text-tag uppercase text-muted-foreground">{label}</div>
     </div>
   );
 }

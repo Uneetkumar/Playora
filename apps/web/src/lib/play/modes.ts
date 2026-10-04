@@ -1,5 +1,5 @@
 import { botRegistry } from "@playora/bot-engine";
-import { gameEngineRegistry } from "@playora/game-engine";
+import { gameEngineRegistry, levelsFor } from "@playora/game-engine";
 import type { GameId } from "@playora/game-types";
 
 export type PlayModeId =
@@ -15,6 +15,7 @@ export type PlayModeId =
 export interface PlayMode {
   id: PlayModeId;
   label: string;
+  /** One factual line on the mode: what it is, not how it feels. */
   tagline: string;
   /** Sign-in required. Guest counts as signed in. */
   needsAuth: boolean;
@@ -157,7 +158,7 @@ export function getPlayModes(gameId: GameId): PlayMode[] {
       {
         id: "solo",
         label: "Play",
-        tagline: "Jump straight in — no account, no internet",
+        tagline: "Plays on this device, no account needed",
         needsAuth: false,
         needsInternet: false,
         status: "ready",
@@ -169,9 +170,11 @@ export function getPlayModes(gameId: GameId): PlayMode[] {
     list.push({
       id: "offline-ai",
       label: "Play vs AI",
+      // Not "seven levels": several board games have a single bot, or fold
+      // the seven onto their own easy / medium / hard.
       tagline: isRace
-        ? "Quick race against AI rivals with chosen difficulty"
-        : "Seven difficulty levels, no internet needed",
+        ? "A quick race against AI rivals at the level you pick"
+        : "You against the computer, on this device",
       needsAuth: false,
       needsInternet: false,
       status: "ready",
@@ -182,7 +185,7 @@ export function getPlayModes(gameId: GameId): PlayMode[] {
     list.push({
       id: "offline-career",
       label: "Career Mode",
-      tagline: "8 championship circuits, star challenges, and unlocks",
+      tagline: `${levelsFor(gameId).length} races against a growing field, each unlocking the next`,
       needsAuth: false,
       needsInternet: false,
       status: "ready",
@@ -230,8 +233,8 @@ export function getPlayModes(gameId: GameId): PlayMode[] {
       },
       {
         id: "lan",
-        label: "Same wifi",
-        tagline: "Direct local network play with 0ms lag — scan QR code to join",
+        label: "Same Wi-Fi",
+        tagline: "One device hosts on your network; the others scan its QR code to join",
         needsAuth: false,
         needsInternet: false,
         status: "ready",

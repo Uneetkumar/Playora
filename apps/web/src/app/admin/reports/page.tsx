@@ -1,8 +1,20 @@
 "use client";
 
 import * as React from "react";
-import { Badge, Button, Card, Input, LoadingState, cn } from "@playora/ui";
-import { Flag, ShieldCheck } from "lucide-react";
+import {
+  Badge,
+  Button,
+  Card,
+  Input,
+  Skeleton,
+  ToggleGroup,
+  ToggleGroupItem,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@playora/ui";
+import { Flag, Info, ShieldCheck } from "lucide-react";
+import { EmptyState } from "../../../components/page/empty-state";
 import { useAuthStore } from "../../../lib/store/auth-store";
 import { useStaffRole } from "../../../hooks/use-staff";
 import {
@@ -34,37 +46,44 @@ export default function AdminReportsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
+      <ToggleGroup
+        type="single"
+        value={filter}
+        onValueChange={(v) => v && setFilter(v as ReportStatus | "all")}
+        aria-label="Report status"
+        className="w-full sm:w-auto"
+      >
         {FILTERS.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            onClick={() => setFilter(f.id)}
-            aria-pressed={filter === f.id}
-            className={cn(
-              "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
-              filter === f.id
-                ? "border-primary bg-primary/15 text-primary-accent"
-                : "border-border text-muted-foreground hover:text-foreground",
-            )}
-          >
+          <ToggleGroupItem key={f.id} value={f.id} className="flex-1 sm:flex-none">
             {f.label}
-          </button>
+          </ToggleGroupItem>
         ))}
-      </div>
+      </ToggleGroup>
 
       {isLoading ? (
-        <LoadingState title="Loading reports" />
-      ) : error ? (
-        <Card className="border-destructive/40 bg-destructive/5 p-5 text-sm">{error}</Card>
-      ) : reports.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
-          <ShieldCheck className="h-8 w-8 text-success" aria-hidden />
-          <p className="font-display text-lg font-bold text-foreground">Nothing waiting</p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            No reports with this status.
-          </p>
+        <div role="status" aria-live="polite" className="space-y-3">
+          <span className="sr-only">Loading reports</span>
+          {[0, 1, 2].map((i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
         </div>
+      ) : error ? (
+        <p
+          role="alert"
+          className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive-ink"
+        >
+          <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          {error}
+        </p>
+      ) : reports.length === 0 ? (
+        <EmptyState
+          tone={filter === "open" ? "success" : "default"}
+          icon={<ShieldCheck />}
+          title={filter === "open" ? "Nothing waiting" : "No reports here"}
+          body={
+            filter === "open" ? "Every report has been dealt with." : "No reports with this status."
+          }
+        />
       ) : (
         <ul className="space-y-3">
           {reports.map((report) => (
@@ -107,7 +126,7 @@ function ReportCard({
   const open = report.status === "open";
 
   return (
-    <Card className="border-border bg-card p-4">
+    <Card className="p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -115,9 +134,7 @@ function ReportCard({
             <span className="font-display text-sm font-bold text-foreground">
               {report.reportedName}
             </span>
-            <Badge variant="outline" className="text-[10px]">
-              {report.reason}
-            </Badge>
+            <Badge variant="outline">{report.reason}</Badge>
             <Badge
               variant={
                 report.status === "open"
@@ -126,17 +143,15 @@ function ReportCard({
                     ? "destructive"
                     : "secondary"
               }
-              className="text-[10px]"
             >
               {report.status.replace("_", " ")}
             </Badge>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            Reported by {report.reporterName} ·{" "}
-            {new Date(report.createdAt).toLocaleString()}
+            Reported by {report.reporterName} · {new Date(report.createdAt).toLocaleString()}
           </p>
           {report.details && (
-            <p className="mt-2 rounded-lg bg-muted/40 px-3 py-2 text-sm text-foreground">
+            <p className="mt-2 rounded-lg bg-muted px-3 py-2 text-sm text-foreground">
               {report.details}
             </p>
           )}
@@ -147,7 +162,7 @@ function ReportCard({
         <div className="mt-4 border-t border-border pt-4">
           <label
             htmlFor={`reason-${report.id}`}
-            className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+            className="text-tag uppercase text-muted-foreground"
           >
             Reason — goes on the permanent record
           </label>
@@ -164,28 +179,32 @@ function ReportCard({
 
           <div className="mt-3 flex flex-wrap gap-2">
             {ACTIONS.map((action) => (
-              <Button
-                key={action.id}
-                size="sm"
-                variant={action.id === "ban" ? "destructive" : "outline"}
-                title={action.hint}
-                disabled={busy || !reason.trim() || !actorId}
-                onClick={() => void run(() => onAct(action.id, reason))}
-              >
-                {action.label}
-              </Button>
+              <Tooltip key={action.id}>
+                <TooltipTrigger asChild>
+                  {/* A span, so the hint still shows while the button is disabled. */}
+                  <span
+                    tabIndex={busy || !reason.trim() || !actorId ? 0 : -1}
+                    className="inline-flex rounded-md"
+                  >
+                    <Button
+                      size="sm"
+                      variant={action.id === "ban" ? "destructive" : "outline"}
+                      disabled={busy || !reason.trim() || !actorId}
+                      onClick={() => void run(() => onAct(action.id, reason))}
+                    >
+                      {action.label}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{action.hint}</TooltipContent>
+              </Tooltip>
             ))}
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={busy}
-              onClick={() => void run(onDismiss)}
-            >
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => void run(onDismiss)}>
               Dismiss
             </Button>
           </div>
 
-          <p aria-live="polite" className="mt-2 min-h-[1rem] text-xs text-destructive">
+          <p aria-live="polite" className="mt-2 min-h-[1rem] text-xs text-destructive-ink">
             {message}
           </p>
         </div>

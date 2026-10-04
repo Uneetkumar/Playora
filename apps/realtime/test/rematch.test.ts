@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { TestClient, mintToken, uuid } from "./helpers.js";
+import { TestClient, mintToken, readyUp, uuid } from "./helpers.js";
 
 afterEach(async () => {
   TestClient.closeAll();
@@ -22,8 +22,7 @@ async function finishedMatch(roomId: string) {
   await guest.authenticate(await mintToken(GUEST, { name: "Guest" }));
   await guest.waitFor("ROOM_STATE");
 
-  host.send({ type: "READY", roomId });
-  guest.send({ type: "READY", roomId });
+  await readyUp(guest, host, roomId, GUEST);
   host.send({ type: "START_GAME", roomId });
   const started = await host.waitFor("GAME_STARTED");
 
@@ -80,6 +79,45 @@ describe("RoomDurableObject: rematch", () => {
       (m) => m.type === "REMATCH_STATE" && m.votes.length === 0,
     );
     expect(cleared.type).toBe("REMATCH_STATE");
+  });
+
+  it("refuses a rematch with too few players left, and leaves the room playable", async () => {
+    const roomId = nextRoom("short");
+    const { host, guest, firstSessionId } = await finishedMatch(roomId);
+
+    guest.send({ type: "LEAVE_ROOM", roomId });
+    await host.waitWhere((m) => m.type === "PLAYER_LEFT" && m.playerId === GUEST);
+
+    // The only voter left agrees, but chess needs two.
+    host.send({ type: "REMATCH", roomId, accept: true });
+    const error = await host.waitWhere((m) => m.type === "ERROR");
+    expect(error).toMatchObject({ code: "INVALID_PLAYER_COUNT" });
+    expect(host.messagesOfType("GAME_STARTED")).toHaveLength(1);
+
+    // Still between matches, not stuck `in_game` with the old board, and the
+    // vote is not left hanging.
+    host.send({ type: "RESYNC", roomId });
+    const resync = await host.waitFor("RESYNC_STATE");
+    expect(resync.room.status).toBe("finished");
+    expect(resync.room.currentSessionId).toBe(firstSessionId);
+    const votes = host.messagesOfType("REMATCH_STATE").at(-1);
+    expect(votes?.type === "REMATCH_STATE" && votes.votes).toEqual([]);
+
+    // So Start says why it cannot deal, rather than "a game is in progress".
+    host.send({ type: "START_GAME", roomId });
+    const refused = await host.waitWhere((m) => m.type === "ERROR" && m !== error);
+    expect(refused).toMatchObject({ code: "INVALID_PLAYER_COUNT" });
+  });
+
+  it("rate limits a held-down rematch toggle", async () => {
+    const roomId = nextRoom("flood");
+    const { host } = await finishedMatch(roomId);
+
+    for (let i = 0; i < 20; i++) {
+      host.send({ type: "REMATCH", roomId, accept: i % 2 === 0 });
+    }
+    const limited = await host.waitWhere((m) => m.type === "ERROR" && m.code === "RATE_LIMITED");
+    expect(limited.type).toBe("ERROR");
   });
 
   it("refuses a rematch while no game has finished", async () => {

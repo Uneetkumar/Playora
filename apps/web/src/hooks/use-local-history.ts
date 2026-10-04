@@ -81,7 +81,10 @@ export function useLocalHistory(options?: {
   limit?: number;
 }): LocalMatchRecord[] {
   const { gameId, limit = 50 } = options ?? {};
-  const [records, setRecords] = React.useState<LocalMatchRecord[]>(() => loadHistory());
+  // Empty on the first render, filled in by the effect below: the server has
+  // no localStorage, so reading it here made the client's first render
+  // disagree with the server's HTML for anyone with offline history.
+  const [records, setRecords] = React.useState<LocalMatchRecord[]>([]);
 
   React.useEffect(() => {
     const onStorage = (e: StorageEvent) => {

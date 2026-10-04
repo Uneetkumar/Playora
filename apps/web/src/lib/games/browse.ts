@@ -16,7 +16,9 @@ export const PLAYERS_FILTERS = [
   { id: "1p", label: "1P" },
   { id: "2p", label: "2P" },
   { id: "2-4p", label: "2-4P" },
-  { id: "party", label: "Party" },
+  // Labelled by the count, not "Party": the genre chips have a Party too,
+  // and its games (all solo) never match this one. The id stays, for links.
+  { id: "party", label: "5+P" },
 ] as const;
 
 export type PlayersFilter = (typeof PLAYERS_FILTERS)[number]["id"];
@@ -27,9 +29,9 @@ export type PlayersFilter = (typeof PLAYERS_FILTERS)[number]["id"];
  *
  * The buckets are group sizes: on your own, a duel, a small group, a crowd.
  * "2-4P" is a game that takes three or four, so a two-only game like chess
- * lives under 2P rather than turning up in every bucket. "Party" is five or
- * more — which is why the solo party-themed arcade games do not appear there:
- * none of them can actually seat five people yet.
+ * lives under 2P rather than turning up in every bucket. "5+P" (id `party`)
+ * is five or more — which is why the solo party-themed arcade games do not
+ * appear there: none of them can actually seat five people yet.
  */
 const PLAYERS_MATCH: Record<PlayersFilter, (r: PlayerRange) => boolean> = {
   "1p": (r) => r.min === 1,

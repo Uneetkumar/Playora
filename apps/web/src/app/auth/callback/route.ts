@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { safeNextPath } from "@/lib/safe-next";
 
 /**
  * OAuth landing route.
@@ -10,7 +11,8 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const redirectTo = searchParams.get("next") ?? "/";
+  // Only a path on this site, so `next` cannot be used as an open redirect.
+  const safeNext = safeNextPath(searchParams.get("next"), "/");
   const oauthError = searchParams.get("error_description") ?? searchParams.get("error");
 
   if (oauthError) {
@@ -28,7 +30,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`);
   }
 
-  // Only same-origin relative paths, so `next` cannot be used as an open redirect.
-  const safeNext = redirectTo.startsWith("/") && !redirectTo.startsWith("//") ? redirectTo : "/";
   return NextResponse.redirect(`${origin}${safeNext}`);
 }

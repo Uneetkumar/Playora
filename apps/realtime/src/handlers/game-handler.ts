@@ -2,9 +2,12 @@ import type { WebSocket as CFWebSocket } from "@cloudflare/workers-types";
 import { gameEngineRegistry } from "@playora/game-engine";
 import type { AnyGameEngine, BaseGameAction, BaseGameState } from "@playora/game-engine";
 
+import { RoomOptionsSchema, playersNotReady, validateRoomOptions } from "@playora/protocol";
+
 import type { RoomContext } from "../durable-objects/room-context.js";
-import { readAttachment } from "../durable-objects/room-state.js";
+import { readAttachment, toRoomStatePayload } from "../durable-objects/room-state.js";
 import { log, errorFields } from "../lib/logger.js";
+import { engineConfigFor, resetReadiness, updateRoomSettings } from "./lobby-handler.js";
 
 export interface MatchResult {
   winnerId: string | null;
@@ -22,6 +25,14 @@ export interface MatchResult {
 /**
  * Starts a match. Host authority is re-checked against authoritative state here
  * rather than trusting anything captured when the socket opened.
+ *
+ * The ready check is enforced here, not only in the lobby UI: every seated
+ * human other than the host has to have readied up. Bots are always ready,
+ * and the host's Start is the host's ready (`playersNotReady`).
+ *
+ * `customRules` is the room's options under its older name. It is held to the
+ * same whitelist as UPDATE_ROOM_SETTINGS and saved to the room, so a client
+ * can no longer hand the engine a deck seed or a hand size of its choosing.
  */
 export async function startGame(
   ctx: RoomContext,
@@ -71,7 +82,46 @@ export async function startGame(
     return;
   }
 
-  await beginSession(ctx, customRules);
+  // Settings before the ready check: changing them clears everyone's ready
+  // (updateRoomSettings), so a Start that changes them waits for the guests
+  // to agree to the new ones rather than dealing on the old agreement.
+  if (customRules && Object.keys(customRules).length > 0) {
+    const parsed = RoomOptionsSchema.safeParse(customRules);
+    const allowed = parsed.success ? validateRoomOptions(room.gameId, parsed.data) : null;
+    if (!parsed.success || !allowed?.ok) {
+      ctx.send(ws, {
+        type: "ERROR",
+        code: "INVALID_SETTINGS",
+        message: allowed && !allowed.ok ? allowed.reason : "Those game settings are not valid.",
+      });
+      return;
+    }
+    // The same path the lobby's settings take, so the change is saved and
+    // everyone sees it before the deal.
+    await updateRoomSettings(ctx, ws, userId, parsed.data);
+  }
+
+  const waitingOn = playersNotReady(Object.values(room.players), room.hostUserId);
+  if (waitingOn.length > 0) {
+    ctx.send(ws, {
+      type: "ERROR",
+      code: "PLAYERS_NOT_READY",
+      message:
+        waitingOn.length === 1
+          ? "Waiting for 1 player to ready up."
+          : `Waiting for ${waitingOn.length} players to ready up.`,
+      details: { waitingOn },
+    });
+    return;
+  }
+
+  if (!(await beginSession(ctx))) {
+    ctx.send(ws, {
+      type: "ERROR",
+      code: "EXECUTION_ERROR",
+      message: "The game could not be dealt. The room is still open; try starting again.",
+    });
+  }
 }
 
 /**
@@ -81,25 +131,48 @@ export async function startGame(
  * different authority: nobody is the host of a rematch, both players agreed to
  * it. The permission and validation checks stay in the callers, so this is
  * never reachable without one of them having run.
+ *
+ * The engine deals first and the room is only touched once it has. An engine
+ * that refuses the deal (too few players, say) used to throw after the room
+ * was already marked `in_game`, which left it stuck there: Start refused as
+ * "already in progress", and anyone joining became a spectator. Returns false
+ * when the deal is refused, with the room exactly as it was.
  */
-export async function beginSession(
-  ctx: RoomContext,
-  customRules: Record<string, unknown> | undefined,
-): Promise<void> {
+export async function beginSession(ctx: RoomContext): Promise<boolean> {
   const { room } = ctx;
   const engine = gameEngineRegistry.get(room.gameId);
   const players = Object.values(room.players);
 
+  const sessionId = crypto.randomUUID();
+  let initialState: BaseGameState;
+  try {
+    initialState = engine.init(players, {
+      ...engineConfigFor(room),
+      roomId: room.roomId,
+      sessionId,
+      // Its own secret, never the session id. The session id is broadcast to
+      // every client, and a deck shuffled from it can be dealt again by anyone
+      // holding the open-source engine.
+      randomSeed: crypto.randomUUID(),
+    });
+  } catch (err) {
+    log.error("game.deal_failed", {
+      roomId: room.roomId,
+      gameId: room.gameId,
+      players: players.length,
+      ...errorFields(err),
+    });
+    return false;
+  }
+
   room.status = "in_game";
   room.sequenceNumber = 1;
-  room.currentSessionId = crypto.randomUUID();
+  room.currentSessionId = sessionId;
   room.startedAt = Date.now();
   room.endedAt = null;
-  room.currentGameState = engine.init(players, {
-    roomId: room.roomId,
-    sessionId: room.currentSessionId,
-    ...(customRules ?? {}),
-  });
+  // Readiness was for this deal; the next one asks again.
+  resetReadiness(room);
+  room.currentGameState = initialState;
   await ctx.persist();
 
   ctx.broadcast({
@@ -119,6 +192,7 @@ export async function beginSession(
     sessionId: room.currentSessionId,
     players: players.length,
   });
+  return true;
 }
 
 /**
@@ -258,6 +332,8 @@ export async function finishGame(ctx: RoomContext, result: MatchResult): Promise
   room.endedAt = Date.now();
   // A vote cast after the previous match must not carry into this one.
   room.rematchVotes = [];
+  // Nor a ready tick: the next match is a new decision.
+  resetReadiness(room);
   await ctx.persist();
 
   ctx.broadcast({
@@ -266,6 +342,9 @@ export async function finishGame(ctx: RoomContext, result: MatchResult): Promise
     sessionId: room.currentSessionId ?? "",
     result,
   });
+  // After the result, so a client that applies ROOM_STATE wholesale already
+  // knows the match is over.
+  ctx.broadcast({ type: "ROOM_STATE", room: toRoomStatePayload(room) });
 
   log.info("game.finished", {
     roomId: room.roomId,

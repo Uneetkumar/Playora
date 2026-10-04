@@ -3,10 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LoadingState, cn } from "@playora/ui";
-import { ShieldAlert, LayoutDashboard, Flag } from "lucide-react";
+import { Badge, Button, Skeleton, cn } from "@playora/ui";
+import { Flag, LayoutDashboard, ShieldAlert, ShieldCheck } from "lucide-react";
 import { useAuthStore } from "../../lib/store/auth-store";
 import { useStaffRole } from "../../hooks/use-staff";
+import { PageContainer, PageHeader } from "../../components/page/page-header";
+import { EmptyState } from "../../components/page/empty-state";
 
 const SECTIONS = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
@@ -29,39 +31,54 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (authLoading || isLoading) {
     return (
-      <div className="container mx-auto max-w-md px-4 py-16">
-        <LoadingState title="Checking access" />
-      </div>
+      <PageContainer className="space-y-8" role="status" aria-live="polite">
+        <span className="sr-only">Checking access</span>
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-40" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
+        </div>
+      </PageContainer>
     );
   }
 
   if (!isStaff) {
     return (
-      <div className="container mx-auto max-w-md px-4 py-20 text-center sm:px-6">
-        <ShieldAlert className="mx-auto h-10 w-10 text-muted-foreground" aria-hidden />
-        <h1 className="mt-3 font-display text-2xl font-bold text-foreground">Staff only</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          This area is for moderators and administrators.
-        </p>
-        <Link href="/" className="mt-6 inline-block text-sm text-primary-accent hover:underline">
-          Back to Playora
-        </Link>
-      </div>
+      <PageContainer className="max-w-2xl">
+        <EmptyState
+          className="mt-8"
+          icon={<ShieldAlert />}
+          title="Staff only"
+          body="This area is for moderators and administrators. If you should have access, ask an administrator to add your account."
+          action={
+            <Button asChild>
+              <Link href="/">Back to Playora</Link>
+            </Button>
+          }
+        />
+      </PageContainer>
     );
   }
 
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-8 sm:px-6">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-3xl font-extrabold text-foreground">Staff</h1>
-          <p className="text-sm text-muted-foreground">
-            Signed in as {role === "admin" ? "an administrator" : "a moderator"}.
-          </p>
-        </div>
-      </header>
+    <PageContainer className="space-y-8">
+      <PageHeader
+        icon={<ShieldCheck />}
+        title="Staff"
+        description="Moderation and the numbers behind the platform."
+        action={
+          <Badge variant={role === "admin" ? "default" : "secondary"}>
+            {role === "admin" ? "Administrator" : "Moderator"}
+          </Badge>
+        }
+      />
 
-      <nav className="mb-6 flex gap-2" aria-label="Staff sections">
+      {/* Route links, not tabs: each section is its own page with its own URL. */}
+      <nav aria-label="Staff sections" className="flex gap-6 border-b border-border">
         {SECTIONS.map((section) => {
           const active =
             section.href === "/admin" ? pathname === "/admin" : pathname.startsWith(section.href);
@@ -69,14 +86,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Link
               key={section.href}
               href={section.href}
+              aria-current={active ? "page" : undefined}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
+                "-mb-px inline-flex items-center gap-2 border-b-2 px-1 pb-3 pt-1 text-sm font-semibold transition-colors duration-hover ease-out-expo",
                 active
-                  ? "border-primary bg-primary/15 text-primary-accent"
-                  : "border-border text-muted-foreground hover:text-foreground",
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               )}
             >
-              <section.icon className="h-3.5 w-3.5" aria-hidden />
+              <section.icon className="h-4 w-4" aria-hidden />
               {section.label}
             </Link>
           );
@@ -84,6 +102,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </nav>
 
       {children}
-    </div>
+    </PageContainer>
   );
 }

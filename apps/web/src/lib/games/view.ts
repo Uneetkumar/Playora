@@ -24,6 +24,15 @@ export const NEW_WINDOW_DAYS = 30;
 /** And UPDATED for this many days after `updatedAt`. */
 export const UPDATED_WINDOW_DAYS = 14;
 
+/**
+ * At most this many games wear NEW at once, and this many UPDATED: the most
+ * recent in each window (`badgeSpotlight`). A badge is there to single a game
+ * out, and a launch of sixteen games one day, plus an update to fourteen the
+ * same day, had put a badge on every card in the catalogue.
+ */
+export const NEW_LIMIT = 4;
+export const UPDATED_LIMIT = 4;
+
 export interface GameViewContext {
   /**
    * The moment NEW and UPDATED are judged against.
@@ -81,24 +90,75 @@ function withinDays(isoDate: string, now: number, days: number): boolean {
   return age >= 0 && age < days;
 }
 
+function toTime(now: Date | number): number {
+  return typeof now === "number" ? now : now.getTime();
+}
+
+/** Whether a game is among the few allowed to wear NEW, and UPDATED, right now. */
+export interface BadgeSpotlight {
+  new: boolean;
+  updated: boolean;
+}
+
 /**
  * The single badge a card shows.
  *
  * LIVE beats everything because it is the only one that says something about
  * right now; NEW beats UPDATED because a game a month old has, trivially, been
- * updated recently; HOT is the editorial fallback for featured games that are
- * neither. An unparseable date or `now` simply fails every window.
+ * updated recently (so a game inside its NEW window never shows UPDATED, even
+ * when the limit leaves it without NEW); HOT is the editorial fallback for
+ * featured games that are neither. An unparseable date or `now` simply fails
+ * every window.
+ *
+ * `spotlight` is this game's place in the catalogue-wide limits; `gameView`
+ * passes `badgeSpotlight`'s answer, and without it only the windows apply.
  */
 export function badgeFor(
   meta: Pick<GameMeta, "releasedAt" | "updatedAt" | "featured">,
   { now, onlineCount = 0 }: GameViewContext,
+  spotlight: BadgeSpotlight = { new: true, updated: true },
 ): GameBadge | null {
   if (onlineCount > 0) return "live";
-  const t = typeof now === "number" ? now : now.getTime();
-  if (withinDays(meta.releasedAt, t, NEW_WINDOW_DAYS)) return "new";
-  if (withinDays(meta.updatedAt, t, UPDATED_WINDOW_DAYS)) return "updated";
+  const t = toTime(now);
+  const fresh = withinDays(meta.releasedAt, t, NEW_WINDOW_DAYS);
+  if (fresh && spotlight.new) return "new";
+  if (!fresh && spotlight.updated && withinDays(meta.updatedAt, t, UPDATED_WINDOW_DAYS)) return "updated";
   if (meta.featured) return "hot";
   return null;
+}
+
+/** The last answer, by day: every card on a page asks with the same `now`. */
+let spotlightCache: { t: number; ids: { new: ReadonlySet<GameId>; updated: ReadonlySet<GameId> } } | null = null;
+
+/**
+ * Which games may wear NEW and UPDATED at `now`: of the playable games inside
+ * each window, the `NEW_LIMIT` most recently released and the `UPDATED_LIMIT`
+ * most recently updated (leaving out any still inside its NEW window). Ties,
+ * such as a batch shipped on one day, go by catalogue order, the editorial
+ * one. Pure: the same `now` always picks the same games.
+ */
+export function badgeSpotlight(id: GameId, now: Date | number): BadgeSpotlight {
+  const t = toTime(now);
+  if (spotlightCache?.t !== t) {
+    const playable = GAME_CATALOG.filter((g) => isPlayable(g)).map((g) => ({ id: g.id, ...GAME_META[g.id] }));
+    const newest = (games: typeof playable, key: "releasedAt" | "updatedAt", limit: number) =>
+      new Set(
+        // `sort` is stable, so equal dates keep catalogue order.
+        [...games]
+          .sort((a, b) => Date.parse(b[key]) - Date.parse(a[key]))
+          .slice(0, limit)
+          .map((g) => g.id),
+      );
+    const fresh = playable.filter((g) => withinDays(g.releasedAt, t, NEW_WINDOW_DAYS));
+    const updated = playable.filter(
+      (g) => !withinDays(g.releasedAt, t, NEW_WINDOW_DAYS) && withinDays(g.updatedAt, t, UPDATED_WINDOW_DAYS),
+    );
+    spotlightCache = {
+      t,
+      ids: { new: newest(fresh, "releasedAt", NEW_LIMIT), updated: newest(updated, "updatedAt", UPDATED_LIMIT) },
+    };
+  }
+  return { new: spotlightCache.ids.new.has(id), updated: spotlightCache.ids.updated.has(id) };
 }
 
 /**
@@ -126,7 +186,7 @@ export function gameView(id: GameId, ctx: GameViewContext): GameView {
     modes: modeChipsFor(id),
     players,
     playersLabel: formatPlayers(players),
-    badge: badgeFor(meta, { now: ctx.now, onlineCount }),
+    badge: badgeFor(meta, { now: ctx.now, onlineCount }, badgeSpotlight(id, ctx.now)),
     onlineCount,
     playable: isPlayable(game),
   };

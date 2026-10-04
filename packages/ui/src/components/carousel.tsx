@@ -263,12 +263,19 @@ export const CarouselNext = React.forwardRef<HTMLButtonElement, ButtonProps>(
 );
 CarouselNext.displayName = "CarouselNext";
 
-/** One dot per snap point; the current one stretches into a pill. */
+/**
+ * One dot per snap point; the current one stretches into a pill.
+ *
+ * The dot is drawn small, but each button is a 24x40 target around it (32
+ * wide for the pill), with no gap between them: on a phone the dots can be
+ * the only way to pick a slide, and a 6px dot is not something a thumb can
+ * hit. The focus ring is drawn round the dot, where the eye already is.
+ */
 export function CarouselDots({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   const { scrollSnaps, selectedIndex, scrollTo } = useCarousel();
   if (scrollSnaps.length < 2) return null;
   return (
-    <div className={cn("flex items-center justify-center gap-1.5", className)} {...props}>
+    <div className={cn("flex items-center justify-center", className)} {...props}>
       {scrollSnaps.map((_, index) => {
         const current = index === selectedIndex;
         return (
@@ -278,12 +285,17 @@ export function CarouselDots({ className, ...props }: React.HTMLAttributes<HTMLD
             aria-label={`Go to slide ${index + 1} of ${scrollSnaps.length}`}
             aria-current={current || undefined}
             onClick={() => scrollTo(index)}
-            className={cn(
-              "h-1.5 rounded-full transition-[width,background-color] duration-hover ease-out-expo",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-              current ? "w-5 bg-foreground" : "w-1.5 bg-foreground/30 hover:bg-foreground/50",
-            )}
-          />
+            className="group flex h-10 min-w-6 items-center justify-center px-1.5 focus-visible:outline-none"
+          >
+            <span
+              aria-hidden
+              className={cn(
+                "block h-1.5 rounded-full transition-[width,background-color] duration-hover ease-out-expo",
+                "group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-background",
+                current ? "w-5 bg-foreground" : "w-1.5 bg-foreground/30 group-hover:bg-foreground/50",
+              )}
+            />
+          </button>
         );
       })}
     </div>

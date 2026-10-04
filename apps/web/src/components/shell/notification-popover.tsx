@@ -2,229 +2,208 @@
 
 import * as React from "react";
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
+import { Bell, CheckCheck, Flame, Sparkles, Swords, Trash2, Trophy, UserPlus, X } from "lucide-react";
 import {
-  Bell,
-  CheckCheck,
-  Trophy,
-  Swords,
-  UserPlus,
-  Sparkles,
-  X,
-  ChevronRight,
-  Flame,
-  Trash2,
-} from "lucide-react";
-import { Badge, cn } from "@playora/ui";
+  Button,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+  ScrollArea,
+  ToggleGroup,
+  ToggleGroupItem,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  cn,
+  focusRingClass,
+} from "@playora/ui";
 import { useNotifications, type NotificationItem } from "../../hooks/use-notifications";
+import { CountDot } from "./count-dot";
 
+/** One icon and tint per kind, from tokens, so both themes read. */
+const KIND: Record<NotificationItem["type"], { icon: LucideIcon; className: string }> = {
+  invite: { icon: Swords, className: "bg-primary/15 text-primary-accent" },
+  achievement: { icon: Trophy, className: "bg-reward/15 text-reward" },
+  friend: { icon: UserPlus, className: "bg-accent/15 text-accent" },
+  match: { icon: Flame, className: "bg-streak/15 text-streak" },
+  system: { icon: Sparkles, className: "bg-muted text-muted-foreground" },
+};
+
+const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+/**
+ * "just now", "5 minutes ago", "yesterday", from `createdAt`, worked out each
+ * time the list renders rather than stored, so it never freezes at "Just
+ * now". Nothing for an item without a usable time.
+ */
+function timeAgo(createdAt: number): string | null {
+  if (!Number.isFinite(createdAt) || createdAt <= 0) return null;
+  const seconds = Math.round((createdAt - Date.now()) / 1000);
+  const abs = Math.abs(seconds);
+  if (abs < 45) return "just now";
+  if (abs < 3600) return relative.format(Math.round(seconds / 60), "minute");
+  if (abs < 86_400) return relative.format(Math.round(seconds / 3600), "hour");
+  return relative.format(Math.round(seconds / 86_400), "day");
+}
+
+/**
+ * Notifications from the header. Restyled onto Popover (portalled, Escape
+ * and outside-click handled, focus returned) and tokens; the rows used to be
+ * clickable <div>s, which a keyboard could not reach, with a dismiss button
+ * that only appeared on mouse hover.
+ */
 export function NotificationPopover() {
   const [open, setOpen] = React.useState(false);
   const [filter, setFilter] = React.useState<"all" | "unread">("all");
-  const popoverRef = React.useRef<HTMLDivElement>(null);
+  const { notifications, unreadCount, markAsRead, markAllAsRead, deleteNotification, clearAll } =
+    useNotifications();
 
-  const {
-    notifications,
-    unreadCount,
-    markAsRead,
-    markAllAsRead,
-    deleteNotification,
-    clearAll,
-  } = useNotifications();
-
-  React.useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    if (open) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [open]);
-
-  const filtered = filter === "unread" ? notifications.filter((n) => !n.read) : notifications;
-
-  const getIcon = (type: NotificationItem["type"]) => {
-    switch (type) {
-      case "invite":
-        return <Swords className="h-4 w-4 text-primary-accent" />;
-      case "achievement":
-        return <Trophy className="h-4 w-4 text-yellow-400" />;
-      case "friend":
-        return <UserPlus className="h-4 w-4 text-blue-400" />;
-      case "match":
-        return <Flame className="h-4 w-4 text-orange-400" />;
-      default:
-        return <Sparkles className="h-4 w-4 text-emerald-400" />;
-    }
-  };
+  const shown = filter === "unread" ? notifications.filter((n) => !n.read) : notifications;
+  const label = unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications";
 
   return (
-    <div className="relative" ref={popoverRef}>
-      {/* Trigger Bell Button */}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={cn(
-          "relative flex h-10 w-10 items-center justify-center rounded-full transition-all",
-          open
-            ? "bg-primary/20 text-primary-accent shadow-inner"
-            : "text-foreground/70 hover:bg-foreground/10 hover:text-foreground"
-        )}
-        aria-label={`Notifications ${unreadCount > 0 ? `(${unreadCount} unread)` : ""}`}
-        aria-expanded={open}
-      >
-        <Bell className="h-5 w-5" />
-        {unreadCount > 0 && (
-          <span className="absolute top-1.5 right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-gradient-to-r from-rose-500 to-pink px-1 text-[9px] font-black text-white shadow-[0_0_8px_rgba(244,63,94,0.8)] animate-pulse">
-            {unreadCount}
-          </span>
-        )}
-      </button>
+    <Popover open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="icon" className="relative shrink-0" aria-label={label}>
+              <Bell className="h-5 w-5" aria-hidden />
+              <CountDot count={unreadCount} />
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Notifications</TooltipContent>
+      </Tooltip>
 
-      {/* Notification Dropdown Popover */}
-      {open && (
-        <div className="absolute right-0 top-full mt-2 z-50 w-84 sm:w-96 rounded-2xl border border-foreground/15 bg-popover/95 p-4 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 duration-150">
-          {/* Header */}
-          <div className="flex items-center justify-between pb-3 border-b border-foreground/10">
-            <div className="flex items-center gap-2">
-              <h3 className="font-display text-sm font-bold text-popover-foreground">Notifications</h3>
-              {unreadCount > 0 ? (
-                <Badge variant="default" className="text-[10px] bg-primary text-white">
-                  {unreadCount} new
-                </Badge>
-              ) : (
-                <span className="text-[10px] text-emerald-400 font-bold">All caught up</span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              {unreadCount > 0 && (
-                <button
-                  type="button"
-                  onClick={markAllAsRead}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-muted-foreground hover:text-primary-accent transition-colors"
-                >
-                  <CheckCheck className="h-3.5 w-3.5" />
-                  Mark read
-                </button>
-              )}
-              {notifications.length > 0 && (
-                <button
-                  type="button"
-                  onClick={clearAll}
-                  className="p-1 text-muted-foreground hover:text-rose-400 transition-colors"
-                  title="Clear all notifications"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              )}
-            </div>
+      <PopoverContent align="end" className="w-[22rem] p-0">
+        <div className="flex items-center gap-2 px-4 pb-2 pt-4">
+          <h2 className="font-display text-base font-bold text-foreground">Notifications</h2>
+          <div className="ml-auto flex items-center gap-1">
+            {unreadCount > 0 && (
+              <Button variant="ghost" size="sm" onClick={markAllAsRead}>
+                <CheckCheck className="h-4 w-4" aria-hidden />
+                Mark all read
+              </Button>
+            )}
+            {notifications.length > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon-sm" onClick={clearAll} aria-label="Clear all notifications">
+                    <Trash2 className="h-4 w-4" aria-hidden />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Clear all</TooltipContent>
+              </Tooltip>
+            )}
           </div>
+        </div>
 
-          {/* Filter Pills */}
-          <div className="flex items-center gap-2 py-2.5">
-            <button
-              type="button"
-              onClick={() => setFilter("all")}
-              className={cn(
-                "rounded-full px-3 py-1 text-xs font-bold transition-colors",
-                filter === "all"
-                  ? "bg-foreground/15 text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              All ({notifications.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setFilter("unread")}
-              className={cn(
-                "rounded-full px-3 py-1 text-xs font-bold transition-colors",
-                filter === "unread"
-                  ? "bg-primary/30 text-primary-accent border border-primary/40"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Unread ({unreadCount})
-            </button>
+        <div className="px-4 pb-3">
+          <ToggleGroup
+            type="single"
+            value={filter}
+            onValueChange={(v) => v && setFilter(v as "all" | "unread")}
+            className="w-full"
+            aria-label="Show"
+          >
+            <ToggleGroupItem value="all" size="sm">
+              All
+            </ToggleGroupItem>
+            <ToggleGroupItem value="unread" size="sm">
+              Unread{unreadCount > 0 ? ` (${unreadCount})` : ""}
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+
+        {shown.length === 0 ? (
+          <div className="flex flex-col items-center px-6 pb-8 pt-4 text-center">
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <Bell className="h-5 w-5" aria-hidden />
+            </span>
+            <p className="mt-3 text-sm font-semibold text-foreground">
+              {filter === "unread" ? "You are all caught up" : "No notifications yet"}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Match results, achievements and invites show up here.
+            </p>
           </div>
-
-          {/* List */}
-          <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
-            {filtered.length === 0 ? (
-              <div className="py-10 text-center text-muted-foreground">
-                <Bell className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                <p className="text-xs font-medium">
-                  {filter === "unread" ? "No unread notifications" : "No notifications yet"}
-                </p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  Real match results, achievements & invites will appear here.
-                </p>
-              </div>
-            ) : (
-              filtered.map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => markAsRead(item.id)}
-                  className={cn(
-                    "group relative flex items-start gap-3 rounded-xl p-3 border transition-all cursor-pointer",
-                    item.read
-                      ? "border-foreground/5 bg-foreground/2 hover:bg-foreground/5 text-foreground/70"
-                      : "border-primary/30 bg-primary/10 hover:bg-primary/15 text-foreground shadow-sm"
-                  )}
-                >
-                  {/* Icon */}
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5 border border-foreground/10">
-                    {getIcon(item.type)}
-                  </div>
-
-                  {/* Body */}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-1">
-                      <p className="text-xs font-bold truncate leading-tight text-popover-foreground">
-                        {item.title}
-                      </p>
-                      <span className="text-[10px] text-muted-foreground shrink-0">{item.time}</span>
-                    </div>
-                    <p className="text-[11px] text-foreground/60 mt-0.5 line-clamp-2 leading-relaxed">
-                      {item.description}
-                    </p>
-
-                    {item.actionUrl && (
+        ) : (
+          <ScrollArea className="border-t border-border" viewportClassName="max-h-80 [&>div]:!block">
+            <ul className="divide-y divide-border">
+              {shown.map((item) => {
+                const kind = KIND[item.type] ?? KIND.system;
+                const Icon = kind.icon;
+                const when = timeAgo(item.createdAt);
+                const body = (
+                  <>
+                    <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", kind.className)}>
+                      <Icon className="h-4 w-4" aria-hidden />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline gap-2">
+                        <span className="truncate text-sm font-semibold text-foreground">{item.title}</span>
+                        {!item.read && (
+                          <span className="h-2 w-2 shrink-0 self-center rounded-full bg-primary" aria-label="Unread" />
+                        )}
+                      </span>
+                      <span className="mt-0.5 line-clamp-2 block text-sm text-muted-foreground">
+                        {item.description}
+                      </span>
+                      <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                        {when}
+                        {item.actionUrl && (
+                          <span className="font-semibold text-primary-accent">
+                            {when && "· "}
+                            {item.actionLabel || "View"}
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                  </>
+                );
+                const rowClass = cn(
+                  "flex w-full items-start gap-3 py-3 pl-4 pr-12 text-left transition-colors duration-hover ease-out-expo",
+                  "hover:bg-foreground/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                  !item.read && "bg-primary/[0.06]",
+                );
+                return (
+                  <li key={item.id} className="relative">
+                    {item.actionUrl ? (
                       <Link
                         href={item.actionUrl}
+                        className={rowClass}
                         onClick={() => {
                           markAsRead(item.id);
                           setOpen(false);
                         }}
-                        className="mt-2 inline-flex items-center gap-1 text-[11px] font-bold text-primary-accent hover:text-primary-accent/80"
                       >
-                        <span>{item.actionLabel || "View"}</span>
-                        <ChevronRight className="h-3 w-3" />
+                        {body}
                       </Link>
+                    ) : (
+                      <button type="button" className={rowClass} onClick={() => markAsRead(item.id)}>
+                        {body}
+                      </button>
                     )}
-                  </div>
-
-                  {/* Dismiss button */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteNotification(item.id);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-foreground transition-opacity"
-                    aria-label="Dismiss"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-    </div>
+                    <button
+                      type="button"
+                      onClick={() => deleteNotification(item.id)}
+                      aria-label={`Dismiss "${item.title}"`}
+                      className={cn(
+                        "absolute right-2 top-2.5 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground",
+                        "transition-colors duration-hover ease-out-expo hover:bg-foreground/[0.08] hover:text-foreground",
+                        focusRingClass,
+                      )}
+                    >
+                      <X className="h-4 w-4" aria-hidden />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </ScrollArea>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }

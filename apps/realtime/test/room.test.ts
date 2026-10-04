@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { env, runInDurableObject } from "cloudflare:test";
-import { TestClient, mintToken, uuid } from "./helpers.js";
+import { TestClient, mintToken, readyUp, uuid } from "./helpers.js";
 
 // Closing a socket kicks off disconnect handling inside the Durable Object
 // (persist, alarm scheduling). Give that a tick to drain, or it races the
@@ -17,7 +17,7 @@ const HOST = uuid(1);
 const GUEST = uuid(2);
 
 /** Seats two authenticated players and returns both clients. */
-async function seatTwo(roomId: string) {
+async function seatTwo(roomId: string, opts: { ready?: boolean } = {}) {
   const host = await TestClient.connect(roomId);
   await host.authenticate(await mintToken(HOST, { name: "Host" }));
   await host.waitFor("ROOM_STATE");
@@ -25,6 +25,9 @@ async function seatTwo(roomId: string) {
   const opponent = await TestClient.connect(roomId);
   await opponent.authenticate(await mintToken(GUEST, { name: "Opponent" }));
   await opponent.waitFor("ROOM_STATE");
+
+  // The server will not deal until the guest has readied up.
+  if (opts.ready) await readyUp(opponent, host, roomId, GUEST);
 
   return { host, opponent };
 }
@@ -92,7 +95,7 @@ describe("RoomDurableObject: room lifecycle", () => {
 
   it("starts the game for the host and broadcasts state to both players", async () => {
     const roomId = nextRoom("start");
-    const { host, opponent } = await seatTwo(roomId);
+    const { host, opponent } = await seatTwo(roomId, { ready: true });
 
     host.send({ type: "START_GAME", roomId });
 
@@ -110,7 +113,7 @@ describe("RoomDurableObject: room lifecycle", () => {
 
   it("refuses a second START_GAME while a game is running", async () => {
     const roomId = nextRoom("double-start");
-    const { host, opponent } = await seatTwo(roomId);
+    const { host, opponent } = await seatTwo(roomId, { ready: true });
 
     host.send({ type: "START_GAME", roomId });
     await host.waitFor("GAME_STARTED");
@@ -127,7 +130,7 @@ describe("RoomDurableObject: durability", () => {
   // routine eviction destroyed the room and any match in progress.
   it("persists room and game state to Durable Object storage", async () => {
     const roomId = nextRoom("persist");
-    const { host, opponent } = await seatTwo(roomId);
+    const { host, opponent } = await seatTwo(roomId, { ready: true });
 
     host.send({ type: "START_GAME", roomId });
     await host.waitFor("GAME_STARTED");
@@ -146,7 +149,7 @@ describe("RoomDurableObject: durability", () => {
 
   it("serves the persisted room to a later connection", async () => {
     const roomId = nextRoom("rejoin");
-    const { host, opponent } = await seatTwo(roomId);
+    const { host, opponent } = await seatTwo(roomId, { ready: true });
     host.send({ type: "START_GAME", roomId });
     await host.waitFor("GAME_STARTED");
 
@@ -165,7 +168,7 @@ describe("RoomDurableObject: durability", () => {
 
   it("restores game state on RESYNC", async () => {
     const roomId = nextRoom("resync");
-    const { host, opponent } = await seatTwo(roomId);
+    const { host, opponent } = await seatTwo(roomId, { ready: true });
     host.send({ type: "START_GAME", roomId });
     await host.waitFor("GAME_STARTED");
 
@@ -215,7 +218,7 @@ describe("RoomDurableObject: abuse controls", () => {
 
   it("does not let a spectator act in the game", async () => {
     const roomId = nextRoom("spectator");
-    const { host, opponent } = await seatTwo(roomId);
+    const { host, opponent } = await seatTwo(roomId, { ready: true });
     host.send({ type: "START_GAME", roomId });
     await host.waitFor("GAME_STARTED");
 

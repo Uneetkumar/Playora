@@ -68,6 +68,8 @@
     /* Rewards and streaks on page surfaces. Unlike the badge colours below,
        these change with the theme. */
     --reward: 43.3 96.4% 56.3%;
+    /* Reward as text on its own 15% tint, like the status inks above. */
+    --reward-ink: 43.3 96.4% 56.3%;
     --streak: 9.2 100% 61.8%;
     /* Legacy social/reward accent, kept for the screens that use it. */
     --pink: 338.4 100% 65.1%;
@@ -86,6 +88,13 @@
     --badge-soon: 228.9 18.9% 28%;
     --badge-foreground: 231.4 24.1% 5.7%;
     --badge-soon-foreground: 229.1 25.6% 91.6%;
+
+    /* Words on cover art and the scrim under them (`scrim-art`), defined
+       once for the badges' reason: the art does not change with the theme,
+       so neither does what keeps a title legible over it. */
+    --art-scrim: 231.4 24.1% 5.7%;
+    --art-foreground: 230 37.5% 96.9%;
+    --art-muted-foreground: 228 15.7% 68.8%;
 
     --radius: 12px;
 
@@ -145,6 +154,7 @@
     --warning-ink: 32.6 100% 27.1%;
     --destructive-ink: 353.4 69.4% 38.4%;
     --reward: 35.5 91.7% 32.9%;
+    --reward-ink: 31.8 81% 28.8%;
     --streak: 17.5 88.3% 40.4%;
     --pink: 338 78% 52%;
 
@@ -336,6 +346,26 @@
       hsl(var(--background) / 0.2) 55%,
       transparent
     );
+  }
+
+  /* The same gradient for words that sit on the art itself (game cards),
+     in the art's own dark ink whatever the theme, under `text-art-*` words.
+     In the page colour, light theme's cards read as a white haze. */
+  .scrim-art {
+    background-image: linear-gradient(
+      to top,
+      hsl(var(--art-scrim) / 0.92),
+      hsl(var(--art-scrim) / 0.2) 55%,
+      transparent
+    );
+  }
+
+  /* A soft halo in the same ink under words on art, for the bright detail
+     (a white card face, a lit sky) a gradient cannot predict. */
+  .text-halo-art {
+    text-shadow:
+      0 1px 2px hsl(var(--art-scrim) / 0.7),
+      0 0 10px hsl(var(--art-scrim) / 0.45);
   }
 
   /* The hero's text column: heavier, because a title, a meta line and three

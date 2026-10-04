@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import {
   type ClientMessage,
+  type RoomOptions,
   type ServerMessage,
   parseServerMessage,
   serializeProtocolMessage,
@@ -22,7 +23,11 @@ interface UseRoomSocketOptions {
   ready?: boolean;
   asSpectator?: boolean;
   onReaction?: (reaction: PlayerReaction) => void;
-  onError?: (error: string) => void;
+  /**
+   * Every ERROR the server sends. `code` says which kind (ILLEGAL_MOVE,
+   * PLAYERS_NOT_READY, KICKED…), so a caller can toast one and act on another.
+   */
+  onError?: (error: string, code?: string) => void;
 }
 
 /** First retry delay; doubles each attempt. */
@@ -373,7 +378,7 @@ export function useRoomSocket({
 
           case "ERROR": {
             setError(msg.message);
-            onErrorRef.current?.(msg.message);
+            onErrorRef.current?.(msg.message, msg.code);
             break;
           }
 
@@ -490,6 +495,34 @@ export function useRoomSocket({
     sendMessage({ type: "UNREADY", roomId });
   }, [sendMessage, roomId]);
 
+  /**
+   * Ready or not, in one call. The server holds START_GAME until every seated
+   * human other than the host has readied, so this is what a guest's Ready
+   * button sends.
+   */
+  const setReadyState = useCallback(
+    (ready: boolean) => {
+      sendMessage({ type: "SET_READY", roomId, ready });
+    },
+    [sendMessage, roomId],
+  );
+
+  /** Host-only: remove a player (between matches) or a spectator (any time). */
+  const kickPlayer = useCallback(
+    (playerId: string) => {
+      sendMessage({ type: "KICK_PLAYER", roomId, playerId });
+    },
+    [sendMessage, roomId],
+  );
+
+  /** Host-only: change the room's options; the server refuses keys the game does not have. */
+  const updateRoomSettings = useCallback(
+    (settings: RoomOptions) => {
+      sendMessage({ type: "UPDATE_ROOM_SETTINGS", roomId, settings });
+    },
+    [sendMessage, roomId],
+  );
+
   const startGame = useCallback(
     (customRules?: Record<string, unknown>) => {
       sendMessage({ type: "START_GAME", roomId, customRules });
@@ -564,6 +597,9 @@ export function useRoomSocket({
     connectionStatus,
     setReady,
     setUnready,
+    setReadyState,
+    kickPlayer,
+    updateRoomSettings,
     startGame,
     sendGameAction,
     sendChatMessage,

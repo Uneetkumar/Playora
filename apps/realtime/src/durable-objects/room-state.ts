@@ -31,6 +31,13 @@ export interface PersistedRoom {
    * every read must tolerate it being absent.
    */
   rematchVotes?: string[];
+  /**
+   * Accounts the host has removed. They are refused a seat, or a spectator's
+   * place, for the rest of the room's life.
+   *
+   * Optional for the same reason as `rematchVotes`.
+   */
+  kickedUserIds?: string[];
   createdAt: number;
   startedAt: number | null;
   endedAt: number | null;

@@ -61,6 +61,18 @@ export async function authenticateConnection(
     room.players[identity.userId] !== undefined ||
     room.spectators[identity.userId] !== undefined;
 
+  // Someone the host removed stays removed. Normal closure, so the client
+  // reads it as a goodbye rather than a dropped line to keep redialling.
+  if (!isReconnect && room.kickedUserIds?.includes(identity.userId)) {
+    ctx.send(ws, {
+      type: "ERROR",
+      code: "KICKED",
+      message: "The host removed you from this room.",
+    });
+    ctx.closeSocket(ws, 1000, "Removed by the host");
+    return;
+  }
+
   if (!isReconnect && !admit(room, identity, attachment)) {
     ctx.send(ws, { type: "ERROR", code: "ROOM_FULL", message: "This room is full." });
     ctx.closeSocket(ws, 1008, "Room full");
@@ -104,7 +116,10 @@ export async function authenticateConnection(
     ctx.broadcast({ type: "PLAYER_JOINED", roomId: room.roomId, player: record });
   }
 
-  ctx.send(ws, { type: "ROOM_STATE", room: toRoomStatePayload(room) });
+  // Everyone gets the whole room, not just the newcomer. PLAYER_JOINED alone
+  // cannot say whether the arrival took a seat or is watching, and a client
+  // that guessed "seat" showed spectators in the seat grid.
+  ctx.broadcast({ type: "ROOM_STATE", room: toRoomStatePayload(room) });
 
   if (room.status === "in_game" && room.currentGameState) {
     sendGameStateTo(ctx, ws, identity.userId);

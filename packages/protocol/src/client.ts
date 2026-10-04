@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RoomOptionsSchema } from "./lobby.js";
 
 export const ClientMessageTypeSchema = z.enum([
   "AUTH",
@@ -6,6 +7,7 @@ export const ClientMessageTypeSchema = z.enum([
   "LEAVE_ROOM",
   "READY",
   "UNREADY",
+  "SET_READY",
   "START_GAME",
   "ADD_BOT",
   "REMOVE_BOT",
@@ -15,6 +17,8 @@ export const ClientMessageTypeSchema = z.enum([
   "PING",
   "RESYNC",
   "REMATCH",
+  "KICK_PLAYER",
+  "UPDATE_ROOM_SETTINGS",
 ]);
 
 export type ClientMessageType = z.infer<typeof ClientMessageTypeSchema>;
@@ -53,6 +57,37 @@ export const ReadyMessageSchema = z.object({
 export const UnreadyMessageSchema = z.object({
   type: z.literal("UNREADY"),
   roomId: z.string(),
+});
+
+/**
+ * Ready or not, as one message. READY and UNREADY remain for older clients and
+ * do exactly the same thing.
+ */
+export const SetReadyMessageSchema = z.object({
+  type: z.literal("SET_READY"),
+  roomId: z.string(),
+  ready: z.boolean(),
+});
+
+/**
+ * Host-only: remove someone from the room. A seated player can only be removed
+ * between matches; a spectator at any time. Someone removed cannot rejoin the
+ * same room.
+ */
+export const KickPlayerMessageSchema = z.object({
+  type: z.literal("KICK_PLAYER"),
+  roomId: z.string(),
+  playerId: z.string().min(1),
+});
+
+/**
+ * Host-only: change the room's options before a match. Only the keys the
+ * room's game offers are accepted (see `roomOptionKeysFor`).
+ */
+export const UpdateRoomSettingsMessageSchema = z.object({
+  type: z.literal("UPDATE_ROOM_SETTINGS"),
+  roomId: z.string(),
+  settings: RoomOptionsSchema,
 });
 
 export const StartGameMessageSchema = z.object({
@@ -112,6 +147,7 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   LeaveRoomMessageSchema,
   ReadyMessageSchema,
   UnreadyMessageSchema,
+  SetReadyMessageSchema,
   StartGameMessageSchema,
   AddBotMessageSchema,
   RemoveBotMessageSchema,
@@ -121,6 +157,8 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   PingMessageSchema,
   ResyncMessageSchema,
   RematchMessageSchema,
+  KickPlayerMessageSchema,
+  UpdateRoomSettingsMessageSchema,
 ]);
 
 export type ClientMessage = z.infer<typeof ClientMessageSchema>;
@@ -130,6 +168,9 @@ export type LeaveRoomMessage = z.infer<typeof LeaveRoomMessageSchema>;
 export type RematchMessage = z.infer<typeof RematchMessageSchema>;
 export type ReadyMessage = z.infer<typeof ReadyMessageSchema>;
 export type UnreadyMessage = z.infer<typeof UnreadyMessageSchema>;
+export type SetReadyMessage = z.infer<typeof SetReadyMessageSchema>;
+export type KickPlayerMessage = z.infer<typeof KickPlayerMessageSchema>;
+export type UpdateRoomSettingsMessage = z.infer<typeof UpdateRoomSettingsMessageSchema>;
 export type StartGameMessage = z.infer<typeof StartGameMessageSchema>;
 export type AddBotMessage = z.infer<typeof AddBotMessageSchema>;
 export type RemoveBotMessage = z.infer<typeof RemoveBotMessageSchema>;

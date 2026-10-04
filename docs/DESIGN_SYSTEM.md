@@ -81,6 +81,7 @@ and the shadow separate them. Use `bg-muted` for a fill inside a card, not
 | `bg-warning` | `#F5A524` | `#A05D00` | Caution, a connection degrading |
 | `text-success-ink`, `text-warning-ink`, `text-destructive-ink` | `#22C55E`, `#F5A524`, `#FF6B76` | `#166534`, `#8A4B00`, `#A61E2D` | Status colour as text on its own 15% tint |
 | `text-reward`, `bg-reward/15` | `#FBBF24` | `#A16207` | Gold on a page surface: best-score trophies, earned stars |
+| `text-reward-ink` | `#FBBF24` | `#854D0E` | Gold as text on its own 15% tint (a chip such as the lobby's Host). Light `reward` is 4.0:1 there, its ink 5.6:1 |
 | `text-streak` | `#FF5A3C` | `#C2410C` | Flame on a page surface: combos, win streaks |
 | `bg-pink` | `#FF4D8D` | `#E4256B` | Legacy. Existing screens only; do not add new uses |
 
@@ -118,13 +119,15 @@ the art does not change with the theme.
 
 Which badge a game gets is decided in one place, `badgeFor` in
 `apps/web/src/lib/games/view.ts`, and every card reads it from `gameView()`
-rather than deciding again. The windows are constants there.
+rather than deciding again. The windows are constants there, and so are the
+limits: a badge singles a game out, so only the few most recent games in a
+window wear it, never the whole catalogue after a big release day.
 
 | Class | Colour | Meaning |
 |---|---|---|
 | `bg-badge-live` | `#22C55E` | Live now, with an online count. Has a pulsing dot (`animate-pulse-dot`) |
-| `bg-badge-new` | `#22D3EE` | Released in the last 30 days (`NEW_WINDOW_DAYS`) |
-| `bg-badge-updated` | `#A79BFF` | Updated in the last 14 days (`UPDATED_WINDOW_DAYS`) |
+| `bg-badge-new` | `#22D3EE` | Released in the last 30 days (`NEW_WINDOW_DAYS`); the four most recent at most (`NEW_LIMIT`) |
+| `bg-badge-updated` | `#A79BFF` | Updated in the last 14 days (`UPDATED_WINDOW_DAYS`); the four most recent at most (`UPDATED_LIMIT`) |
 | `bg-badge-hot` | `#FF5A3C` | Featured: in the hero rotation (`FEATURED_GAME_IDS`) |
 | `bg-badge-top` | `#FBBF24` | Top-ranked |
 | `bg-badge-soon` | `#3A3F55` | Not playable yet (`playable` is false) |
@@ -132,6 +135,25 @@ rather than deciding again. The windows are constants there.
 Text on every badge except SOON is `text-badge-foreground` (dark ink, 6.3:1 or
 better). SOON uses `text-badge-soon-foreground`. The `<Badge variant="live">`
 and related variants already apply these colours.
+
+### Words on cover art
+
+For the same reason, text laid straight on cover art (a game card's title and
+meta line) does not follow the theme either. A scrim in the page colour turns
+light theme's covers into a white haze with dark words fighting the art; the
+art's own dark ink with light words reads over any cover in both themes.
+
+| Class | Use for |
+|---|---|
+| `.scrim-art` | The gradient under the words: `art-scrim` at 92% at the edge, 20% at 55%, then clear |
+| `from-art-scrim/70` | Deepening that gradient behind the title only |
+| `text-art-foreground` | The title. 17.9:1 on the scrim's colour |
+| `text-art-muted-foreground` | The meta line. 8.3:1 on the scrim's colour |
+| `.text-halo-art` | On the words' container: a soft halo in the scrim's ink, for a bright highlight in the art the gradient cannot predict |
+
+`.scrim-bottom` and `.scrim-left` stay in the page colour: they are for art
+that fades *into the page* (the hero, a room's header), where the words sit on
+the page rather than on the picture.
 
 ### Per-game accent
 
@@ -334,9 +356,9 @@ All of these come from `@playora/ui`.
 │                              │
 │        cover art             │  ← fills the card at the rail's ratio,
 │     (no text baked in)       │    16:9 landscape · 2:3 portrait · 1:1 grid
-│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│  ← .scrim-bottom
-│ Game title                   │  text-card-title, one line, truncate
-│ 2–4 players · 5 min · Cards  │  text-meta text-muted-foreground
+│▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓│  ← .scrim-art (dark in both themes)
+│ Game title                   │  text-card-title text-art-foreground, truncate
+│ 2–4 players · 5 min · Cards  │  text-meta text-art-muted-foreground
 └──────────────────────────────┘
 ```
 
@@ -344,7 +366,9 @@ All of these come from `@playora/ui`.
   that is not playable. The priority, set by `badgeFor`, is LIVE (with the
   online count), then NEW, UPDATED, HOT. NEW outranks UPDATED because a game
   under a month old has, trivially, been updated recently. HOT is the
-  editorial fallback for a featured game that is neither.
+  editorial fallback for a featured game that is neither. On a card under
+  160px wide (a 132px portrait card in a phone's rail) LIVE drops its count
+  so it clears the heart; the link's label still says it.
 - **Top right:** a multiplayer icon (lucide `Users`). The favourite heart
   appears on hover or focus, and is always visible once favourited.
 - **Bottom:** a scrim, the title, then a meta row. The player count comes from

@@ -27,6 +27,7 @@ import { applyGameAction, finishGame, startGame } from "../handlers/game-handler
 import type { MatchResult } from "../handlers/game-handler.js";
 import { addBot, removeBot, runBotTurns } from "../handlers/bot-handler.js";
 import { voteRematch } from "../handlers/rematch-handler.js";
+import { kickPlayer, setReady, updateRoomSettings } from "../handlers/lobby-handler.js";
 import { RaceLoop, applyRaceInput, isRealTimeGame } from "../handlers/race-handler.js";
 import { enqueueMatchWork } from "../lib/match-queue.js";
 import type { RoomContext } from "./room-context.js";
@@ -105,18 +106,24 @@ export class RoomDurableObject {
 
     if (url.pathname.endsWith("/status")) {
       const room = this.room;
-      return Response.json({
-        exists: room !== null,
-        roomId: room?.roomId ?? null,
-        roomCode: room?.roomCode ?? null,
-        gameId: room?.gameId ?? null,
-        status: room?.status ?? null,
-        playerCount: room ? Object.keys(room.players).length : 0,
-        spectatorCount: room ? Object.keys(room.spectators).length : 0,
-        activeConnections: this.state.getWebSockets().length,
-        sequenceNumber: room?.sequenceNumber ?? 0,
-        currentSessionId: room?.currentSessionId ?? null,
-      });
+      // Readable from the web app's origin: the rooms list shows live seat
+      // counts from here. Counts and state only, nothing about who is in it.
+      return Response.json(
+        {
+          exists: room !== null,
+          roomId: room?.roomId ?? null,
+          roomCode: room?.roomCode ?? null,
+          gameId: room?.gameId ?? null,
+          status: room?.status ?? null,
+          playerCount: room ? Object.keys(room.players).length : 0,
+          spectatorCount: room ? Object.keys(room.spectators).length : 0,
+          activeConnections: this.state.getWebSockets().length,
+          sequenceNumber: room?.sequenceNumber ?? 0,
+          currentSessionId: room?.currentSessionId ?? null,
+          maxPlayers: room?.settings.maxPlayers ?? null,
+        },
+        { headers: { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-store" } },
+      );
     }
 
     return new Response("Not Found", { status: 404 });
@@ -235,27 +242,37 @@ export class RoomDurableObject {
 
     switch (msg.type) {
       case "READY":
-      case "UNREADY": {
-        const player = room.players[userId];
-        if (!player) return;
-        player.isReady = msg.type === "READY";
-        await this.persist();
-        ctx.broadcast({
-          type: "PLAYER_READY",
-          roomId: room.roomId,
-          playerId: userId,
-          isReady: player.isReady,
-        });
+      case "UNREADY":
+      case "SET_READY": {
+        if (!this.allow(ws, attachment.connectionId, "lobby")) return;
+        const ready = msg.type === "SET_READY" ? msg.ready : msg.type === "READY";
+        await setReady(ctx, ws, userId, ready);
+        return;
+      }
+
+      case "KICK_PLAYER": {
+        if (!this.allow(ws, attachment.connectionId, "lobby")) return;
+        await kickPlayer(ctx, ws, userId, msg.playerId);
+        return;
+      }
+
+      case "UPDATE_ROOM_SETTINGS": {
+        if (!this.allow(ws, attachment.connectionId, "lobby")) return;
+        await updateRoomSettings(ctx, ws, userId, msg.settings);
         return;
       }
 
       case "START_GAME":
+        if (!this.allow(ws, attachment.connectionId, "lobby")) return;
         await startGame(ctx, ws, userId, msg.customRules);
         await runBotTurns(ctx);
         this.syncRaceLoop();
         return;
 
       case "REMATCH": {
+        // A vote toggle reaches the whole room (REMATCH_STATE), exactly as a
+        // ready toggle does, so it shares the ready toggle's budget.
+        if (!this.allow(ws, attachment.connectionId, "lobby")) return;
         const outcome = await voteRematch(ctx, ws, userId, msg.accept);
         // A rematch can hand the first move to a bot, exactly as a fresh start can.
         if (outcome.started) {
@@ -266,10 +283,12 @@ export class RoomDurableObject {
       }
 
       case "ADD_BOT":
+        if (!this.allow(ws, attachment.connectionId, "lobby")) return;
         await addBot(ctx, ws, userId, msg.level as Parameters<typeof addBot>[3]);
         return;
 
       case "REMOVE_BOT":
+        if (!this.allow(ws, attachment.connectionId, "lobby")) return;
         await removeBot(ctx, ws, userId, msg.botId);
         return;
 
@@ -419,6 +438,10 @@ export class RoomDurableObject {
       playerId: userId,
       reason,
     });
+    // PLAYER_LEFT cannot carry a new host. Without the whole room, the
+    // promoted player's client kept the old host id and never showed them
+    // the Start button.
+    this.context().broadcast({ type: "ROOM_STATE", room: toRoomStatePayload(room) });
     log.info("player.left", { roomId: room.roomId, userId, reason });
 
     await this.checkAbandonment(userId);

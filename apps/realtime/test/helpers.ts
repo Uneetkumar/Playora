@@ -135,4 +135,15 @@ export class TestClient {
   }
 }
 
+/**
+ * Readies a seated player and waits until `observer` has seen it, so a
+ * START_GAME sent next cannot overtake the ready on its way to the room.
+ */
+export async function readyUp(player: TestClient, observer: TestClient, roomId: string, userId: string) {
+  player.send({ type: "SET_READY", roomId, ready: true });
+  await observer.waitWhere(
+    (m) => m.type === "PLAYER_READY" && m.playerId === userId && m.isReady,
+  );
+}
+
 export const uuid = (n: number) => `0000000${n}-0000-4000-8000-00000000000${n}`;

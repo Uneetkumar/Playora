@@ -1,12 +1,12 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import * as React from "react";
 import { QueryProvider } from "../lib/query/query-provider";
 import { AnalyticsProvider } from "../lib/observability/analytics-provider";
 import { Sora, Inter, JetBrains_Mono } from "next/font/google";
-import { AnimatedBackground } from "../components/shell/animated-background";
-import { Toaster, TooltipProvider } from "@playora/ui";
+import { Toaster, TooltipProvider, themes } from "@playora/ui";
 import { THEME_BOOTSTRAP } from "../lib/theme";
+import { SIDEBAR_BOOTSTRAP } from "../components/shell/sidebar-bootstrap";
 import { SITE_NAME, SITE_TAGLINE, SITE_DESCRIPTION, siteUrl, siteJsonLd } from "../lib/seo";
 
 /*
@@ -81,6 +81,25 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
+/*
+ * `viewportFit: "cover"` lets the page run under the notch and home
+ * indicator, which the shell then pads back by the safe-area insets (header,
+ * bottom tab bar, the game shell). Without it the insets are all zero and an
+ * installed app shows bars of white around the frame.
+ *
+ * The browser chrome takes the header's colour. These follow the OS; the
+ * shell corrects them to the theme actually chosen once it mounts.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: themes.dark.surface },
+    { media: "(prefers-color-scheme: light)", color: themes.light.surface },
+  ],
+};
+
 import { AppShell } from "../components/shell/app-shell";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -98,6 +117,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Applies the saved theme before first paint, so choosing Light
             survives a reload and does not flash dark on the way in. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
+        {/* Same idea for the sidebar: a collapsed rail is collapsed on the
+            first frame, so the page does not shift sideways on load. */}
+        <script dangerouslySetInnerHTML={{ __html: SIDEBAR_BOOTSTRAP }} />
         {/* Site-level structured data: names the site and declares the search
             endpoint, which is what produces a sitelinks search box. */}
         <script
@@ -107,7 +129,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       {/* Colours come from tokens, never hardcoded hex (design brief). */}
       <body className="min-h-screen bg-background text-foreground antialiased relative">
-        <AnimatedBackground />
         <QueryProvider>
           <AnalyticsProvider>
             {/* One provider for the app, so tooltips share a delay group:

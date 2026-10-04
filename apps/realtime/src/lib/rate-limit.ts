@@ -16,6 +16,12 @@ export const RATE_LIMITS = {
   chat: { capacity: 5, refillPerSecond: 1 },
   reaction: { capacity: 8, refillPerSecond: 2 },
   gameAction: { capacity: 20, refillPerSecond: 10 },
+  /**
+   * Ready toggles, rematch votes, Start and the host's lobby controls (bots,
+   * kicks, settings). Each one broadcasts to the whole room, so a held-down
+   * toggle must not become a flood for everyone else.
+   */
+  lobby: { capacity: 10, refillPerSecond: 2 },
 } as const satisfies Record<string, RateLimitRule>;
 
 export type RateLimitKind = keyof typeof RATE_LIMITS;

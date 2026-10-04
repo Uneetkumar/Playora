@@ -108,6 +108,7 @@ export const GAME_CATALOG: readonly CatalogGame[] = [
     rules: [
       "Hold W or the mouse button to accelerate, S to brake.",
       "Steer with A and D, or by moving the mouse across the track.",
+      "On a phone or tablet, use the on-screen controls: hold the green pedal at the bottom right to accelerate (the one beside it brakes), and the arrows at the bottom left to steer.",
       "Corners throw you towards the outside, harder the faster you are going. Lift off for the tight ones.",
       "Leaving the tarmac costs you speed, and hitting a cone or barrier costs you far more.",
       "Collect coins along the way — they decide the score when places are level.",
@@ -125,7 +126,7 @@ export const GAME_CATALOG: readonly CatalogGame[] = [
     tags: ["racing", "bikes", "stunts", "physics", "action", "3d"],
     phase: "Available now",
     rules: [
-      "Same controls as Car Race: W to accelerate, A and D to steer, S to brake, N for nitro.",
+      "Same controls as Car Race: W to accelerate, A and D to steer, S to brake, N for nitro; on a phone or tablet, the same on-screen pedals and arrows.",
       "A bike out-accelerates a car and changes direction faster.",
       "It is also thrown further by a corner and takes much longer to recover from a hit.",
       "Half the width of a car, so gaps a car has to avoid are open to you.",

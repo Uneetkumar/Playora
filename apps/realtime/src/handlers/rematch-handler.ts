@@ -84,9 +84,34 @@ export async function voteRematch(
     return { started: false };
   }
 
+  // Everyone left agreeing is not the same as there being enough of them: an
+  // opponent who leaves or is removed after the match takes their seat with
+  // them. Refused here, with the votes cleared so the result screen does not
+  // sit on "waiting", rather than left for the engine to throw on.
+  const count = gameEngineRegistry.get(room.gameId).validatePlayerCount(Object.values(room.players));
+  if (!count.valid) {
+    room.rematchVotes = [];
+    await ctx.persist();
+    announce(ctx);
+    ctx.send(ws, {
+      type: "ERROR",
+      code: "INVALID_PLAYER_COUNT",
+      message: count.reason ?? "Not enough players for a rematch.",
+    });
+    return { started: false };
+  }
+
   room.rematchVotes = [];
   announce(ctx);
-  await beginSession(ctx, undefined);
+  if (!(await beginSession(ctx))) {
+    await ctx.persist();
+    ctx.send(ws, {
+      type: "ERROR",
+      code: "EXECUTION_ERROR",
+      message: "The rematch could not be dealt. Vote again to retry.",
+    });
+    return { started: false };
+  }
 
   log.info("rematch.started", { roomId: room.roomId, players: needed.length });
   return { started: true };

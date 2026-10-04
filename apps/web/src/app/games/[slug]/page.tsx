@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { GAME_CATALOG } from "../../../lib/games/catalog";
 import { gameMetadata, gameJsonLd, breadcrumbJsonLd, indexableGames } from "../../../lib/seo";
+import { catalogDay } from "../../../components/games/card-logic";
 import { GameDetailClient } from "./game-detail-client";
 
 /**
@@ -10,13 +11,22 @@ import { GameDetailClient } from "./game-detail-client";
  * The page was a single client component, which cannot export
  * `generateMetadata` — so every game shared as a bare link with no title, no
  * description and no image, and search engines had nothing to index. The
- * interactive half is unchanged and now lives in `game-detail-client.tsx`;
- * this file exists to give each game a real identity on the web.
+ * interactive half lives in `game-detail-client.tsx`, handed the id resolved
+ * here, so an unknown slug 404s before any of it renders; this file exists
+ * to give each game a real identity on the web.
  */
 
 interface Props {
   params: Promise<{ slug: string }>;
 }
+
+/**
+ * The NEW and UPDATED badges are judged by a day read here, on the server,
+ * and handed to the client, so the HTML and the hydration agree (each reading
+ * its own clock could straddle a day). Regenerated hourly, as the home page
+ * and Browse are, so a badge is never more than an hour behind the day.
+ */
+export const revalidate = 3600;
 
 /**
  * Pre-renders every playable game at build time.
@@ -58,7 +68,7 @@ export default async function GameDetailPage({ params }: Props) {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd(game)) }}
       />
-      <GameDetailClient />
+      <GameDetailClient gameId={game.id} now={catalogDay()} />
     </>
   );
 }

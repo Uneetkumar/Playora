@@ -27,7 +27,7 @@ const OnlineRaceView = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex aspect-video w-full items-center justify-center rounded-2xl border border-border bg-[#140a2e] text-sm text-muted-foreground">
+      <div className="flex aspect-video w-full items-center justify-center rounded-2xl border border-border bg-muted text-sm text-muted-foreground">
         Building the track…
       </div>
     ),
@@ -45,6 +45,8 @@ interface RoomGameSurfaceProps {
   sendGameAction: (type: string, payload: Record<string, unknown>) => void;
   onRematch: () => void;
   rematchPending?: boolean;
+  /** Why a rematch cannot start; see MatchResult. */
+  rematchUnavailable?: string | null;
 }
 
 /**
@@ -65,6 +67,7 @@ export function RoomGameSurface({
   sendGameAction,
   onRematch,
   rematchPending = false,
+  rematchUnavailable = null,
 }: RoomGameSurfaceProps) {
   return (
     <div className="space-y-6">
@@ -80,6 +83,7 @@ export function RoomGameSurface({
           progression={progression}
           onRematch={onRematch}
           rematchPending={rematchPending}
+          rematchUnavailable={rematchUnavailable}
           exitHref="/games"
         />
       )}

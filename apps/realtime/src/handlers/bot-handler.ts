@@ -7,6 +7,7 @@ import type { RoomContext } from "../durable-objects/room-context.js";
 import { nextSeatIndex, playerCount, toRoomStatePayload } from "../durable-objects/room-state.js";
 import { log } from "../lib/logger.js";
 import { executeAction } from "./game-handler.js";
+import { botDisplayName } from "./lobby-handler.js";
 
 /** Guards against a malformed engine state driving an endless bot loop. */
 const MAX_CONSECUTIVE_BOT_TURNS = 64;
@@ -58,7 +59,7 @@ export async function addBot(
   }
 
   const botId = `bot-${crypto.randomUUID()}`;
-  const name = `AI level ${level}`;
+  const name = botDisplayName(level);
   const bot: ProtocolPlayer = {
     id: botId,
     userId: botId,
@@ -111,6 +112,7 @@ export async function removeBot(
   delete room.players[botId];
   await ctx.persist();
   ctx.broadcast({ type: "PLAYER_LEFT", roomId: room.roomId, playerId: botId, reason: "kicked" });
+  ctx.broadcast({ type: "ROOM_STATE", room: toRoomStatePayload(room) });
   log.info("bot.removed", { roomId: room.roomId, botId });
 }
 

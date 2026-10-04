@@ -31,7 +31,7 @@ export function JoinByCode({ className }: { className?: string }) {
 
   return (
     <div className={className}>
-      <form onSubmit={submit} className="flex flex-col gap-2 sm:flex-row">
+      <form onSubmit={submit} className="flex gap-2">
         <div className="relative flex-1">
           <Hash
             className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
@@ -47,16 +47,16 @@ export function JoinByCode({ className }: { className?: string }) {
               setCode(e.target.value.toUpperCase());
               if (error) setError(null);
             }}
-            placeholder="ENTER ROOM CODE"
+            placeholder="Room code"
             maxLength={ROOM_CODE_LENGTH + 2}
             autoComplete="off"
             spellCheck={false}
-            className="pl-9 uppercase tracking-[0.2em] font-mono"
+            className="h-11 pl-9 font-mono uppercase tracking-[0.2em] placeholder:font-sans placeholder:normal-case placeholder:tracking-normal"
           />
         </div>
-        <Button type="submit" disabled={!code.trim() || isJoining} className="gap-2 sm:w-auto">
+        <Button type="submit" disabled={!code.trim() || isJoining} className="h-11 shrink-0 gap-2">
           {isJoining ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
           ) : (
             <ArrowRight className="h-4 w-4" aria-hidden />
           )}
@@ -64,7 +64,7 @@ export function JoinByCode({ className }: { className?: string }) {
         </Button>
       </form>
       {error && (
-        <p role="alert" className="mt-2 text-sm text-red-300">
+        <p role="alert" className="mt-2 text-sm text-destructive-ink">
           {error}
         </p>
       )}

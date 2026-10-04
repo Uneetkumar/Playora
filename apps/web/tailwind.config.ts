@@ -116,7 +116,11 @@ const config: Config = {
           foreground: hsl("warning-foreground"),
           ink: hsl("warning-ink"),
         },
-        reward: hsl("reward"),
+        reward: {
+          DEFAULT: hsl("reward"),
+          /** As text on a `bg-reward/15` tint. See tokens.ts. */
+          ink: hsl("reward-ink"),
+        },
         streak: hsl("streak"),
         pink: hsl("pink"),
         /*
@@ -134,6 +138,13 @@ const config: Config = {
           soon: hsl("badge-soon"),
           foreground: hsl("badge-foreground"),
           "soon-foreground": hsl("badge-soon-foreground"),
+        },
+        /* Words on cover art and the scrim under them: the same in both
+           themes, like the badges. See `.scrim-art` in globals.css. */
+        art: {
+          scrim: hsl("art-scrim"),
+          foreground: hsl("art-foreground"),
+          "muted-foreground": hsl("art-muted-foreground"),
         },
         "game-accent": {
           DEFAULT: gameAccent,

@@ -9,7 +9,7 @@ export interface NotificationItem {
   type: "invite" | "achievement" | "friend" | "match" | "system";
   title: string;
   description: string;
-  time: string;
+  /** Epoch ms. The popover words it ("5 minutes ago") at the time it is read. */
   createdAt: number;
   read: boolean;
   actionUrl?: string;
@@ -17,6 +17,12 @@ export interface NotificationItem {
 }
 
 const STORAGE_KEY_PREFIX = "playora_real_notifications_";
+
+/**
+ * Items an earlier build seeded on first visit: a welcome claiming "5 instant
+ * games". Dropped on load, so a device that already has one stops showing it.
+ */
+const RETIRED_ID_PREFIX = "sys-welcome-";
 
 export function useNotifications() {
   const { user } = useAuthStore();
@@ -26,31 +32,16 @@ export function useNotifications() {
 
   const storageKey = `${STORAGE_KEY_PREFIX}${user?.id || "guest"}`;
 
-  // Load real notifications from localStorage
+  // Load real notifications from localStorage. Nothing is seeded: an unread
+  // dot on a first visit for a message nobody sent is not news, and the
+  // popover's empty state already says what will show up there.
   React.useEffect(() => {
     try {
       const stored = localStorage.getItem(storageKey);
-      if (stored) {
-        const parsed = JSON.parse(stored) as NotificationItem[];
-        setNotifications(parsed);
-      } else {
-        // Generate real welcome notification for user
-        const initial: NotificationItem[] = [
-          {
-            id: `sys-welcome-${Date.now()}`,
-            type: "system",
-            title: "Welcome to Playora!",
-            description: "Explore 5 instant games, play vs AI bots or challenge friends on Wi-Fi.",
-            time: "Just now",
-            createdAt: Date.now(),
-            read: false,
-            actionUrl: "/games",
-            actionLabel: "Explore Games",
-          },
-        ];
-        setNotifications(initial);
-        localStorage.setItem(storageKey, JSON.stringify(initial));
-      }
+      const parsed = stored ? (JSON.parse(stored) as NotificationItem[]) : [];
+      const kept = parsed.filter((n) => !n.id.startsWith(RETIRED_ID_PREFIX));
+      if (kept.length !== parsed.length) localStorage.setItem(storageKey, JSON.stringify(kept));
+      setNotifications(kept);
     } catch {
       setNotifications([]);
     } finally {
@@ -71,8 +62,7 @@ export function useNotifications() {
           id: `prog-games-${progression.gamesPlayed}`,
           type: "achievement",
           title: "Match Progress Recorded",
-          description: `You have completed ${progression.gamesPlayed} match(es) with a ${Math.round(progression.winRate * 100)}% win rate.`,
-          time: "Recent",
+          description: `You have completed ${progression.gamesPlayed} ${progression.gamesPlayed === 1 ? "match" : "matches"} with a ${Math.round(progression.winRate * 100)}% win rate.`,
           createdAt: Date.now(),
           read: false,
           actionUrl: "/history",
@@ -86,11 +76,10 @@ export function useNotifications() {
   }, [progression, isLoaded, storageKey]);
 
   const addNotification = React.useCallback(
-    (notif: Omit<NotificationItem, "id" | "time" | "createdAt" | "read">) => {
+    (notif: Omit<NotificationItem, "id" | "createdAt" | "read">) => {
       const item: NotificationItem = {
         ...notif,
         id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        time: "Just now",
         createdAt: Date.now(),
         read: false,
       };
